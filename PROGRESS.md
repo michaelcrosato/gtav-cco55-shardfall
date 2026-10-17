@@ -5,23 +5,31 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase:** M2 City in progress (2026-10-17); **paused at the user's request until 11:59 PDT
-  (18:59 UTC)**, with a scheduled message to resume. Landed for M2: E14 regions; `pav_world` +
-  Paloma Bay; Mirador Hills; Route 404 + ramps + broken end; The Ditch; lane graph, signals,
-  parking, walk tiles, cover; time of day + weather; the Proving Grounds; the streaming tour test
-  (10.6 km at 40 m/s, no holes, <= 146 active chunks); GPS; sprint/crouch; `gtf citymap`,
-  `gtf perf`; `LIB/gtf_city` (44 props) + `MAT/gtf` (18 materials) merged; the city dressed
-  with them, mast-arm signals with live lamps.
-- **Open:** triangles at street views are over budget with the props (3.15 M at
-  `downtown_street`, budget 2.5 M): mesh LOD for round primitives requested from the E7 helper.
-- **Helpers (worktrees, asked to commit and stop; resume with SendMessage):** E7 renderer (sky,
-  weather visuals, window kernel, night emissives, culling + distance classes, mesh LOD, shadow
-  follow, render-style `ViewIntent` fields) in `.claude/worktrees/agent-a73e1fb49a0cee6a4`; E9
-  vehicles v2 + `gtf_vehicles` bodies + `vehicles.toml` + feel test in the E9 worktree.
-- **Next after resuming:** merge E7 (then `gtf assets reindex=store`), tune the time-of-day
-  presets with the sky, captures of every view at three times of day, `gtf perf view=all`, web
-  build booting into the city, close M2; merge E9 and start M3 (driving, enter/exit, camera
-  modes, vehicle audio, radio skeleton).
+- **Phase:** M2 City in progress (2026-10-17). The user paused the helpers until 11:59 PDT (18:59
+  UTC; a scheduled message resumes); the goal check kept forcing turns, so solo work went on
+  meanwhile. Landed for M2: E14 regions; `pav_world` + Paloma Bay; Mirador Hills; Route 404 +
+  ramps + broken end; The Ditch; lane graph, signals, parking, walk tiles, cover; time of day +
+  weather; the Proving Grounds; the streaming tour test (10.6 km at 40 m/s, no holes, <= 146
+  active chunks); GPS; sprint/crouch; `gtf citymap`, `gtf perf`; `LIB/gtf_city` (44 props) +
+  `MAT/gtf`; the city dressed, mast-arm signals with live lamps; **E7 merged** (sky, weather,
+  night lights, facade windows, static culling, render-style `ViewIntent` fields); **facades by
+  building style** from the district's `[facades]` (windows lit at night, `out/fac_night.png`);
+  the Catalogue fits big props (store tests green again).
+- **Perf:** `gtf perf view=all` passes every budget after E7's culling (downtown_street 1.51 M
+  triangles, hills_vista 2.90 M under its relaxed budget); mesh LOD is no longer urgent.
+- **Open:** street lamps are props and stay dark at night: prop parts need a night glow (flag
+  `NIGHT` + glow lights) — next for the E7 helper, then mesh LOD; tune the presets with the
+  render-style fields (lit style, tonemap) toward the GTA V look; E7's saved
+  `cloud_through.patch` (sun through thin cloud) in the session scratchpad.
+- **Helpers (worktrees; resume with SendMessage):** E7 renderer in
+  `.claude/worktrees/agent-a73e1fb49a0cee6a4` (merged at 367da03); E9 vehicles v2 +
+  `gtf_vehicles` + `vehicles.toml` + feel test in `.claude/worktrees/agent-ab25c5efa06c05e86`
+  (at d6a5c61; its stale workspace build files were deleted for disk; it must merge the branch).
+- **Disk:** a fixed allowance, about 2 GB free; prune duplicate build artefacts (keep the newest
+  per crate) and avoid workspace-wide test builds in worktrees.
+- **Next:** E7 helper: prop night glow + lamp lights, then mesh LOD; E9 helper: resume; me: tune
+  presets, captures of every view at three times of day, web build booting into the city, close
+  M2; merge E9 and start M3 (driving, enter/exit, camera modes, vehicle audio, radio skeleton).
 - **Branch / PR:** the session's designated branch; the draft PR opened with the plan.
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)
