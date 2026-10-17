@@ -5,7 +5,7 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase:** M2 City in progress (2026-10-17). The user paused the helpers until 11:59 PDT (18:59
+- **Phase:** M2 City done (2026-10-17); M3 next. The user paused the helpers until 11:59 PDT (18:59
   UTC; a scheduled message resumes); the goal check kept forcing turns, so solo work went on
   meanwhile. Landed for M2: E14 regions; `pav_world` + Paloma Bay; Mirador Hills; Route 404 +
   ramps + broken end; The Ditch; lane graph, signals, parking, walk tiles, cover; time of day +
@@ -41,7 +41,7 @@ resumed or compacted session reads first.
 - [x] **M1 Platform** — E2 input v2, E3 hook v2, E4 presentation data, E5 `pav_ui` + headless HUD
       capture, E6 camera intent + draw list, E13 app shell, E8 part 1 (bank + loops), UI gallery,
       FPS readout.
-- [ ] **M2 City** — E14 world regions first (region provider, static meshes, speed-aware streaming,
+- [x] **M2 City** — E14 world regions first (region provider, static meshes, speed-aware streaming,
       far LOD, unload policies); `pav_world` generator + graphs; city props/materials; E7 sky, time of
       day + weather, window kernel, CPU region culling, merged statics; district + dev district +
       views; `citymap`, `lanes`, `perf`.
@@ -171,3 +171,19 @@ resumed or compacted session reads first.
   window (`scripts/smoke-gtf.sh 25 --scene freeway/roam`, Xvfb + lavapipe): boot complete in
   1.5 s, the FPS readout (software rendering, so red), money, radar with the city map, vitals,
   objective with a keycap glyph, the generated city (`out/smoke-gtf/screen.png`).
+- 2026-10-17 — **M2 done.** E14 regions + `pav_world` (terrain, Route 404 + ramps, The Ditch, lane
+  graph, signals, walk tiles, cover, dressing with `LIB/gtf_city`), Paloma Bay + the Proving
+  Grounds, E7 merged (`97bfc96`: sky, weather, night lights, facade windows, static culling),
+  facades by style (`609dcab`), the game's look in `world.toml` (`44ab6af`), `gtf lanes` + the
+  city determinism test (`58af7f7`), the web pointer-lock crash fixed (`832b694`). Acceptance:
+  city digest identical over two builds (1152 chunks); lane network one strongly connected
+  piece; `freeway/tour` 10.6 km at 40 m/s with no holes, <= 146 active / 0 dormant chunks
+  (filmstrip `out/m2/tour_filmstrip.png`, golden hour into dusk); `hills_vista` shows the
+  district; `gtf perf view=all` within budget (downtown 1.51 M triangles); every view at 11:00,
+  18:10 and 22:30 (`out/m2/sheet1.png`, `sheet2.png`; changed after looking: the docks view's
+  eye, noon's contrast and smog line, the lit/ACES look); the web build boots into the city with
+  the HUD (`out/web-m2/fixed_*`). Tests: pav_world, gtf_game, pav_tools store + store_rooms,
+  pav_render + pav_view (46), WGSL in Tint; clippy clean on the touched crates. Carried: street
+  lamps are dark at night (props need a night glow), mesh LOD (E7 helper); pier deck and Big Wheel
+  (M7).
+
