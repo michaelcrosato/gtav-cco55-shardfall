@@ -5,10 +5,13 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase:** M0 done (2026-10-17); **M1 Platform in progress.** M1 order: E2 input v2 → E3 hook
-  v2 + E4 presentation data (`crates/pav_core/src/present.rs` drafted, not yet wired) → E5
-  `pav_ui` + `capture hud=true` → E6 camera intent + draw list → E13 app shell → E8 part 1 →
-  `gtf_game` frontend skeleton, UI gallery, FPS readout.
+- **Phase:** M1 Platform in progress (2026-10-17). Landed: E2 input v2, E3 hook v2, E4
+  `pav_core::present`, E6 view (camera intent, view intent, draw list) — `40772ce`; E13 app shell
+  (controller model + key maps, mouse look, Esc/F1 routing, saves/settings/rumble requests, game
+  audio scenes), E8 part 1 (bank, loops, effects bus), `gtf_game` frontend + UI gallery + orbit
+  camera + weapon wheel + settings (uncommitted, waiting on `pav_ui`). In flight: `pav_ui` (E5,
+  a helper agent) → then wire it into `pav_app` (overlay, pointer → `ui.*`, gear, FPS readout),
+  M1 captures (gallery at 1920×1080 and 960×540, window smoke with the FPS readout), commit.
 - **Branch / PR:** the session's designated branch; the draft PR opened with the plan.
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)

@@ -12,8 +12,12 @@ pub fn app_config() -> pav_app::AppConfig {
         default_scene: gtf_game::KEY,
         touch: pav_app::TouchMode::AttractOnly,
         dev_keys: cfg!(debug_assertions),
+        sound_bank: Some(SOUNDS),
     }
 }
+
+/// The game's sound cues (over the engine's default bank).
+pub const SOUNDS: &str = include_str!("../../../content/freeway/sounds.toml");
 
 /// The game's agent CLI: `gtf help`.
 pub const CLI: pav_tools::cli::Cli =
