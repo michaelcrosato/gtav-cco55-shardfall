@@ -18,8 +18,11 @@ gtf_game = { path = "../gtf_game" }
 pav_app = { path = "../pav_app" }
 pav_core.workspace = true
 pav_tools.workspace = true
+pav_world.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
+glam.workspace = true
+png.workspace = true
 
 [lints]
 workspace = true

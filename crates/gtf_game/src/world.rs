@@ -21,25 +21,41 @@ pub const DOWNTOWN: Vec3 = Vec3::new(-190.0, 0.0, -96.0);
 /// view arrives).
 pub const STREAM: StreamSettings = StreamSettings { radius: 160.0, unload: 230.0, lookahead: 1.6, budget: 3 };
 
-/// The district, built once per process for each version of its file.
-pub fn city() -> Result<Arc<City>> {
-    static CACHE: Mutex<Option<(String, Arc<City>)>> = Mutex::new(None);
-    let text = crate::content::text("district.toml", include_str!("../../../content/freeway/district.toml"));
+/// A district file under `content/freeway/`, built once per process for each version of its text.
+fn district(file: &'static str, built_in: &'static str) -> Result<Arc<City>> {
+    static CACHE: Mutex<Vec<(&'static str, String, Arc<City>)>> = Mutex::new(Vec::new());
+    let text = crate::content::text(file, built_in);
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((t, c)) = cache.as_ref() {
-        if *t == *text {
-            return Ok(c.clone());
-        }
+    if let Some((_, _, c)) = cache.iter().find(|(f, t, _)| *f == file && *t == *text) {
+        return Ok(c.clone());
     }
-    let city = Arc::new(City::from_toml(&text).map_err(|e| anyhow!("content/freeway/district.toml: {e}"))?);
-    *cache = Some((text.into_owned(), city.clone()));
+    let city = Arc::new(City::from_toml(&text).map_err(|e| anyhow!("content/freeway/{file}: {e}"))?);
+    cache.retain(|(f, _, _)| *f != file);
+    cache.push((file, text.into_owned(), city.clone()));
     Ok(city)
 }
 
+/// Paloma Bay.
+pub fn city() -> Result<Arc<City>> {
+    district("district.toml", include_str!("../../../content/freeway/district.toml"))
+}
+
+/// The Proving Grounds, the developer district (`freeway/dev`).
+pub fn dev_city() -> Result<Arc<City>> {
+    district("dev_district.toml", include_str!("../../../content/freeway/dev_district.toml"))
+}
+
+/// The district a scene mode plays in.
+pub fn city_for(mode: &str) -> Result<Arc<City>> {
+    if mode == "dev" { dev_city() } else { city() }
+}
+
+/// Where the Proving Grounds start: by the main crossroads.
+pub const DEV_SPAWN: Vec3 = Vec3::new(-22.0, 0.15, -22.0);
+
 /// Builds the city scene: hands the simulation the district, loads the area around `at` (the
 /// start, or a view's target and eye) and puts the player on the ground at `at`.
-pub fn build_scene(sim: &mut Sim, at: Vec2, also: &[Vec3]) -> Result<Arc<City>> {
-    let city = city()?;
+pub fn build_scene(sim: &mut Sim, city: Arc<City>, at: Vec2, also: &[Vec3]) -> Result<Arc<City>> {
     let spawn = Vec3::new(at.x, city.ground_y(at) + 0.05, at.y);
     sim.state.spawn = spawn;
     sim.state.focus = spawn;

@@ -30,6 +30,11 @@ pub struct DistrictDef {
     pub freeway: Vec<Freeway>,
     #[serde(default)]
     pub channel_ramp: Vec<ChannelRamp>,
+    /// Stunt ramps and signs placed by hand.
+    #[serde(default)]
+    pub jump: Vec<Jump>,
+    #[serde(default)]
+    pub sign: Vec<Sign>,
     /// Rows of characters, north first.
     pub map: String,
     /// Ground heights, one character per map cell (`0`-`9`, then `a`-`z`), in steps of
@@ -215,4 +220,53 @@ pub struct ChannelRamp {
     pub side: String,
     /// Rows (map cell coordinates, fractions allowed) of its top end and its bottom end.
     pub rows: [f32; 2],
+}
+
+/// A kicker ramp for stunt jumps: a wedge rising along `yaw` (degrees, 0 = north, 90 = east).
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Jump {
+    /// Map cell coordinates of its middle (fractions allowed).
+    pub at: [f32; 2],
+    pub yaw: f32,
+    #[serde(default = "jump_len")]
+    pub length: f32,
+    #[serde(default = "jump_width")]
+    pub width: f32,
+    #[serde(default = "jump_height")]
+    pub height: f32,
+    #[serde(default)]
+    pub name: String,
+}
+
+fn jump_len() -> f32 {
+    12.0
+}
+
+fn jump_width() -> f32 {
+    5.0
+}
+
+fn jump_height() -> f32 {
+    2.0
+}
+
+/// Words on a post (the developer district's station signs, street furniture text).
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Sign {
+    pub at: [f32; 2],
+    pub text: String,
+    #[serde(default = "sign_height")]
+    pub height: f32,
+    #[serde(default = "sign_size")]
+    pub size: f32,
+}
+
+fn sign_height() -> f32 {
+    3.2
+}
+
+fn sign_size() -> f32 {
+    0.9
 }

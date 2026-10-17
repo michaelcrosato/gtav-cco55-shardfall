@@ -336,6 +336,26 @@ impl Session {
         pav_render::capture::render_to_rgba(&mut gpu.renderer, &scene, width, height)
     }
 
+    /// Renders like [`Session::render`], also measuring how long building the scene took (the
+    /// view's CPU work per frame, in milliseconds; performance budgets).
+    pub fn render_timed(&mut self, width: u32, height: u32) -> Result<(Vec<u8>, f64)> {
+        let frame = self.sim.frame();
+        let focus = frame.focus;
+        self.camera.snap(focus);
+        let camera = self.camera.clone();
+        let view = self.view_for(&frame);
+        let events = std::mem::take(&mut self.events);
+        let gpu = self.gpu()?;
+        gpu.prepare_frame(&frame);
+        if !frame.studio_active() {
+            gpu.builder.add_events(&events);
+        }
+        let t = std::time::Instant::now();
+        let scene = gpu.builder.build(&frame, &frame, 1.0, &camera, width as f32 / height as f32, &view, focus);
+        let ms = t.elapsed().as_secs_f64() * 1000.0;
+        Ok((pav_render::capture::render_to_rgba(&mut gpu.renderer, &scene, width, height)?, ms))
+    }
+
     /// Renders like [`Session::render`] with the running game's UI (`PlayFrame::ui`, drawn by
     /// `pav_ui`) over the picture. The flag is false when the scene publishes no `PlayFrame`
     /// (then the picture has no UI). Headless: no perf readout, PlayStation glyphs for `Auto`.

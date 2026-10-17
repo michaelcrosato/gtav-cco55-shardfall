@@ -1,0 +1,169 @@
+# Time of day and weather (PLAN.md §5.6.12, §5.11). The clock runs `day_length` real seconds per
+# 24 game hours; the look blends between the presets around the hour, then the weather changes it.
+# Colours are sRGB hex. Sun and moon directions come from the hour (east at dawn, west at dusk);
+# a preset sets their colour and strength.
+
+day_length = 2880.0     # 48 real minutes per game day
+start = "17:40"         # a new game starts in the golden hour
+latitude = 34.0         # how high the sun climbs (degrees north)
+
+[[preset]]
+name = "late_night"
+hour = 2.5
+sun = { color = "#2d3550", intensity = 0.0 }
+moon = { color = "#8fa3c8", intensity = 0.22 }
+sky = { zenith = "#050a17", horizon = "#152038", ground = "#0d0f14", glow = "#1c2740", stars = 1.0, clouds = 0.15, cloud = "#1d2536" }
+ambient = { sky = "#26324c", ground = "#14161c", level = 0.42 }
+fog = { color = "#152038", start = 160.0, end = 900.0 }
+exposure = 1.35
+bloom = 0.65
+temperature = -0.35
+saturation = 0.9
+street_lights = 1.0
+windows = 0.45
+
+[[preset]]
+name = "dawn"
+hour = 5.9
+sun = { color = "#ff9a6a", intensity = 0.45 }
+moon = { color = "#8fa3c8", intensity = 0.05 }
+sky = { zenith = "#2c3f6b", horizon = "#f1a37c", ground = "#3a2e2a", glow = "#ffb68a", stars = 0.25, clouds = 0.3, cloud = "#f4b59a" }
+ambient = { sky = "#7f86a8", ground = "#5a463c", level = 0.62 }
+fog = { color = "#e7a98e", start = 140.0, end = 900.0 }
+exposure = 1.2
+bloom = 0.55
+temperature = 0.15
+saturation = 1.05
+street_lights = 0.6
+windows = 0.35
+
+[[preset]]
+name = "morning"
+hour = 8.5
+sun = { color = "#ffe6c4", intensity = 1.05 }
+sky = { zenith = "#3d74c2", horizon = "#bcd4e8", ground = "#6b5c4c", glow = "#fff0d6", clouds = 0.25, cloud = "#ffffff" }
+ambient = { sky = "#93acd0", ground = "#7a6a58", level = 0.82 }
+fog = { color = "#c3d6e6", start = 220.0, end = 1150.0 }
+exposure = 1.1
+bloom = 0.4
+temperature = 0.05
+saturation = 1.08
+
+[[preset]]
+name = "noon"
+hour = 13.0
+sun = { color = "#fff7e8", intensity = 1.3 }
+sky = { zenith = "#3f78c8", horizon = "#d5dfe6", ground = "#76685a", glow = "#ffffff", clouds = 0.2, cloud = "#ffffff" }
+ambient = { sky = "#a3b8d6", ground = "#857560", level = 0.9 }
+# Bleached, a little smog on the horizon.
+fog = { color = "#d8dcd6", start = 200.0, end = 1100.0 }
+exposure = 1.0
+bloom = 0.35
+haze = 0.06
+temperature = 0.1
+saturation = 1.0
+contrast = 1.04
+
+[[preset]]
+name = "golden_hour"
+hour = 17.8
+sun = { color = "#ffc27a", intensity = 1.2 }
+sky = { zenith = "#4a72b0", horizon = "#f5c99a", ground = "#6b5240", glow = "#ffbf75", clouds = 0.25, cloud = "#ffe0bd" }
+ambient = { sky = "#9aa6c4", ground = "#80604a", level = 0.8 }
+fog = { color = "#efcfa8", start = 200.0, end = 1100.0 }
+exposure = 1.15
+bloom = 0.55
+haze = 0.08
+temperature = 0.35
+saturation = 1.15
+vignette = 0.15
+
+[[preset]]
+name = "magic_hour"
+hour = 19.4
+sun = { color = "#ff7a6a", intensity = 0.35 }
+moon = { color = "#9fb0d0", intensity = 0.04 }
+sky = { zenith = "#3b3f78", horizon = "#ff8a7c", ground = "#3b2a33", glow = "#ff9e7a", stars = 0.15, clouds = 0.3, cloud = "#ff9fa0" }
+ambient = { sky = "#8a7aa8", ground = "#4e3a40", level = 0.62 }
+fog = { color = "#d6889a", start = 180.0, end = 1000.0 }
+exposure = 1.25
+bloom = 0.7
+temperature = 0.1
+tint = -0.12
+saturation = 1.2
+street_lights = 0.85
+windows = 0.8
+vignette = 0.2
+
+[[preset]]
+name = "night"
+hour = 21.5
+sun = { color = "#2d3550", intensity = 0.0 }
+moon = { color = "#9fb2d6", intensity = 0.25 }
+sky = { zenith = "#08112a", horizon = "#1f2c4a", ground = "#111317", glow = "#2b3757", stars = 0.9, clouds = 0.2, cloud = "#25304a" }
+ambient = { sky = "#2e3b5a", ground = "#191b22", level = 0.48 }
+fog = { color = "#1f2c4a", start = 180.0, end = 1000.0 }
+exposure = 1.3
+bloom = 0.7
+temperature = -0.2
+tint = -0.05
+saturation = 0.95
+street_lights = 1.0
+windows = 1.0
+vignette = 0.2
+
+# Weather: how each state changes the time of day's look, how long it lasts (game hours) and
+# what may follow it (weights).
+[weather.clear]
+hours = [6.0, 14.0]
+next = { clear = 3.0, hazy = 3.0, overcast = 2.0, fog = 1.0 }
+
+[weather.hazy]
+clouds = 0.1
+fog = 0.75
+light = 0.92
+saturation = 0.92
+haze = 0.12
+hours = [4.0, 10.0]
+next = { clear = 3.0, overcast = 2.0 }
+
+[weather.overcast]
+clouds = 0.85
+cloud = "#9aa1a8"
+fog = 0.8
+light = 0.55
+saturation = 0.8
+hours = [3.0, 8.0]
+next = { clear = 2.0, rain = 3.0, hazy = 1.0 }
+
+[weather.rain]
+clouds = 0.95
+cloud = "#6f767e"
+fog = 0.55
+light = 0.4
+saturation = 0.72
+rain = 1.0
+wind = 4.0
+hours = [2.0, 5.0]
+next = { overcast = 3.0, storm = 1.5, clear = 1.0 }
+
+[weather.storm]
+clouds = 1.0
+cloud = "#4d535b"
+fog = 0.45
+light = 0.28
+saturation = 0.65
+rain = 2.2
+wind = 9.0
+lightning = 0.12    # flashes per second
+hours = [1.0, 3.0]
+next = { rain = 3.0, overcast = 1.0 }
+
+[weather.fog]
+clouds = 0.5
+cloud = "#b8bec4"
+fog = 0.22
+light = 0.6
+saturation = 0.78
+hours = [2.0, 5.0]
+next = { clear = 2.0, hazy = 2.0 }

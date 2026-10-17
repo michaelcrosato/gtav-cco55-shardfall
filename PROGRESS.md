@@ -5,13 +5,17 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase:** M2 City in progress (2026-10-17). M1 is done (see the log). Landed for M2: E14 world
-  regions (`b5de689`); `pav_world` (district TOML → grid, ground with sidewalks, lots, buildings by
-  style, dressing, labels, map raster) with Paloma Bay in `content/freeway/district.toml`; far view
-  per 32 m chunk with CPU frustum culling; the game streams the city around the player and the
-  title drone. Next: Route 404 (elevated deck + ramps), the hills, The Ditch, city props and
-  materials, E7 sky/time of day/weather/window kernel, dev district + views, `citymap`/`lanes`/`perf`
-  tools, perf budgets, the web build booting into the city.
+- **Phase:** M2 City in progress (2026-10-17). Landed: E14 world regions (`b5de689`); `pav_world`
+  + Paloma Bay + far view (`d905d41`); Mirador Hills terrain, reference views (`a24dbb6`); Route 404
+  with the Pretzel and Harbor Gate ramps and the broken end (`db8772e`); The Ditch (`6c0ed5e`).
+  In progress (uncommitted): lane graph, signals, parking, walk tiles, cover (`pav_world::lanes`,
+  `walk`, `cover`), `[[jump]]`/`[[sign]]` placements, the Proving Grounds (`dev_district.toml`),
+  time of day + weather (`gtf_game::daytime`, `content/freeway/world.toml`), the streaming tour
+  (`freeway/tour` + `tests/streaming.rs`), `gtf citymap` and `gtf perf`. Helpers running in
+  worktrees: E7 renderer (sky, weather visuals, window kernel, night emissives, culling, shadow
+  follow, render-style fields on `ViewIntent`) and the `LIB/gtf_city` props + `MAT/gtf` materials.
+  Next: merge both, tune the presets with the sky, captures of all views at three times of day,
+  web build into the city, then M3 (player + vehicles, E9).
 - **Branch / PR:** the session's designated branch; the draft PR opened with the plan.
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)
@@ -89,6 +93,23 @@ resumed or compacted session reads first.
   prop publish `pack=` and `gtf` material embedding, game tools through `pav_tools::cli::main_with`,
   `until:` polling for browser checks, D16 (developer demo level), and touch devices showing only
   the gear button.
+
+- 2026-10-17 — **Paloma Bay is 64 × 72 cells** (1024 × 1152 m): 8 extra rows of hills to the north
+  give Mirador Drive, Lookout Drive and the PALOMA sign room (the plan's sketch had 5 rows).
+- 2026-10-17 — **Terrain is a painted height grid** beside the map (one character per cell, 4 m
+  steps) smoothed into 4 m samples; flat cells stay slabs so the city keeps sidewalks and markings.
+  Hill roads are grid streets flattened across (switchbacks of straight runs), not splines.
+- 2026-10-17 — **Route 404** is a swept deck (30.4 m, three lanes each way) at 11 m; ramps land
+  on one-cell stubs off the cross streets (no frontage roads, so nothing drives under a low ramp);
+  the corridor's ground sits at road level (`level = -0.15`).
+- 2026-10-17 — **The Ditch** keeps the channel as its own road network (road roles never join
+  channel and street cells); crossing roads keep their own characters and become bridges.
+- 2026-10-17 — **Walking is a 2 m tile map** (sidewalk, crossing tied to its junction's signal,
+  path, open ground) instead of a hand-built node graph: every loop, corner and crosswalk is one
+  connected surface, A* over tiles for longer trips. Cover points come from building walls facing
+  walkable tiles, the Ditch's walls and the freeway barriers.
+- 2026-10-17 — **Game cameras get no cutaway** (walls are not cut or faded when a hook game
+  supplies `PlayFrame.camera`).
 
 ## Open issues
 - None yet. (Planning-time unknowns to verify early: rapier body-type switching for vehicle LOD in

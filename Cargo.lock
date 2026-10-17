@@ -1051,10 +1051,13 @@ name = "gtf_app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "glam 0.33.11",
  "gtf_game",
  "pav_app",
  "pav_core",
  "pav_tools",
+ "pav_world",
+ "png",
  "serde_json",
 ]
 

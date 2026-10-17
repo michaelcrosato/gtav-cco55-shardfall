@@ -248,6 +248,7 @@ pub fn wheel_page(player: Vec2) -> UiModel {
         weapon: 1,
         help: None,
         map_blips: lot_blips(),
+        route: Vec::new(),
     });
     UiModel { hud: Some(hud), wheel: Some(wheel), overlay: Overlay { vignette: 0.5, ..Default::default() }, ..Default::default() }
 }

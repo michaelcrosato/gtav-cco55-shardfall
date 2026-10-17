@@ -56,8 +56,8 @@ cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccFFFFF
 ....-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ====-====-====-======-=====-=============-=====-=====-===-=FFFFF
 ====-====-====-======-=====-=============-=====-=====-===-=FFFFF
-ssss-....-cccc-cccccc-ccccc-cccccc==ttttt---CCt-ttttt-ttt-tFFFFF
 ssss-....-cccc-cccccc-ccccc-cccccc==ttttt-ttCCt-ttttt-ttt-tFFFFF
+ssss-....-cccc-cccccc-ccccc-cccccc==ttttt---CCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ----------------------------------==ttttt-ttCCt-ttttt-ttt-tF-F-F
@@ -381,7 +381,7 @@ kind = "on"
 [[channel_ramp]]
 col = 44
 side = "west"
-rows = [46.6, 49.6]
+rows = [47.6, 50.4]
 
 [[channel_ramp]]
 col = 44

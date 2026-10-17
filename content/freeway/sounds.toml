@@ -24,3 +24,12 @@ layers = [
     { wave = "triangle", freq = 1046.5, decay = 0.25, sustain = 0.6, hold = 0.25, release = 0.05, volume = 0.07 },
     { wave = "triangle", freq = 1318.5, decay = 0.25, sustain = 0.6, hold = 0.25, release = 0.05, volume = 0.06, delay = 0.03 },
 ]
+
+# Weather: thunder after a lightning flash (rumbling filtered noise, a crack when close).
+[cue."weather.thunder"]
+layers = [
+    { wave = "noise", freq = 1, attack = 0.02, decay = 2.6, volume = 0.5, cutoff = 900, cutoff_end = 90 },
+    { wave = "noise", freq = 1, decay = 0.25, volume = 0.25, cutoff = 3500, cutoff_end = 600 },
+    { wave = "sine", freq = 48, freq_end = 34, glide = 1.5, attack = 0.05, decay = 2.0, volume = 0.3 },
+]
+voices = 2

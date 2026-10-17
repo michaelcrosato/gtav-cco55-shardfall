@@ -8,6 +8,8 @@ The detail behind `AGENTS.md`, read on demand: open the section you need, not th
 - [Browser and phones](#browser-and-phones): running the web build headless, emulating a phone.
 - [Controls](#controls): keyboard, gamepad, touch and the fixed system keys.
 - [Tests](#tests): what each suite covers.
+- [Urban kit (pav_world)](#urban-kit-pav_world): district files, terrain, freeways, channels,
+  lanes, walking, cover.
 
 ## Code map
 ```
@@ -368,3 +370,47 @@ Also, named for what they cover: `pav_core/tests/` `animation.rs`, `animation_pr
 load with no asset files), `vehicles.rs`; `pav_tools/tests/`
 `animation_preview.rs`, `asset_errors.rs`, `asset_format2.rs`, `asset_library.rs`,
 `asset_preview.rs`, `foundations.rs`, `reply_budget.rs`, `store.rs`.
+
+## Urban kit (pav_world)
+`pav_world` turns a district file (TOML) into an immutable `City` (`City::from_toml`, a pure
+function of the text: build once, share as `Arc<City>`). The city is a
+`pav_core::region::RegionProvider`: hand it to `Sim::set_region_provider` with
+`StreamSettings` and streaming loads its 32 m chunks around the player, vehicles and
+`world.interest` points; `PlayFrame.far` takes `city.far` (low-detail view of everything) and
+`PlayFrame.map` takes `city.map` (1 px/m picture). Paloma Bay is `content/freeway/district.toml`;
+the small developer district is `content/freeway/dev_district.toml`.
+- **Map:** `map` rows of characters (north first, 16 m `cell`s from `origin` [x, z]); `[legend]`
+  maps a character to a `zone` or a `road` class (`alley`, `street`, `avenue`, `boulevard`,
+  `channel`, `path`). Roads one character wide are streets (two lanes, parking, sidewalks);
+  avenues and the boulevard are drawn two characters wide. Zones (`[zones.<name>]`): `ground`
+  (concrete, grass, sand, water, asphalt, dirt, plaza, brush), lot widths/depth/setback, building
+  `styles` (tower_glass, tower_concrete, stucco_shop, apartment, bungalow, shed, warehouse),
+  heights, street dressing densities (`props`), `level` (ground offset; -0.15 = road level).
+- **Landmarks** (`[[landmark]]`): a cell rectangle taken over by an `assembly` (tower_bank,
+  police, hospital, open, paloma_sign, lookout...), with a map `blip`; `level = true` flattens the
+  terrain under it.
+- **Terrain:** `terrain` rows (same size as the map: `0`-`9`, `a`-`z` × `terrain_step` m),
+  smoothed into 4 m samples (`City::terrain`, `Terrain::height_at`); cells with height become
+  meshes with exact colliders, roads on slopes are flat across. `City::ground_y(p)` is the
+  walkable height anywhere (road, lot, terrain, water surface).
+- **Freeways** (`[[freeway]]`): a smoothed centre line in cell coordinates, deck `height`,
+  `lanes` each way, `closed_start`, `broken_end`, and `[[freeway.ramps]]` (`from` beside the
+  deck, `to` on a street stub, `kind` on/off). Deck and ramps are swept meshes with exact
+  colliders; `City::freeways` keeps the sampled paths.
+- **Channels:** `channel` road cells running north-south become a sunken bed (6 m) with sloped
+  walls; roads crossing them keep their own characters and become bridges; `[[channel_ramp]]`
+  adds ramps down the walls. Channel roads never join street roads in road roles.
+- **Placements:** `[[jump]]` (a kicker wedge: `at` cell coords, `yaw`, length/width/height) and
+  `[[sign]]` (words on a post).
+- **Lanes** (`City::lanes`, `lanes::LaneGraph`): every drivable lane as a polyline in its
+  direction (right-hand traffic), connectors through junctions (straight/left/right, U-turns at
+  dead ends), freeway and ramp lanes, channel lanes (closed to ambient traffic), lane-change
+  neighbours, `Junction`s with `SignalPlan`s (`light(ns, t)`, `walk(ns, t)`: pure functions of
+  time), `parking` spots, `nearest(p, filter)`, `route(from, to)` (A*) and `route_points`.
+- **Walking** (`City::walk`, `walk::WalkMap`): 2 m tiles (sidewalk, crossing tied to its
+  junction's signal, path, open ground), `at(p)`, `random(rng, filter)`, `path(from, to, budget)`.
+- **Cover** (`City::cover`): points along building walls facing walkable ground (high) and low
+  walls and barriers (low), each with the direction away from its wall; `near(pos, threat, r)`.
+- Checks: `cargo test -p pav_world` (district builds and is deterministic, the open lane network
+  is one strongly connected piece, routes, signals, walking, cover); the game's `gtf citymap
+  layers=lanes,signals,parking,walk,cover crop=[x0,z0,x1,z1]` draws them over the map.

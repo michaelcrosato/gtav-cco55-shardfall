@@ -1,0 +1,134 @@
+# The Proving Grounds (`freeway/dev`, PLAN.md §9 M2, D16): a 256 m district that is both the fast
+# fixture for tests and the engine's urban tech demo. Each area has a sign naming the system it
+# exercises and the `gtf` command that checks it. Same format as district.toml.
+
+name = "The Proving Grounds"
+cell = 16.0
+origin = [-128.0, -128.0]
+seed = 7
+
+map = '''
+-------==-------
+-cccccc==rrrrrr-
+-cccccc==rrrrrr-
+-cccccc==rrrrrr-
+-------==-------
+-PPPPPP==gggggg-
+-PPPPPP==gggggg-
+================
+================
+-VVVVVV==hhhhhh-
+-VVVVVV==hhhhhh-
+-VVVVVV==hhhhhh-
+-VVVVVV==-------
+-VVVVVV==mmmmmm-
+-VVVVVV==mmmmmm-
+-------==-------
+'''
+
+[legend]
+"c" = { zone = "shops" }
+"r" = { zone = "range" }
+"P" = { zone = "lot" }
+"g" = { zone = "park" }
+"V" = { zone = "pad" }
+"h" = { zone = "yard" }
+"m" = { zone = "missions" }
+"-" = { road = "street" }
+"=" = { road = "avenue" }
+
+[zones.shops]
+ground = "concrete"
+styles = ["stucco_shop", "apartment"]
+lot = [10.0, 18.0]
+depth = 24.0
+height = [5.0, 11.0]
+props = { lamp = 1.0, palm = 4.0, bench = 1.5, bin = 2.0, hydrant = 1.0 }
+
+[zones.range]
+ground = "concrete"
+props = { lamp = 1.0 }
+
+[zones.lot]
+ground = "asphalt"
+props = { lamp = 1.0 }
+
+[zones.park]
+ground = "grass"
+props = { lamp = 1.0, tree = 3.0, bench = 2.0, bin = 1.0 }
+
+[zones.pad]
+ground = "asphalt"
+
+[zones.yard]
+ground = "asphalt"
+props = { lamp = 1.0 }
+
+[zones.missions]
+ground = "plaza"
+props = { lamp = 1.0, bench = 1.0 }
+
+[[landmark]]
+key = "police"
+name = "SPPD Training"
+cells = [[11, 9], [14, 10]]
+assembly = "police"
+height = 9.0
+blip = "police"
+
+# A kicker for jumps and a long incline for slopes on the vehicle pad.
+[[jump]]
+at = [5.0, 10.0]
+yaw = 0.0
+length = 12.0
+width = 5.0
+height = 2.2
+name = "kicker"
+
+[[jump]]
+at = [2.5, 12.0]
+yaw = 0.0
+length = 30.0
+width = 6.0
+height = 3.0
+name = "incline"
+
+[[sign]]
+at = [8.0, 6.6]
+text = "SIGNALS & TRAFFIC | gtf citymap layers=lanes,signals"
+
+[[sign]]
+at = [5.6, 4.0]
+text = "STREETS & STREAMING | gtf status, freeway/view/hills_vista"
+
+[[sign]]
+at = [11.0, 4.6]
+text = "COVER RANGE | gtf citymap layers=cover"
+
+[[sign]]
+at = [12.0, 6.6]
+text = "PEDESTRIANS & CROSSWALKS | gtf citymap layers=walk"
+
+[[sign]]
+at = [3.5, 4.6]
+text = "PARKING | gtf citymap layers=parking"
+
+[[sign]]
+at = [3.5, 8.6]
+text = "VEHICLE FEEL PAD | gtf vehicle_feel"
+
+[[sign]]
+at = [6.6, 10.0]
+text = "STUNT JUMP | gtf vehicle_feel test=jump"
+
+[[sign]]
+at = [12.5, 11.6]
+text = "HEAT DISPATCH | gtf play cmd=heat 3"
+
+[[sign]]
+at = [10.5, 13.4]
+text = "MISSIONS | gtf play cmd=mission start dev_test"
+
+[[sign]]
+at = [13.0, 13.4]
+text = "UI GALLERY & AUDIO | freeway/gallery, gtf audio_capture"

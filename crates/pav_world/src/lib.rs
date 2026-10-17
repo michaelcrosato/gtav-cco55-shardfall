@@ -19,14 +19,18 @@ use pav_core::terrain::TerrainPatch;
 use pav_core::zones::{Label, Zone};
 
 pub mod channel;
+pub mod cover;
 pub mod def;
 mod dress;
+mod extras;
 pub mod freeway;
 pub mod grid;
 pub mod ground;
+pub mod lanes;
 mod lots;
 pub mod raster;
 pub mod terrain;
+pub mod walk;
 
 pub use def::{DistrictDef, RoadClass};
 pub use grid::{Cell, Grid};
@@ -73,6 +77,11 @@ pub struct City {
     pub freeways: Vec<freeway::FreewayGeom>,
     /// Storm channels (The Ditch).
     pub channels: Vec<channel::ChannelGeom>,
+    /// Every drivable lane, junctions with their signals, parking spots.
+    pub lanes: lanes::LaneGraph,
+    /// Where people walk (2 m tiles) and where they take cover.
+    pub walk: walk::WalkMap,
+    pub cover: cover::Cover,
     /// Chunk coordinate bounds, inclusive.
     pub chunk_bounds: (IVec2, IVec2),
     bins: BTreeMap<(i32, i32), Bin>,
@@ -107,9 +116,13 @@ impl City {
         ground::build(&def, &grid, &terrain, &mut out);
         ground::terrain_meshes(&def, &grid, &terrain, &mut out);
         let channels = channel::build(&def, &grid, &terrain, &mut out);
+        extras::build(&def, &grid, &terrain, &mut out);
         lots::build(&def, &grid, &terrain, &mut out);
         dress::build(&def, &grid, &terrain, &mut out);
         let freeways = freeway::build(&def, &grid, &terrain, &mut out);
+        let lanes = lanes::LaneGraph::build(&grid, &terrain, &freeways, &channels, def.seed);
+        let walk = walk::WalkMap::build(&def, &grid, &out.buildings, &lanes);
+        let cover = cover::Cover::build(&out.buildings, &walk, &channels, &freeways);
         let lo = grid.origin;
         let hi = grid.origin + Vec2::new(grid.w as f32, grid.h as f32) * grid.cell;
         let chunk_bounds = (
@@ -146,6 +159,9 @@ impl City {
             buildings: out.buildings,
             freeways,
             channels,
+            lanes,
+            walk,
+            cover,
             chunk_bounds,
             bins,
             map,

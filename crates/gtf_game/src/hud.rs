@@ -82,6 +82,8 @@ pub struct HudInput<'a> {
     pub weapon: usize,
     pub help: Option<(&'a str, f32)>,
     pub map_blips: Vec<Blip>,
+    /// The GPS route on the radar (map points from the player on).
+    pub route: Vec<Vec2>,
 }
 
 pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
@@ -94,7 +96,7 @@ pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
             player: h.player,
             player_heading: h.heading,
             blips: h.map_blips.clone(),
-            route: Vec::new(),
+            route: h.route.clone(),
             cones: Vec::new(),
             circles: Vec::new(),
         }),

@@ -1255,7 +1255,8 @@ fn t_camera(s: &mut Session, a: &Args) -> Result<Output> {
 }
 
 /// What the last frame cost to draw (main pass), from the renderer's own counters.
-pub(crate) fn render_stats(s: &mut Session) -> Result<Value> {
+/// The renderer's statistics for the last frame (draw calls, instances, triangles, ...).
+pub fn render_stats(s: &mut Session) -> Result<Value> {
     let st = s.gpu()?.renderer.stats;
     Ok(json!({
         "triangles": st.triangles, "batches": st.batches, "mesh_instances": st.mesh_instances,

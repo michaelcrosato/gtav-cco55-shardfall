@@ -99,10 +99,17 @@ pub fn role(grid: &Grid, c: IVec2) -> Role {
     let me = grid.road(c).unwrap_or(RoadClass::Street);
     let ew = run(grid, c, IVec2::X);
     let ns = run(grid, c, IVec2::Y);
-    // A band at most 2 cells thick; longer runs both ways make a junction.
+    // A band at most 2 cells thick; longer runs both ways make a junction. A two-cell band
+    // needs its other cell to run the same way: a single cell sticking out sideways (a stub or a
+    // driveway meeting a street) makes a junction instead.
     let along_x = ew >= 3 || (ew == 2 && ns == 1);
     let along_z = ns >= 3 || (ns == 2 && ew == 1);
-    match (along_x && ns <= 2, along_z && ew <= 2) {
+    let beside = |d: IVec2, axis: IVec2| {
+        grid.road(c + d).is_some_and(|r| r.drivable() && same_level(r, me)) && run(grid, c + d, axis) >= 2
+    };
+    let thick_x = ns == 1 || beside(IVec2::Y, IVec2::X) || beside(-IVec2::Y, IVec2::X);
+    let thick_z = ew == 1 || beside(IVec2::X, IVec2::Y) || beside(-IVec2::X, IVec2::Y);
+    match (along_x && ns <= 2 && thick_x, along_z && ew <= 2 && thick_z) {
         (true, false) => {
             let i = (1..=2)
                 .take_while(|s| grid.road(c - IVec2::Y * *s).is_some_and(|r| r.drivable() && same_level(r, me)))
@@ -172,6 +179,46 @@ fn edge(lo: Vec2, hi: Vec2, i: usize, w: f32) -> (Vec2, Vec2) {
     }
 }
 
+/// The sidewalks of road cell `c` (rectangles, x/z min and max): strips on edges facing anything
+/// that is not a road, corner squares where two roads meet around a block corner. A storm channel
+/// beside a road's length (a bridge's sides) gets a sidewalk; at a road's end (a driveway to a
+/// channel ramp) it does not. Paths, alleys and channels have none.
+pub(crate) fn sidewalk_rects(grid: &Grid, c: IVec2) -> Vec<(Vec2, Vec2)> {
+    let Some(class) = grid.road(c) else { return Vec::new() };
+    if matches!(class, RoadClass::Path | RoadClass::Alley | RoadClass::Channel) {
+        return Vec::new();
+    }
+    let lo = grid.corner(c);
+    let hi = lo + Vec2::splat(grid.cell);
+    let r = role(grid, c);
+    let is_road = |i: usize, d: IVec2| match grid.road(c + d) {
+        Some(RoadClass::Path) | None => false,
+        Some(RoadClass::Channel) => match r {
+            Role::Ew { .. } => i == 1 || i == 3,
+            Role::Ns { .. } => i == 0 || i == 2,
+            _ => false,
+        },
+        Some(_) => true,
+    };
+    let mut rects = Vec::new();
+    let mut walled = [false; 4];
+    for (i, d) in DIRS.iter().enumerate() {
+        if !is_road(i, *d) {
+            walled[i] = true;
+            rects.push(edge(lo, hi, i, SIDEWALK));
+        }
+    }
+    for (i, (d1, d2)) in [(0, 1), (1, 2), (2, 3), (3, 0)].iter().enumerate() {
+        if !walled[*d1] && !walled[*d2] && grid.road(c + DIRS[*d1] + DIRS[*d2]).is_none_or(|r| r == RoadClass::Path) {
+            let corner = [Vec2::new(hi.x, lo.y), hi, Vec2::new(lo.x, hi.y), lo][i];
+            let dir = Vec2::new(if corner.x == hi.x { -1.0 } else { 1.0 }, if corner.y == hi.y { -1.0 } else { 1.0 });
+            let other = corner + dir * SIDEWALK;
+            rects.push((corner.min(other), corner.max(other)));
+        }
+    }
+    rects
+}
+
 #[allow(clippy::too_many_arguments)]
 fn road_cell(grid: &Grid, c: IVec2, class: RoadClass, lo: Vec2, hi: Vec2, white: Color, yellow: Color, out: &mut Out) {
     let surface = match class {
@@ -184,35 +231,8 @@ fn road_cell(grid: &Grid, c: IVec2, class: RoadClass, lo: Vec2, hi: Vec2, white:
     if class == RoadClass::Path || class == RoadClass::Alley {
         return;
     }
-    // Sidewalks on edges facing anything that is not a road; corner squares where two roads meet
-    // around a block corner.
-    // A storm channel beside a road's length (a bridge's sides) gets a sidewalk; at a road's
-    // end (a driveway to a channel ramp) it does not.
-    let r = role(grid, c);
-    let is_road = |i: usize, d: IVec2| match grid.road(c + d) {
-        Some(RoadClass::Path) | None => false,
-        Some(RoadClass::Channel) if class != RoadClass::Channel => match r {
-            Role::Ew { .. } => i == 1 || i == 3,
-            Role::Ns { .. } => i == 0 || i == 2,
-            _ => false,
-        },
-        Some(_) => true,
-    };
-    let mut walled = [false; 4];
-    for (i, d) in DIRS.iter().enumerate() {
-        if !is_road(i, *d) {
-            walled[i] = true;
-            let (a, b) = edge(lo, hi, i, SIDEWALK);
-            out.blocks.push(slab(a, b, ROAD_Y, LOT_Y, sidewalk()));
-        }
-    }
-    for (i, (d1, d2)) in [(0, 1), (1, 2), (2, 3), (3, 0)].iter().enumerate() {
-        if !walled[*d1] && !walled[*d2] && grid.road(c + DIRS[*d1] + DIRS[*d2]).is_none_or(|r| r == RoadClass::Path) {
-            let corner = [Vec2::new(hi.x, lo.y), hi, Vec2::new(lo.x, hi.y), lo][i];
-            let dir = Vec2::new(if corner.x == hi.x { -1.0 } else { 1.0 }, if corner.y == hi.y { -1.0 } else { 1.0 });
-            let other = corner + dir * SIDEWALK;
-            out.blocks.push(slab(corner.min(other), corner.max(other), ROAD_Y, LOT_Y, sidewalk()));
-        }
+    for (a, b) in sidewalk_rects(grid, c) {
+        out.blocks.push(slab(a, b, ROAD_Y, LOT_Y, sidewalk()));
     }
     if class == RoadClass::Channel {
         return;

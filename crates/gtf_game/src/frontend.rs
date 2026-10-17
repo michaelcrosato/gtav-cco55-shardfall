@@ -423,7 +423,15 @@ impl Front {
     }
 
     /// The page's full-screen `Screen` (None while playing).
-    pub fn screen(&self, settings: &Settings, has_save: bool, web: bool, player: Vec2, blips: &[Blip]) -> Option<Screen> {
+    pub fn screen(
+        &self,
+        settings: &Settings,
+        has_save: bool,
+        web: bool,
+        player: Vec2,
+        blips: &[Blip],
+        route: &[Vec2],
+    ) -> Option<Screen> {
         let s = |id: &str, title: &str, body: ScreenBody, backdrop: Backdrop, hints: Vec<Prompt>| Screen {
             id: id.into(),
             title: title.into(),
@@ -495,7 +503,11 @@ impl Front {
                                     pulse: false,
                                 }))
                                 .collect(),
-                            route: self.waypoint.map(|w| vec![player, w]).unwrap_or_default(),
+                            route: if route.len() >= 2 {
+                                route.to_vec()
+                            } else {
+                                self.waypoint.map(|w| vec![player, w]).unwrap_or_default()
+                            },
                             selected: blips
                                 .iter()
                                 .find(|b| b.pos.distance(self.map_cursor) < self.map_zoom * 0.04)

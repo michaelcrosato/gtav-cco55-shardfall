@@ -8,25 +8,28 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use glam::{Vec2, Vec3};
+use pav_core::InputFrame;
 use pav_core::entity::EntityId;
 use pav_core::frame::SimEvent;
 use pav_core::games::{Entry, Game, GameBox, entry};
 use pav_core::present::*;
 use pav_core::sim::Sim;
-use pav_core::{Color, InputFrame};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 pub mod about;
 pub mod camera;
 pub mod content;
+pub mod daytime;
 pub mod frontend;
 pub mod gallery;
+pub mod gps;
 pub mod hud;
 pub mod pad;
 pub mod player;
 pub mod protagonists;
 pub mod settings;
+pub mod tour;
 pub mod views;
 pub mod world;
 
@@ -87,10 +90,20 @@ pub struct Freeway {
     pub quit: bool,
     /// A reference view's still camera (`freeway/view/<name>`).
     pub view: Option<views::View>,
+    /// The clock and the weather.
+    pub sky: daytime::Sky,
+    /// Sprint stamina and crouch.
+    pub foot: player::Foot,
     /// The district (rebuilt from its file when missing, e.g. after loading a snapshot; a
     /// cache, so not part of the state).
     #[serde(skip)]
     city: Option<Arc<pav_world::City>>,
+    /// The streaming tour's route (`freeway/tour`; rebuilt from the city when missing).
+    #[serde(skip)]
+    tour: Option<Arc<tour::Tour>>,
+    /// The route to the waypoint (derived; replanned when missing).
+    #[serde(skip)]
+    gps: gps::Gps,
     #[serde(skip)]
     settings_json: Option<Arc<String>>,
 }
@@ -103,12 +116,14 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         None => None,
     };
     let city = match &view {
-        Some(v) => world::build_scene(sim, Vec2::new(v.target.x, v.target.z), &[v.eye, v.target])?,
-        None => world::build_scene(sim, world::flat(world::SPAWN), &[])?,
+        Some(v) => world::build_scene(sim, world::city()?, Vec2::new(v.target.x, v.target.z), &[v.eye, v.target])?,
+        None if mode == "dev" => world::build_scene(sim, world::dev_city()?, world::flat(world::DEV_SPAWN), &[])?,
+        None => world::build_scene(sim, world::city()?, world::flat(world::SPAWN), &[])?,
     };
+    let mode_is_tour = mode == "tour";
     let mut front = Front::default();
     front.page = match mode.as_str() {
-        "roam" | "dev" => Page::Play,
+        "roam" | "dev" | "tour" => Page::Play,
         _ if view.is_some() => Page::Play,
         "gallery" => {
             front.back = Page::Title;
@@ -120,6 +135,17 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
     let mut cam = OrbitCam::default();
     // Look east along Sunset Row from the start.
     cam.face(std::f32::consts::FRAC_PI_2);
+    player::tune(&mut sim.config.movement);
+    let world = daytime::def()?;
+    let mut sky = daytime::Sky::new(&world);
+    if let Some(v) = &view {
+        // A view is a still: its hour holds, its weather stays.
+        if let Some(t) = v.time.as_deref() {
+            sky.hour = daytime::parse_time(t).ok_or_else(|| anyhow::anyhow!("view {}: bad time '{t}'", v.name))?;
+        }
+        sky.speed = 0.0;
+        sky.set_weather(&world, v.weather.as_deref().unwrap_or("clear"), true)?;
+    }
     let game = Freeway {
         mode,
         time: 0.0,
@@ -142,6 +168,10 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         roam_age: 0.0,
         quit: false,
         view,
+        sky,
+        foot: player::Foot::default(),
+        tour: (mode_is_tour).then(|| Arc::new(tour::Tour::new(&city))),
+        gps: gps::Gps::default(),
         city: Some(city),
         settings_json: None,
     };
@@ -179,6 +209,32 @@ impl Freeway {
                 if !slot.is_empty() && !self.saves.contains(&slot) {
                     self.saves.push(slot);
                 }
+            }
+        }
+    }
+
+    /// World commands (also typed by tests and tools): `time HH:MM`, `clock <speed>`,
+    /// `weather <name>` (held until changed), `weather auto`.
+    fn world_cmds(&mut self, input: &InputFrame) {
+        let Ok(world) = daytime::def() else { return };
+        for c in &input.cmds {
+            let mut w = c.split_whitespace();
+            match (w.next(), w.next()) {
+                (Some("time"), Some(t)) => match daytime::parse_time(t) {
+                    Some(h) => self.sky.hour = h,
+                    None => log::warn!("time: '{t}' is not HH:MM"),
+                },
+                (Some("clock"), Some(k)) => match k.parse::<f32>() {
+                    Ok(k) if (0.0..=1000.0).contains(&k) => self.sky.speed = k,
+                    _ => log::warn!("clock: '{k}' is not a speed (0-1000)"),
+                },
+                (Some("weather"), Some("auto")) => self.sky.held = false,
+                (Some("weather"), Some(name)) => {
+                    if let Err(e) = self.sky.set_weather(&world, name, true) {
+                        log::warn!("{e}");
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -244,41 +300,20 @@ impl Freeway {
         if let Some(v) = &self.view {
             return v.camera();
         }
+        if let Some(t) = &self.tour {
+            return t.camera(self.time * tour::SPEED);
+        }
         if self.drone_view() { camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0) } else { self.cam.intent() }
     }
 
-    /// Golden hour over the bay (time of day and weather arrive in M2).
-    fn view() -> ViewIntent {
-        let (el, az) = (22f32.to_radians(), 250f32.to_radians());
-        let to_sun = Vec3::new(az.sin() * el.cos(), el.sin(), -az.cos() * el.cos());
-        let horizon = Color::hex("#b9cde0");
-        ViewIntent {
-            sun_dir: -to_sun,
-            sun_color: Color::hex("#ffd9a8"),
-            sun_intensity: 1.15,
-            ambient_sky: Color::hex("#8fa6c8"),
-            ambient_ground: Color::hex("#7a6352"),
-            ambient: 0.85,
-            sky: Some(SkyIntent {
-                zenith: Color::hex("#4f7fbf"),
-                horizon,
-                ground: Color::hex("#6b5a4a"),
-                glow: Color::hex("#ffcf8a"),
-                sun_size: 0.03,
-                moon_dir: None,
-                stars: 0.0,
-                clouds: 0.2,
-                cloud_color: Color::hex("#fff1e0"),
-                lightning: 0.0,
-            }),
-            // A light marine haze; the far view fills in what streaming has not loaded.
-            fog: Some(FogIntent { color: horizon, start: 220.0, end: 1100.0 }),
-            exposure: 1.0,
-            bloom: 0.35,
-            temperature: 0.12,
-            saturation: 1.08,
-            shadow_radius: 60.0,
-            ..Default::default()
+    /// The look of the moment: the clock and the weather.
+    fn look_now(&self) -> ViewIntent {
+        match daytime::def() {
+            Ok(world) => self.sky.view(&world),
+            Err(e) => {
+                log::error!("{e:#}");
+                ViewIntent::default()
+            }
         }
     }
 }
@@ -286,11 +321,11 @@ impl Freeway {
 impl Game for Freeway {
     const KEY: &'static str = KEY;
 
-    fn pre(&mut self, sim: &mut Sim, input: &InputFrame, _dt: f32, events: &mut Vec<SimEvent>) -> BTreeMap<EntityId, InputFrame> {
+    fn pre(&mut self, sim: &mut Sim, input: &InputFrame, dt: f32, events: &mut Vec<SimEvent>) -> BTreeMap<EntityId, InputFrame> {
         let real = sim.dt();
         self.ui_time += real;
         if self.city.is_none() {
-            match world::city() {
+            match world::city_for(&self.mode) {
                 Ok(c) => self.city = Some(c),
                 Err(e) => log::error!("{e:#}"),
             }
@@ -304,8 +339,29 @@ impl Game for Freeway {
         if let Some(v) = &self.view {
             sim.state.world.interest.extend_from_slice(&[v.eye, v.target]);
         }
+        if self.mode == "tour" {
+            if self.tour.is_none() {
+                self.tour = self.city.as_ref().map(|c| Arc::new(tour::Tour::new(c)));
+            }
+            if let Some(t) = &self.tour {
+                let s = self.time * tour::SPEED;
+                sim.state.world.interest.extend_from_slice(&[t.at(s), t.at(s + 40.0)]);
+                // The player rides along (one focus for streaming, as in play).
+                if let Some(id) = sim.state.player {
+                    sim.set_position(id, t.at(s) + Vec3::Y * 0.05);
+                }
+            }
+        }
         self.host_cmds(input);
+        self.world_cmds(input);
+        if let Ok(world) = daytime::def() {
+            self.sky.step(&world, dt, &mut sim.state.rng, events);
+        }
         let feet = Self::feet(sim);
+        self.gps.set(self.front.waypoint);
+        if let Some(c) = &self.city {
+            self.gps.update(c, feet);
+        }
         let mut ctx = Ctx {
             settings: &mut self.settings,
             has_save: !self.saves.is_empty(),
@@ -346,8 +402,12 @@ impl Game for Freeway {
                 self.cam.update(&InputFrame::default(), feet, look, real);
             } else {
                 self.cam.update(input, feet, look, real);
-                if let (Some(id), None) = (sim.state.player, &self.view) {
-                    out.insert(id, player::on_foot(input, &self.cam));
+                if let (Some(id), None, false) = (sim.state.player, &self.view, self.mode == "tour") {
+                    let (frame, haste) = self.foot.input(input, &self.cam, 50.0, dt);
+                    if let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut()) {
+                        c.haste = haste;
+                    }
+                    out.insert(id, frame);
                 }
             }
         } else {
@@ -378,6 +438,8 @@ impl Game for Freeway {
             "attract_due": self.front.attract_due,
             "idle": round(self.front.idle),
             "camera_yaw": round(self.cam.yaw.to_degrees()),
+            "clock": daytime::format_time(self.sky.hour),
+            "weather": self.sky.weather,
             "web": self.web,
             "touch": self.touch,
         })
@@ -409,7 +471,8 @@ impl Game for Freeway {
         ui.safe_margin = self.settings.safe_area;
         ui.time = self.ui_time;
         if page != Page::Gallery {
-            ui.screen = self.front.screen(&self.settings, !self.saves.is_empty(), self.web, player, &blips);
+            ui.screen =
+                self.front.screen(&self.settings, !self.saves.is_empty(), self.web, player, &blips, &self.gps.minimap(feet));
         }
         if page == Page::Play {
             let heading = sim.player().and_then(|p| p.character.as_ref()).map(|c| c.facing).unwrap_or(0.0);
@@ -425,6 +488,7 @@ impl Game for Freeway {
                 weapon: self.weapon,
                 help,
                 map_blips: blips.clone(),
+                route: self.gps.minimap(feet),
             });
             ui.hud = Some(hud);
             ui.help = help;
@@ -454,11 +518,15 @@ impl Game for Freeway {
             _ => 0.0,
         };
         let menu = page != Page::Play;
+        let mut draw = DrawList::default();
+        if page == Page::Play {
+            draw.ribbons.extend(self.gps.ribbon(feet, 160.0));
+        }
         Some(PlayFrame {
             ui,
-            draw: DrawList::default(),
+            draw,
             camera: Some(self.camera()),
-            view: Some(Self::view()),
+            view: Some(self.look_now()),
             audio: AudioScene {
                 master: self.settings.master,
                 effects: self.settings.sfx,
