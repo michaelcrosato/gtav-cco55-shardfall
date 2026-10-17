@@ -459,8 +459,10 @@ pub struct VehicleState {
     pub flooded: bool,
     /// A tool's held input (used when the game gives none).
     pub hold: Option<VehicleInput>,
-    /// Seconds since the last crash event.
+    /// Seconds since the last contact, and the strongest change in speed (m/s) of the contact
+    /// going on (one crash is costed once, however many ticks its contact lasts).
     pub since_crash: f32,
+    pub crash_dv: f32,
     /// The pose a game last moved it to while kinematic (centre), for its wheels' spin.
     pub kinematic_from: Option<Vec3>,
 }
@@ -496,6 +498,7 @@ impl Default for VehicleState {
             flooded: false,
             hold: None,
             since_crash: 99.0,
+            crash_dv: 0.0,
             kinematic_from: None,
         }
     }

@@ -173,6 +173,37 @@ impl WalkMap {
         self.get(t) != Walk::Blocked
     }
 
+    /// The centre of the walkable tile nearest `p` within `rings` tiles of it (ring by ring,
+    /// nearest centre first): where someone on a road or against a wall steps onto the map.
+    pub fn nearest_walkable(&self, p: Vec2, rings: i32) -> Option<Vec2> {
+        let c = self.tile_of(p);
+        if self.walkable(c) {
+            return Some(self.centre(c));
+        }
+        for r in 1..=rings {
+            let mut best: Option<(f32, Vec2)> = None;
+            for dz in -r..=r {
+                for dx in -r..=r {
+                    if dx.abs() != r && dz.abs() != r {
+                        continue;
+                    }
+                    let t = c + IVec2::new(dx, dz);
+                    if self.walkable(t) {
+                        let at = self.centre(t);
+                        let d = at.distance_squared(p);
+                        if best.is_none_or(|b| d < b.0) {
+                            best = Some((d, at));
+                        }
+                    }
+                }
+            }
+            if let Some((_, at)) = best {
+                return Some(at);
+            }
+        }
+        None
+    }
+
     /// How many tiles of each kind: (sidewalk, crossing, path, open).
     pub fn counts(&self) -> (usize, usize, usize, usize) {
         let mut c = (0, 0, 0, 0);
