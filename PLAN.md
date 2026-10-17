@@ -14,8 +14,8 @@
 1. Read §1–§4 once, then §10 (workflow rules), then execute the milestones in §9 **in order**.
    Re-read the design (§5) and architecture (§6) sections that a milestone names before starting it.
 2. Track everything in `PROGRESS.md`: tick milestone tasks, record evidence for every Definition of
-   Done item (§2), log decisions and open issues. `PROGRESS.md` is what the stop hook and the next
-   agent read to know what is left.
+   Done item (§2), log decisions and open issues. `PROGRESS.md` is what the `/goal` stop hook's
+   evaluation and the next agent read to know what is left.
 3. The game must be **playable and green at the end of every milestone** (builds, tests, bots).
 4. When this plan is wrong about the engine (it was written from a reading of the code, not from
    building every feature), decide, write the decision in `PROGRESS.md` → Decisions, and keep
@@ -46,8 +46,10 @@ single-file HTML build (§12), separate from the engine evaluation.
   Chromium build 1194 via Playwright 1.56.1 (SwiftShader WebGPU); native window smoke tests run under
   Xvfb. Player targets: Windows build on an NVIDIA RTX 3060 Ti, and WebGPU browsers (Chrome / Edge).
 - **Model and Effort Level:** AI lab: Anthropic (Claude). Planning ran at reasoning effort **max**;
-  implementation runs at **Extra** effort. Both were confirmed from the session's metadata
-  (`get_session`: `session_context.model`, `last_served_model`, `effort_level`). The exact model is
+  implementation is handed off at **Extra** effort (the user's stated plan; the implementing
+  session confirms its own level). The planning model and effort were confirmed from the session's
+  metadata (`get_session`: `session_context.model`, `last_served_model`, `effort_level`). The exact
+  model is
   stated in the chat reports (planning and delivery), **not in repository files**: this environment
   forbids model identifiers in anything pushed to a repository (commits, PRs, docs, code). The
   implementing session confirms its own model and effort with `get_session` and states them in its
@@ -61,6 +63,12 @@ single-file HTML build (§12), separate from the engine evaluation.
 The goal is complete when **every** item below is true and `PROGRESS.md` records the evidence (a
 test name, a command and its output summary, a capture path that was looked at, a build artifact).
 Items are deliberately checkable without a display.
+
+**Order of value inside the Definition of Done.** Every item is required for Done. If the run is
+interrupted, this order leaves the most valuable game: (1) the core loop — D1, D2, D3 (on foot,
+driving), D4, D5, D12; (2) structure — D6 with the heist path first, D7, D8, D9; (3) breadth — the
+remaining vehicles and activities, D10 stations beyond the first two, D11 polish, D16; (4) close-out
+— D13–D15. Author M7 content in the same order.
 
 **D1. Builds and checks.** From a clean checkout: the game (`cargo build --locked -p gtf_app`), the
 agent CLI (`gtf`), the single-file web build `dist/GrandTheftFreeway-BX.html`, and the Windows
@@ -79,7 +87,8 @@ Route 404 + the Pretzel interchange + the broken construction ramp. Day/night cy
 
 **D3. Player.** On foot: walk, run, sprint with stamina, jump, vault/climb, swim, crouch, melee, cover
 (snap, peek, blind fire, move along), aim with assist, fire, reload, weapon wheel with slow-mo.
-Vehicles: ≥ 11 archetypes from data (§5.6.3) incl. police cruiser, bus and a flyable helicopter;
+Vehicles: the 13 required archetypes from data (§5.6.3; 2 more are optional) incl. police cruiser,
+bus and a flyable helicopter; cars pitch and roll on slopes, ramps and jumps (E9);
 animated enter/exit, carjacking, locked cars, analog throttle/brake/steer, handbrake drift,
 damage → smoke → fire → explosion, burst tyres, broken lights, horn, headlights, police
 lights/siren, radio. Three protagonists with abilities (Slipstream, Deadeye, Overdrive) and a switch
@@ -88,7 +97,8 @@ wheel with the sky-cam transition.
 **D4. Living city.** Traffic follows lanes and signals, turns at intersections, changes lanes,
 yields to pedestrians, pulls over for sirens, reacts to the player; buses run a route; parked cars
 line the streets. Pedestrians walk sidewalks, cross at crosswalks on the walk signal, use scenario
-points, and react (flee, cower, fight back, film, report crimes). Densities vary by zone and time.
+points, and react (flee, cower, fight back, film, report crimes); a pedestrian struck by a vehicle is thrown
+by the impact impulse before the fall clip plays. Densities vary by zone and time.
 AI level-of-detail keeps the sim inside budget (§6.9).
 
 **D5. Heat.** Five-star wanted system (§5.6.5): witnesses and reporting, police dispatched from
@@ -114,11 +124,11 @@ Quit) → loading cards; settings (audio, display/quality, controls, accessibili
 showing the Source Information block (§1) and asset credits.
 
 **D9. Attract mode.** After 10 seconds without input on the title or any main-menu page, an AI
-plays the game: ≥ 6 vignettes (§5.8) covering driving + radio, a police chase with the helicopter,
-a gunfight with cover, a character switch, a stunt jump, city life, and the heist getaway. It loops
+plays the game: the 7 vignettes of §5.8 (driving + radio, a police chase with the helicopter, a
+gunfight with cover, a character switch, a stunt jump, city life, the heist getaway). It loops
 indefinitely (a 30-minute headless soak reports zero errors and zero stuck vignettes) and any input
-from any device returns to the title at once. On touch devices the game runs the attract loop only,
-with a single settings button on screen.
+from any device returns to the title at once. On touch devices the game runs the attract loop only;
+the only thing drawn over the world is a settings (gear) button (§5.8).
 
 **D10. Audio.** Synthesized SFX for every action and event; continuous loops with live parameters
 (engines by RPM, tyre squeal, sirens, rotor, rain, wind, crowd and city beds); ≥ 4 procedural music
@@ -129,24 +139,36 @@ neon and lit windows at night, VFX for combat, vehicles and weather, camera poli
 and frame-time readout is shown by default and can be hidden in settings.
 
 **D12. Performance.** The budgets in §6.9 hold at all six reference views (`gtf perf view=all`) and
-in the browser build (sim ms/tick from the headless Chromium stats overlay, §7.4). Quality presets
+in the browser build (sim ms/tick from the game's `?perf=1` console line, §7.4); native numbers
+come from a release build of `gtf`. Quality presets
 and dynamic resolution work. Expected frame rate on an RTX 3060 Ti: 60 FPS target, never below 25
 on average (user-verified with the on-screen readout; record that the cloud has no GPU).
 
-**D13. Verification.** Bots complete every mission (both heist approaches) on 3 seeds; the
+**D13. Verification.** Bots complete every mission (both heist approaches) on 3 seeds (long suites
+run as ignored tests or `gtf soak` from a release build, §7.8); the
 heat-evasion bot escapes 3★ within the time limit; traffic and pedestrian soaks pass their anomaly
 limits (§7.5); attract soak passes; snapshot/replay determinism holds with the full city and
 population; HUD captures of every screen in §5.9 were taken and looked at.
 
 **D14. Docs.** `README.md` (game, how to play, controls, build/run, Source Information),
 `docs/gtf/ENGINE_ANALYSIS.md` (§12.2), `docs/gtf/HANDOFF.md` (how to add districts, missions,
-vehicles, weapons, peds, stations, vignettes), engine docs updated for every engine extension
-(`docs/MAKE_A_GAME.md`, `docs/REFERENCE.md`, `AGENTS.md` within its size limits), `PROGRESS.md`
+vehicles, weapons, peds, stations, vignettes), engine docs updated for every engine extension (`docs/REFERENCE.md`, plus
+a short section with pointers in `docs/MAKE_A_GAME.md`, which `docs_limits.rs` caps at 16 KiB and
+whose repository paths must exist; `AGENTS.md` < 32 KiB), `PROGRESS.md`
 complete.
 
-**D15. Delivery.** Branch pushed, draft PR description current, the single-file HTML and the Windows
-`.exe` (zipped) sent to the user with `SendUserFile`, and a final chat report with the Source
-Information block and the engine analysis summary.
+**D15. Delivery.** Branch pushed, draft PR description current, the single-file HTML (its header
+comment holds the Source Information block — checked with `grep`) and the Windows `.exe` (zipped)
+sent to the user with `SendUserFile` (in this session's tool list at planning time; if it is
+missing, the HTML is committed under `dist/` and the `.exe` build command is given instead), and a
+final chat report with the Source Information block and the engine analysis summary.
+
+**D16. Developer demo level.** `freeway/dev` (the Proving Grounds, §9 M2) is complete: one station
+per engine system the game relies on (streaming, signals and traffic, pedestrians, vehicles and the
+feel pad, combat and cover, heat dispatch, the UI gallery, audio and radio, mission-DSL test
+missions), each with a 3D-text sign naming the system and the `gtf` command that checks it; every
+station captured; `docs/gtf/ENGINE_ANALYSIS.md` carries a table of the engine systems used and
+unused.
 
 ---
 
@@ -211,8 +233,8 @@ Read from the code at the pin and measured in this container (debug build, llvmp
 | Camera | View-side rig follows the player; "no per-game camera code" | **E4/E6** sim-side game camera publishes a `CameraIntent`; engine camera helpers (spring arm with collision, chase, cinematic shots, sky-cam) |
 | HUD and menus | egui in `pav_app`, Shardfall-specific; hook games get text lines only | **E4** `UiModel` (pure data) + **E5** `pav_ui` 10-foot kit; HUD in headless captures |
 | Drawing from game state | `pav_view::assets::emit_asset` (code outside `pav_core`) | **E4** `DrawList` (pure data) drawn by `pav_view` |
-| Vehicles | Raycast car steering *toward the stick direction*, driven only by the player; arcade helicopter; toy visuals (box + cabin) | **E9** vehicle v2: analog controls for any driver, damage, doors/seats, archetypes as data, prop bodies, dynamic↔kinematic switch for AI LOD |
-| A city | 32 m chunk streaming, axis-aligned static blocks, terraced terrain, room files | **E10** `pav_world`: city generator from a macro map, lane and sidewalk graphs, traffic, pedestrians, spawning with LOD |
+| Vehicles | Raycast car steering *toward the stick direction*, driven only by the player, **locked to yaw (no pitch or roll)**; arcade helicopter; toy visuals (box + cabin) | **E9** vehicle v2: analog controls for any driver, damage, doors/seats, archetypes as data, prop bodies, dynamic↔kinematic switch for AI LOD |
+| A city | 32 m chunk streaming **hard-wired to the pavilion** (hub + wilderness) and **off for game scenes**; draw distance = loaded physics (5 × 5 chunks); axis-aligned static blocks; room files | **E14** region provider, speed-aware streaming, far LOD, static meshes; **E10** `pav_world`: city generator from a macro map, lane and sidewalk graphs, traffic, pedestrians, spawning with LOD |
 | AI | Wander/patrol/follow/guard brains, 0.5 m nav grid (A*, flow fields), guard sight cones | Graph-based traffic and pedestrian AI (`pav_world`); police and combat AI in the game; nav grid for local on-foot movement |
 | Combat | Lightweight projectiles; `health.rs` for rapier props; no character vitals | Game combat: hitscan via rapier queries, weapons data, vitals, cover |
 | Rendering | WebGPU forward renderer: MSAA, cel/lit, 1 sun shadow region + 4 shadowed point lights, 64 lights, bloom, haze/shafts, SSGI, filters, 65k GPU particles, procedural materials. **Flat sky colour, no culling, all instances uploaded every frame** | **E7** sky dome + time of day, frustum/distance culling with persistent region buffers, shadows that follow the view, fake spotlights, world-text fonts |
@@ -284,8 +306,8 @@ sketch, 16 × 16 tiles of 64 m, north up (engine: x east, z south):
 
 ```
       0 1 2 3 4 5 6 7 8 9 A B C D E F
-  0   H H H H H H H S S H H H H H F F    H  Mirador Hills (terrain to +45 m), winding Mirador Drive
-  1   H H H r r r r r r H H H H H F F    S  PALOMA sign + Lookout Point (vista, collectible, jump)
+  0   H H H H H H H L L H H H H H F F    H  Mirador Hills (terrain to +45 m), winding Mirador Drive
+  1   H H H r r r r r r H H H H H F F    L  PALOMA sign + Lookout Point (vista, collectible, jump)
   2   r r r r r r r r r r r r r c F F    r  Los Mirados bungalows (driveways, palms)
   3   r r r r p p r r r r r r c c F F    p  Mirador Park
   4   c c c c c c c c c c c c c c P F    c  Sunset Row commercial strip (W-E boulevard)
@@ -396,12 +418,12 @@ Roster (all from `content/freeway/vehicles.toml`, bodies authored as props, §6.
 | Key | Name | Class | Top speed | 0–100 km/h | Notes |
 |---|---|---|---|---|---|
 | `fenwick_commuter` | Fenwick Commuter | compact | 30 m/s | 9.0 s | Most common traffic |
-| `zephyr_wagon` | Zephyr Wagon | wagon | 31 m/s | 8.5 s | "Dad car" |
+| `zephyr_wagon` | Zephyr Wagon | wagon | 31 m/s | 8.5 s | "Dad car" (optional) |
 | `okami_kaze` | Okami Kaze | sports | 42 m/s | 3.8 s | S3 getaway car |
 | `bravura_stallion` | Bravura Stallion | muscle | 38 m/s | 4.6 s | Dez's car; burnouts |
 | `daimon_titan` | Daimon Titan | SUV | 31 m/s | 7.0 s | Mack's car; heavy |
 | `marlin_bay` | Marlin Bay | pickup | 30 m/s | 7.5 s | Roxy's truck; open bed |
-| `fenwick_courier` | Fenwick Courier | van | 26 m/s | 11 s | Deliveries |
+| `fenwick_courier` | Fenwick Courier | van | 26 m/s | 11 s | Deliveries (optional) |
 | `paloma_cab` | Paloma Cab | taxi | 32 m/s | 8.0 s | Yellow sedan, roof sign |
 | `sppd_interceptor` | SPPD Interceptor | police | 40 m/s | 5.0 s | Light bar, siren, vigilante |
 | `metro_bus` | Metro Bus | bus | 20 m/s | 18 s | Runs a route; long chase obstacle |
@@ -415,11 +437,15 @@ Roster (all from `content/freeway/vehicles.toml`, bodies authored as props, §6.
   (full lock below 8 m/s, 35% at top speed; "steering assist" setting adds counter-steer), R1
   handbrake (rear grip drops to `drift_grip`), burnout when R2 + L2 at standstill (muscle cars).
   Keyboard: W/S throttle/brake ramp to full in 0.15 s; A/D steer with a 0.12 s ramp.
+- **Body motion:** pitch and roll are free (E9) with anti-roll torque, a low centre of mass, damped
+  rotation in the air and self-righting, so slopes, ramps, jumps and crashes look physical while the
+  car stays controllable.
 - **Feel targets** (checked by `vehicle_feel`, §7.3): 0–100 km/h and top speed within ±10% of the
   table; braking 100 → 0 km/h in 38–50 m (compact) and 32–40 m (sports); lateral grip 0.9–1.1 g at
   25 m/s; a held handbrake at 20 m/s gives a 25–45° slide angle; no roll-overs on flat roads (cars
   roll only on ramps and big impacts; a car upside down for 3 s rights itself, unless it is burning,
-  in which case it explodes).
+  in which case it explodes); climbs Mirador Drive's steepest grade at ≥ 60% of top speed; leaves the
+  stunt ramps within ±10° of level and lands upright.
 - **Enter/exit (≤ 1.2 s, cancellable):** walk to the nearest door (auto-steer ≤ 1 s), the door part
   swings open, the character slides in (sitting clip), the door closes. Exit reverses; holding
   Triangle above 15 m/s bails out with a roll.
@@ -480,7 +506,7 @@ Roster (all from `content/freeway/vehicles.toml`, bodies authored as props, §6.
 | 2★ | 2–3 cars | Lethal force; block the player's car | 160 m |
 | 3★ | 4 cars + SPPD Air (searchlight at night) | Ramming (PIT), occasional roadblocks | 220 m |
 | 4★ | 6 cars + tactical van + air with a marksman | Roadblocks, spike strips, foot units with rifles | 300 m |
-| 5★ | 8 cars, 2 air units, tactical SUVs | Freeway roadblocks, grenades | 400 m |
+| 5★ | 8 cars, 2 air units, 2 tactical vans | Freeway roadblocks, grenades | 400 m |
 
 - **Dispatch:** units spawn **out of view** at SPPD Central, at lane spawn points on the network edge
   of the active area, or as already-patrolling cars; they path along the lane graph to the last known
@@ -532,11 +558,12 @@ Roster (all from `content/freeway/vehicles.toml`, bodies authored as props, §6.
   (`Sitting_*`), take photos (tourists), dance on the beach, watch a performer.
 - Reactions: gunfire within 40 m or a weapon aimed → flee along the graph away from the threat;
   cornered → cower (crouch clip); tough archetypes fight back (fists or a pistol); influencers film
-  (phone clip) — and count as witnesses; struck by a car → knock-down (fall clip) then get up, or die
-  above 12 m/s; bumped → angry line.
+  (phone clip) — and count as witnesses; struck by a car → thrown by the impact impulse (the character
+  controller's knock-back), then a fall clip, then up again — or dead above 12 m/s; bumped → angry line.
 - Density by zone and time: 40–70 active within 120 m; spawn 60–120 m away out of view.
-- **AI LOD:** full character controller within 60 m; beyond that, kinematic movement along the graph
-  with no rapier controller; animation drops to every other tick beyond 40 m.
+- **AI LOD:** full character controller within 60 m; beyond that the engine's character LOD mode
+  (E11): no rapier controller, position and facing set from the graph, the puppet still animated
+  from velocity with fewer parts at distance; animation every other tick beyond 40 m.
 
 #### 5.6.8 Missions and the heist
 - Missions are data (§6.8.6): spawns, steps, fail conditions, checkpoints, medals, dialogue, shots.
@@ -572,7 +599,7 @@ Radio, Settings (opens pause settings), Gallery (taken photos, metadata only), a
   container ramp. Airborne through the gate above the minimum speed → slow-mo camera; landing inside
   the zone → "UNIQUE STUNT BONUS".
 - **Store hold-ups × 2:** aim at the clerk → the bag fills (aiming close speeds it up) → 2★ on exit.
-- **Vigilante:** in a police car press L3 + Cross (keyboard: B) to start; take down fleeing suspects
+- **Vigilante:** in a police car press D-pad → (keyboard: E), or pick it in the phone's Jobs app; take down fleeing suspects
   in cars or on foot, levels of rising difficulty; ends on death, arrest of the player or leaving the car.
 - **Random events × 2:** *Purse Snatcher* (chase on foot, return the purse or keep it) and
   *Getaway Needed* (a robber begs for a ride; lose the cops).
@@ -623,7 +650,8 @@ Wheel turning, buskers, beach volleyball, the news helicopter over downtown at n
 
 ### 5.8 Attract mode (store demo)
 
-- **Trigger:** 10 s (600 ticks) without any input on the title screen or any main-menu page. Input
+- **Trigger:** 10 s (600 ticks; ticks track real time in native and normal browser builds, not in
+  the slow headless test browser, §7.4) without any input on the title screen or any main-menu page. Input
   means any device activity the host sees: a key, a mouse move or click, a pad button or stick past
   its dead zone, a touch (§6.5 E2 `activity`).
 - **Exit:** any input during attract returns to the title at once (≤ 0.25 s fade). The input that
@@ -644,12 +672,19 @@ Wheel turning, buskers, beach volleyball, the news helicopter over downtown at n
 
 - Order shuffles per loop from the sim's random generator; seeds vary; captions call out features
   ("A CITY THAT REACTS", "THREE CRIMINALS. ONE JOB.").
-- HUD: the game logo bottom-left, "DEMO" and "PRESS ANY BUTTON" (with the device's glyph) bottom-
-  right; the normal HUD (minimap, stars) appears during chases to show it off; the FPS readout stays.
-- **Touch devices (phones, tablets):** start straight into the attract loop and never leave it; the
-  only UI is a small gear button (top-right, 56 px tap target) opening an overlay with Sound on/off,
-  Graphics quality, About, and Close. No touch controls. (The engine's touch stick and button fan
-  are disabled for this game.)
+- HUD (desktop): the game logo bottom-left, "DEMO" and "PRESS ANY BUTTON" (with the device's glyph)
+  bottom-right; the normal HUD (minimap, stars) appears during chases to show it off; the FPS
+  readout stays. Touch devices show none of this (below).
+- **Touch devices (phones, tablets):** start straight into the attract loop and never leave it. The
+  only thing drawn over the world is a small gear button (top-right, 56 px tap target) — no HUD,
+  captions, logo, prompt or FPS readout. The gear opens an overlay with Sound on/off, Graphics
+  quality, FPS readout (off by default on touch), About, and Close. Taps elsewhere do nothing. No
+  touch controls (the engine's touch stick and button fan are disabled for this game).
+- **Soak safety:** each vignette change despawns the population and mission actors, drops dormant
+  entities and keeps inactive protagonists as data, so an endless loop never grows state (the attract
+  soak checks that entity count and memory stay flat).
+- **Sound:** native builds play attract audio; browsers block audio until the first click or key
+  (autoplay policy), so the browser attract loop is silent until the input that exits it — expected.
 - Robustness: a vignette that stalls (bot stuck > 6 s, or a goal not reached in its time) ends early
   and logs an anomaly; the attract soak (§7.5) counts them.
 
@@ -668,8 +703,9 @@ Wheel turning, buskers, beach volleyball, the news helicopter over downtown at n
   - Brief: current objective, mission log, recent texts — large type, ≤ 6 rows.
   - Stats: big cards (one per protagonist: cash and 5 stat bars; one for completion with 4 numbers;
     one for collectibles). No tables.
-  - Settings: Audio (master, radio, SFX, dialogue, default station), Display (quality preset,
-    render scale, v-sync, FPS readout, HUD scale, HUD safe-area margin, brightness), Controls (aim
+  - Settings: Audio (master, radio, SFX, dialogue, default station), Display (fullscreen,
+    quality preset, render scale, dynamic resolution, v-sync, FPS readout, HUD scale, HUD safe-area
+    margin, brightness), Controls (aim
     assist, camera sensitivity X/Y, invert Y, vibration, sprint hold/toggle, glyph style auto/PS/
     Xbox/keyboard), Accessibility (subtitles on/off and size, colourblind-safe blips, reduce camera
     shake, high-contrast HUD, weapon-wheel slow-mo on/off).
@@ -711,7 +747,9 @@ Wheel turning, buskers, beach volleyball, the news helicopter over downtown at n
   to 25% (setting).
 - Motion: 150–250 ms ease-out transitions; synthesized UI sounds for move, accept, back, error.
 - Keyboard and mouse map onto the same model: arrows/WASD move focus, Enter/Space accept, Esc back,
-  Q/E tabs; the mouse hovers to focus and clicks to accept; never a desktop-style widget.
+  Q/E tabs; the mouse hovers to focus and clicks to accept (`pav_ui` reports the element under the
+  pointer; the app sends `ui.focus <id>` / `ui.accept <id>` as recorded input commands, so the sim
+  keeps owning focus); never a desktop-style widget.
 - Glyphs: drawn procedurally (no images): PlayStation (✕ ○ □ △, L1/R1/L2/R2, Options, Create,
   touchpad), Xbox (A B X Y, LB/RB/LT/RT, Menu, View) and keyboard keycaps; PlayStation by default;
   the set follows the last device used (setting can force one).
@@ -752,9 +790,14 @@ Wheel turning, buskers, beach volleyball, the news helicopter over downtown at n
 | Map | Touchpad press (Create too, where the touchpad click isn't reported) | same | M |
 | Menus | D-pad/stick move, ✕ accept, ○ back, L1/R1 tabs, L2/R2 zoom/page | same | arrows/WASD, Enter, Esc, Q/E |
 
-Engine system keys stay for development (F1 tuning panel, F2 rooms, F3 boot log, F12 screenshot,
-hold Backspace rewind) but are disabled in release game builds except F12; the engine's Esc menu
-moves to F1 for hook games (§6.5 E13).
+L3 and R3 act on release unless the other stick is clicked within 150 ms (then the ability fires),
+so crouch, horn and look-behind never misfire on the ability chord. Holding Create no longer rewinds
+time (an engine-demo default that E13 turns off for this game).
+
+Engine system keys stay for development (F2 rooms, F3 boot log, F12 screenshot, hold Backspace
+rewind) but are disabled in release game builds except F11 (fullscreen) and F12; for hook games F1
+opens one developer panel holding the tuning panel and the engine's former Esc-menu entries (§6.5
+E13).
 
 ### 5.11 Art direction
 
@@ -883,6 +926,9 @@ pav_app   (lib, + bin shardfall) ----/
   the player sees and hears is described as data (§6.5 E4) and drawn by engine crates.
 - Engine crates never depend on `gtf_*`. Only `gtf_app` links the game in (so a game change rebuilds
   `gtf_game` + two tiny binaries, not `pav_tools`/`pav_app`: minutes saved per iteration).
+- `pav_tools` depends on `pav_world` (generic `citymap` and `lanes` tools). Tools that need the
+  game's data (`perf` views, `soak` modes, `traffic`, `peds`, `vehicle_feel`) live in `gtf_app` and
+  are registered with `pav_tools::cli::main_with(&GTF_TOOLS)` (E1, E12).
 - Shardfall (`pav_core::arpg`) and the pavilion demo keep working; `cargo test --workspace` covers
   them.
 
@@ -917,8 +963,9 @@ host (pav_app / pav_tools)                       sim (pav_core::Sim, fixed 60 Hz
 - Host-only, non-deterministic by design: audio synthesis (incl. music rendering), egui layout and
   animation, particles, decal fading, dynamic resolution. Nothing there feeds back into the sim
   except through recorded `InputFrame`s.
-- Rewind is a development tool: set `history_seconds` to 10 for the game (snapshots of a city with
-  thousands of colliders are large); measure `SimState::approx_bytes` in M2 and adjust.
+- Rewind is a development tool: `history_seconds()` returns 0 in release, web and touch builds and
+  about 10 s in dev tools. Measure real snapshot cost in M2 (serialized size and clone time —
+  `approx_bytes` counts only colliders, bodies, entities and projectiles) and size the window.
 - Content data (TOML) is part of the build; a replay is valid for the same build and content.
 
 ### 6.5 Engine extensions
@@ -938,12 +985,13 @@ pub fn all() -> Vec<&'static Entry>;
 pub fn find(key: &str) -> Option<&'static Entry>;   // searches both
 ```
 - Replace every `GAMES.iter()` (scenes.rs, play_tools.rs, tools.rs) with `games::all()`.
-- `pav_tools`: move the CLI's `main` into `pav_tools::cli::main()`; `src/bin/pav.rs` calls it.
+- `pav_tools`: move the CLI's `main` into `pav_tools::cli::main_with(extra: &'static [Tool])`
+  (`main()` = no extras); `src/bin/pav.rs` calls it; the game's CLI passes its own tools (E12).
 - `pav_app`: split into `lib.rs` (`pub fn run(settings, AppConfig)`) and `main.rs` (Shardfall's
   defaults). `AppConfig { title, default_scene, settings_file, save_prefix, web_storage_prefix,
   dev_keys: bool, touch_mode: TouchMode::{Controls, AttractOnly}, branding }`.
 - `crates/gtf_app`: `src/bin/grand_theft_freeway.rs` (`gtf_game::register(); pav_app::run(..)`)
-  and `src/bin/gtf.rs` (`gtf_game::register(); pav_tools::cli::main()`).
+  and `src/bin/gtf.rs` (`gtf_game::register(); pav_tools::cli::main_with(&gtf_app::tools::TOOLS)`).
 - Scripts: `build-web.sh` gains `--package`, `--bin` (output name follows the bin);
   `scripts/build-gtf-web.sh` wraps it for the game; `build-windows.sh` builds `gtf_app` too; the
   session-start hook builds `gtf` as well as `pav`.
@@ -975,6 +1023,11 @@ pub mod pad { SOUTH, EAST, WEST, NORTH, L1, R1, L2, R2, L3, R3, UP, DOWN, LEFT, 
   Controller", "PS5", "PS4" → PlayStation; "Xbox", "XInput" → Xbox; else generic) and touch.
 - `pav_tools` `input` gains `pad=`/`pad_press=` (names), `stick_l=`, `stick_r=`, `l2=`, `r2=`,
   `mouse=`, `cmd=`, `activity=`; `pad_script` style multi-step input stays in the app.
+- Games read `pad` but fall back to the legacy fields (`move_dir`, button bits) when `pad` is idle,
+  so engine tools that drive the player through them (`input move=`, `filmstrip move=`,
+  `audio_capture move=`, the `feel` meter) keep working.
+- `PadScript` (the app's scripted controller) gains analog `l2=`/`r2=` values — today it forces
+  the triggers off — so scripted smoke runs can accelerate.
 
 **E3 — Game hook v2**
 ```rust
@@ -984,7 +1037,7 @@ trait Game {
     fn world_paused(&self) -> bool { false }     // title, pause, loading: only pre/post run
     fn vehicles(&mut self, sim: &mut Sim, dt: f32) -> BTreeMap<EntityId, VehicleInput> { .. }
     fn present(&self, sim: &Sim) -> Option<PlayFrame> { None }   // §E4; called in Sim::frame
-    fn history_seconds(&self) -> Option<f32> { None }            // rewind window override
+    fn history_seconds(&self) -> Option<f32> { None }            // rewind window (0 = off)
     fn legacy_controls(&self) -> bool { true }   // false: no engine-demo player actions
 }
 ```
@@ -995,6 +1048,8 @@ trait Game {
   host input — instant vehicle enter/exit (`vehicle_interact` on INTERACT), bomb throws (USE),
   crawl toggles — so the game's own mapping is the only one; `pav_app` also stops setting the
   legacy button bits for such games (it still fills `pad`).
+- `VehicleInput` (throttle, brake, steer, handbrake, horn, siren) is defined with the hook in M1;
+  E9 (M3) makes the vehicle code obey it.
 - `RenderFrame.present: Option<Arc<PlayFrame>>`; the `play` tool reports a summary of it.
 
 **E4 — Presentation as data (`pav_core::present`)**
@@ -1032,6 +1087,9 @@ pub struct PlayFrame {
 - **Headless:** `pav_ui::render_offscreen(device, queue, target, size, model, ..)` with egui-wgpu,
   used by `pav_tools` for `capture hud=true` and `filmstrip hud=true`. This closes the engine's open
   issue "the HUD is invisible to the tools" for every hook game.
+- Pointer input: `pav_ui::draw` returns the id of the element under the pointer and whether it was
+  clicked; the app turns that into `ui.focus <id>` / `ui.accept <id>` commands, recorded like any
+  input.
 - `pav_app` keeps its Shardfall UI; hook games that publish a `PlayFrame` get `pav_ui`.
 
 **E6 — `pav_view`**
@@ -1044,17 +1102,24 @@ pub struct PlayFrame {
 - Vehicles: body from the def's prop asset (`body_asset`), wheels from a wheel asset with spin and
   steer, doors as named parts rotated by the door state, crumple offsets per zone, light states, and
   **seated occupants** (puppet with a sitting clip, upper body) for every rider.
-- Emit `StaticBatch`es per region for E7 culling instead of pushing every static instance into
-  `scene.meshes` each frame; per-object sphere-vs-frustum tests for dynamic objects.
+- Hand static regions to the renderer with their bounds (cached instance arrays per region
+  version) so E7 can cull them on the CPU; per-object sphere-vs-frustum tests for dynamic objects;
+  draw the far-LOD tiles (E14) for every region that is not active.
 
 **E7 — `pav_render`**
 - **Sky pass:** full-screen triangle at the far plane: zenith/horizon/ground gradient, sun disc and
   glow, moon, stars, procedural clouds (coverage, speed, colour), lightning flash; fog blends into the
   horizon colour. Replaces the flat clear colour when the scene has a sky.
-- **Culling and persistent buffers:** GPU instance buffers per static batch keyed by (region,
-  version), uploaded only when the version changes; frustum culling by batch AABB (and the shadow
-  frustum for the shadow pass); distance classes (`flags::SMALL` props culled beyond ~90 m, decor
-  beyond ~150 m, buildings to the fog end).
+- **Culling:** cull static regions on the CPU by their bounds (camera frustum; the shadow pass by
+  the shadow frustum), then append the visible regions' cached instances into the existing global
+  per-mesh batches: one instanced draw per mesh kind, one upload of visible instances per frame. Do
+  not give each region its own buffers (regions × mesh kinds would multiply draw calls). Add
+  distance classes (a new `flags::SMALL` for small props, culled beyond ~90 m; decor beyond ~150 m;
+  buildings to the fog end). Persistent GPU buffers only if measurement shows the upload matters.
+- **Merged statics:** merge each chunk's building masses per material into a few custom meshes
+  (world-mapped materials) so a chunk costs a handful of draws; animated scenery (signal heads, the
+  Big Wheel, cranes) is drawn as dynamic items, never baked (baked regions change only by
+  rebuilding); decals are batched into one dynamic mesh.
 - **Shadows:** centre the sun shadow region ahead of the camera along the view direction; radius
   60–80 m; a second far cascade only if captures show it is needed.
 - **Fake spotlights** (`Scene.spots`): an additive soft cone mesh plus a point light where the beam
@@ -1082,11 +1147,19 @@ pub struct PlayFrame {
   drums, bass, lead, pads, genre instrument patches) starting at the given offset.
 - **Babble voice:** formant synthesis (vowel formants, syllable rhythm, per-speaker pitch contour)
   for dialogue, DJs, police scanner and pedestrian barks; duration follows the subtitle length.
+- **Offline rendering for checks:** extend `audio_capture` to render loops, music and the mix from
+  the game's `AudioScene` over time (today it renders one-shot events only).
+- **Budget:** voice caps (one-shots ≤ 48, loops ≤ 24); measure the mixer's CPU time per buffer in the
+  browser build, where it runs on the main thread.
 
 **E9 — Vehicles v2 (`pav_core::vehicle`)**
 - `VehicleDef` adds: class, drive (fwd/rwd/awd), brake force, speed-sensitive steering, downforce,
   centre of mass, wheel geometry, health, `body_asset`, `wheel_asset`, doors (hinges, sides), seats,
   light and siren positions, radio flag.
+- **Unlock pitch and roll.** Today cars may only turn about the vertical axis
+  (`set_enabled_rotations(false, true, false, true)`, `vehicle.rs:215-218`). Free them, with
+  anti-roll torque, a low centre of mass, damped rotation in the air (light air control) and
+  self-righting after 3 s upside down, so hills, ramps, jumps and crashes behave.
 - `VehicleInput { throttle, brake, steer, handbrake, horn, siren }` for any vehicle: the game's
   `vehicles()` map first, then the legacy player path (steer-toward-stick, for the demo rooms), else
   idle. NPC drivers become possible; the player's car uses R2/L2/stick through the game.
@@ -1099,16 +1172,23 @@ pub struct PlayFrame {
 **E10 — `pav_world`** (design in §6.6).
 
 **E11 — `pav_core` odds and ends**
-- Per-character movement overrides (`Character.speed_scale`, jump/climb flags) so sprint, stamina
-  and abilities need no global parameter changes.
+- Per-character speed already exists (`Character.haste` / `slow`, `character.rs:368-370`): use it
+  for sprint, stamina and abilities (the `SPRINT` button bit is defined but unused); add per-character
+  jump/climb flags if needed.
+- **Character LOD mode:** a flag that skips the rapier character controller for distant
+  pedestrians — the game sets position and facing directly, the puppet still animates from
+  velocity, and far puppets draw fewer parts. Puppets are drawn only for character entities, one SDF
+  per part: count them in the §6.9 SDF budget.
+- Held weapons: `PuppetDef.weapon.asset` already draws a library prop in the hand by its `grip`
+  socket; use it for guns.
 - Public clip control for game code (`Sim::play_clip(id, clip, flags, speed)`, upper-body aim and
   cover poses, sitting, hands-up, knock-down and get-up).
 - Query helpers: extend the existing `Sim::raycast(origin, dir, max, exclude)` (`world.rs`; it
   always skips the player and returns point, normal, entity) with a `RayFilter` (include the player,
   exclude a list, statics only, characters only) and return the distance and the static block hit;
   add `Sim::sphere_cast(..)` and `Sim::overlap_sphere(..)` the same way.
-- Public streaming interest points for games (`Sim::set_interest(&[Vec3])`: player, camera target,
-  mission anchors).
+- Streaming interest points: use the existing `state.world.interest` (the `stream point=` tool sets
+  it) for the camera target and mission anchors.
 - Font-agnostic `Text3d` in the frame.
 
 **E12 — `pav_tools` (generic, for any hook game)**
@@ -1116,11 +1196,13 @@ pub struct PlayFrame {
 - `ui` (the current `UiModel` as compact JSON; `ui focus=true` for the focused element only).
 - `play cmd="..."` pushes game commands; `play` summarises `present` (screen, objective, HUD).
 - `input` pad semantics (E2).
-- `perf view=<name>|all` (the game names its reference views; reports the §6.9 budgets pass/fail),
-  `soak seconds= mode=attract|roam|traffic|peds` (runs and reports anomalies the game counts),
-  `citymap` (pav_world raster PNG with zones, roads, lanes, landmarks, spawn and cover points),
-  `traffic`, `peds`, `lanes at=[x,z]`, `vehicle_feel key=<archetype>` (on the dev district's test
-  pad: 0–100, top speed, braking, skidpad g, handbrake slide angle).
+- `citymap` (pav_world raster PNG with zones, roads, lanes, landmarks, spawn and cover points) and
+  `lanes at=[x,z]` — generic, in `pav_tools` (which depends on `pav_world`).
+- Game tools in `gtf_app/src/tools.rs`, registered through `pav_tools::cli::main_with`:
+  `perf view=<name>|all` (the reference views; reports the §6.9 budgets pass/fail),
+  `soak seconds= mode=attract|roam|traffic|peds` (runs and reports the anomaly counters),
+  `traffic`, `peds`, `vehicle_feel key=<archetype>` (on the dev district's test pad: 0–100, top
+  speed, braking, skidpad g, handbrake slide angle, slope and jump cases).
 - Tool rules from `AGENTS.md` ("Adding a tool"): help ≤ 50 tokens, args ≤ 12 words, reject unknown
   args with the nearest name, test on `Session::new("empty", 1)`.
 
@@ -1128,7 +1210,13 @@ pub struct PlayFrame {
 - `AppConfig` (E1), window title and branding, settings and save files named for the game.
 - When the frame has a `PlayFrame`: camera from the intent, `pav_ui` overlay, audio scene, view
   intent; Esc/Options/menus go to the game as pad buttons; the engine's pause menu and tuning panel
-  move to F1 (dev builds) and the F-key system layer is limited to F12 in release game builds.
+  move to one F1 developer panel (dev builds) and the F-key system layer is limited to F11
+  (fullscreen) and F12 in release game builds.
+- Engine input defaults that clash with the game are off for hook games with a `PlayFrame`: holding
+  Select/Create rewinds (`pav_app/src/input.rs:553,618`), the touch stick and button fan, the legacy
+  button bits (E3 `legacy_controls`).
+- Dynamic resolution (today phone-only, `quality.rs`) becomes a desktop option too; add an Ultra
+  preset above High.
 - Activity detection for any device event (mouse moves included); device family for glyphs.
 - Touch devices with `TouchMode::AttractOnly`: no touch controls; a gear button (pav_ui) and its
   overlay; send `platform touch` once at start.
@@ -1136,6 +1224,36 @@ pub struct PlayFrame {
   `localStorage` (web); on start, saves and settings go to the game as commands in the first frame.
 - FPS readout (frame-time EMA) handed to `pav_ui`; vibration through gilrs force feedback (native,
   best effort).
+
+**E14 — World regions for game cities** (found in the planning review)
+- Today a hook game's level is a standalone room with `World { enabled: false }`
+  (`pav_core/src/scenes.rs:49-50`), so `update_streaming` does nothing (`world.rs:772-774`). With
+  streaming on, it builds the pavilion hub at the origin, fills unloaded chunks with wilderness
+  (`TerrainGen`) and treats rooms as pavilion slots (`world.rs:785-932`). The view draws only
+  active regions — regions whose colliders are loaded (`pav_view/src/build.rs:1138-1145`) — and
+  `load_radius` is 2 (a 5 × 5-chunk square); streaming activates 2 regions per 15 ticks
+  (`sim.rs:720-721`).
+- **Region provider:** a game-supplied generator (an `Arc<dyn RegionProvider>` on `Sim`, outside
+  `SimState`, rebuilt from content + seed after a snapshot load like other caches) fills a chunk's
+  statics, decor, static meshes and baked props on first activation. For such scenes the hub,
+  pavilion rooms and `TerrainGen` stay off; interiors are provider regions too.
+- **Static meshes with trimesh colliders** as region items (public API; today only the terrain patch
+  has one, built privately in `terrain.rs`): freeway decks and ramps, hill roads, the Ditch.
+  (Rotated solid decor boxes exist — `Decor { rot, solid }` — as a fallback for straight pieces.)
+- **Speed-aware streaming:** the activation budget scales with the fastest interest point's speed
+  and prefetches along its velocity, so a 40 m/s drive never outruns loading.
+- **Far LOD:** low-detail merged meshes for every chunk (building boxes with night windows, roads,
+  water, the freeway, landmarks), generated once by `pav_world`, published through `PlayFrame`
+  (`far: Arc<FarCity>`) and drawn by the view for every region that is not active, frustum-culled —
+  the hills vista and the sky-cam show the whole district.
+- **Camera range:** `CameraIntent` carries near/far planes (today far = max(300 m, 4 × distance +
+  200), `pav_view/src/camera.rs:174`); fog limits rise (fog end up to ~1,500 m).
+- **Entities and regions:** an unload policy per entity — `Sleep` (today's behaviour, used only for
+  characters with an `ai` brain, `world.rs:964`), `Despawn` (ambient population), `Keep` (mission
+  actors) — so game-driven characters never fall through unloaded chunks and the dormant list
+  (`world.dormant_entities`) cannot grow without bound.
+- Acceptance (M2): `hills_vista` and a sky-cam pass show the whole district; a scripted 40 m/s
+  camera path over every road shows no holes; `stream` reports bounded active and dormant counts.
 
 ### 6.6 `pav_world`: the urban open-world kit
 
@@ -1221,8 +1339,9 @@ pub struct PlayFrame {
 - The generated city is immutable per content + seed: `Arc<City>`, `#[serde(skip)]`, rebuilt on
   load. Dynamic state (agents, parked-car occupancy, damaged props) lives in game state keyed by
   entity id in `BTreeMap`s.
-- Chunks become engine `StaticWorld` regions (`RegionKey::Chunk`) so streaming, dormancy and the
-  view's region cache work unchanged.
+- Chunks are engine `StaticWorld` regions (`RegionKey::Chunk`) filled by `pav_world` as the region
+  provider (E14); streaming, dormancy and the view's region cache then apply, with E14's far LOD
+  drawing everything that is not loaded.
 
 ### 6.7 `gtf_game` module map
 
@@ -1258,6 +1377,7 @@ each `load` when running from the repository (the engine's `level_text` pattern)
 `deny_unknown_fields` and clear errors.
 
 #### 6.8.1 District (`district.toml`)
+A format example: characters and coordinates are illustrative, not the final map.
 ```toml
 name = "Paloma Bay"
 cell = 16.0                     # metres per map character
@@ -1301,8 +1421,8 @@ blip = "bank"
 key = "route_404"
 height = 9.0
 lanes = 3                       # per direction
-points = [[30.5, -1], [30.5, 56], [29, 60], [18, 60]]   # cell coordinates; curves are smoothed
-ramps = [{ at = [30.5, 9], to = "sunset_row_east", side = "west" }]
+points = [[60.5, -1], [60.5, 54], [58, 57.5], [45, 57.5]]   # cell coordinates; smoothed; ends at the broken ramp
+ramps = [{ at = [60.5, 17], to = "sunset_row_east", side = "west" }]
 
 [[spline_road]]
 key = "mirador_drive"
@@ -1494,17 +1614,19 @@ with the full population, plus a 600-tick sim bench) and in the browser build:
 | Draw calls | ≤ 2,000 (≤ 2,500) |
 | Mesh instances | ≤ 40,000 (≤ 55,000) |
 | Triangles | ≤ 2.5 M (≤ 3.5 M) |
-| SDF primitives | ≤ 3,000 |
+| SDF primitives | ≤ 3,000 (puppets ≈ 18 each at full detail, ≈ 6 at far LOD; vehicle SDF parts count too) |
 | Point lights / shadowed | ≤ 64 / ≤ 4 |
 | GPU particles alive | ≤ 30,000 |
 | View build (CPU) | ≤ 4 ms per frame (debug-build measurement, relative) |
-| Sim tick, full population | ≤ 3 ms native release; ≤ 8 ms in the browser (stats overlay ms/tick) |
+| Sim tick, full population | ≤ 3 ms in a native release build of `gtf` (`bench`); ≤ 8 ms in the browser (`?perf=1` console line) |
+| Audio mixer (browser) | ≤ 2 ms of main-thread time per 10 ms of audio; ≤ 48 one-shot voices + 24 loops |
 | Active entities | ≤ 450 (cars ≤ 45 + police, peds ≤ 70, props, pickups) |
-| Snapshot size (`approx_bytes`) | measured in M2; the history window shrinks to fit ≤ 400 MB |
+| Rewind history | off in release, web and touch builds; in dev, measured in M2 (serialized size, clone time) with the window sized to ≤ 400 MB |
 
 Strategy: persistent region batches + culling (E7) first; then chunk-merged decor meshes if draw
 calls exceed budget; AI LOD (§5.6.6–7); population caps; light pooling (nearest 64); small-prop
-distance culling; dynamic resolution (existing `quality.rs`) and presets (Low/Medium/High/Ultra:
+distance culling; dynamic resolution (`quality.rs` has it for phones; extend it to desktop) and presets (Low/Medium/
+High plus a new Ultra:
 render scale, shadows radius, SSGI, haze, MSAA, draw distance, population ×0.6/0.8/1/1.1). The
 user's RTX 3060 Ti should run High at 1080p/60; the on-screen readout lets them confirm.
 
@@ -1583,8 +1705,12 @@ state from logs, not from smooth video). The game must log frontend state change
 title`, `frontend: attract <vignette>`, ...) and, with `?perf=1`, a perf line every 5 s (fps, frame
 ms, sim ms/tick) to the console. Planning observed that mobile emulation shows the engine's default
 touch controls — the game's touch mode must remove them (§5.8, E13).
-1. Desktop: load the HTML → boot ok → title → wait ≥ 11 s → log shows attract running → press a
-   key → log shows title within 1 s of the next frame; screenshots at each step.
+1. Desktop: load the HTML → boot ok → title → **poll** the log until attract starts (an `until:`
+   step allowing ~4 minutes: in the browser the sim runs at most 8 ticks per frame and drops time
+   when behind, `pav_app/src/simhost.rs:337-343`, so at SwiftShader's 0.5–2 frames/s the 600-tick
+   idle timer takes ~40–150 s of wall time) → press a key → poll until the title is logged again
+   (`until:` checks only lines logged after the step starts, so the boot-time title line cannot
+   satisfy it); screenshots at each step.
 2. Mobile emulation (viewport 844 × 390, `isMobile`, `hasTouch`) → attract starts by itself →
    a tap anywhere does not leave attract → tapping the gear opens the overlay → screenshot.
 3. Perf line: sim ms/tick within budget at a busy vignette.
@@ -1600,7 +1726,9 @@ crosswalks), `ai_crashes` (AI–AI collisions), `nan_positions`, `fell_through_w
 | Traffic | `gtf soak mode=traffic seconds=600` (bot cruising the district) | stuck_cars after recovery 0, ai_crashes ≤ 3, spawn/despawn_in_view 0, NaN 0, fell_through 0 |
 | Pedestrians | `gtf soak mode=peds seconds=600` | stuck_peds ≤ 2, ped_on_road ≤ 5, NaN 0 |
 | Roam | `gtf soak mode=roam seconds=900` (bot drives, fights, gets heat, evades) | all of the above + no panic, sim within budget |
-| Attract | `gtf soak mode=attract seconds=1800` | vignette_stalls 0, all vignettes played ≥ 2 times, no panic |
+| Attract | `gtf soak mode=attract seconds=1800` | vignette_stalls 0, all vignettes played ≥ 2 times, entity count and memory flat across loops (±10%), no panic |
+
+Soaks run from a release build of `gtf`, in the background, with logs under `out/soak/`.
 
 ### 7.6 Native smoke (`scripts/smoke-gtf.sh`)
 Xvfb + lavapipe + `--pad-script` (the engine's scripted controller): title → new game → walk to a
@@ -1621,12 +1749,16 @@ loop connected, landmarks placed, no building on a road), `frontend.rs` (boot �
 ticks → attract; any input → title; menus navigable with pad semantics; touch platform → attract
 only), `player.rs`, `vehicles.rs` (enter/exit, carjack, damage → explosion, feel ranges),
 `traffic.rs` (signals obeyed, no AI–AI crashes in 2 minutes at an intersection, pull-over for
-sirens), `peds.rs` (crosswalks on walk phase, flee on gunfire, witness report), `combat.rs`,
-`heat.rs` (crime → report → stars; evade 3★ bot; busted; wasted), `missions.rs` (every mission by
+sirens), `peds.rs` (crosswalks on walk phase, flee on gunfire), `combat.rs`,
+`heat.rs` (witnesses report; crime → report → stars; evade 3★ bot; busted; wasted), `missions.rs` (every mission by
 bot on 3 seeds, both heist approaches; fail → retry → skip after 3 fails), `protagonists.rs`
 (switch keeps each character's state), `save.rs` (round trip), `attract.rs` (every vignette starts,
 runs, ends; loop order deterministic per seed), `replay.rs` (§7.7), `ui.rs` (UiModel snapshots of
 key states: HUD values, pause tabs, wheels, phone, banners).
+
+Long suites (missions by bot on 3 seeds, soaks, the 30-minute attract run) are `#[ignore]`d and run
+with `cargo test --release -p gtf_game -- --ignored` or `gtf soak` in the background; the default
+`cargo test --workspace` stays under about 8 minutes.
 
 ---
 
@@ -1635,15 +1767,21 @@ key states: HUD values, pause tabs, wheels, phone, banners).
   (reuse `LIB/core` where it fits: lamp_post, park_bench, bench, fence, signpost, barrel, crate
   stacks), then `asset_edit action=create` from a brief, `check` to zero findings, a 4-view sheet
   at the game camera (`asset_preview views=...`), at most two fix rounds, publish into
-  `assets/props/lib/gtf_city` or `gtf_vehicles` with `PACK.json` (CC0, own work), add the packs to
-  `props::store::SHIPPED` and `pav_core/build.rs` so every build (and the browser) carries them.
+  `assets/props/lib/gtf_city` or `gtf_vehicles` with `PACK.json` (CC0, own work). `asset_edit
+  action=publish` always targets `LIB/core` today (`pav_tools/src/asset_tools.rs:673-679`), so add a
+  `pack=` argument (engine change). Then add the packs to `props::store::SHIPPED` and
+  `pav_core/build.rs` so every build (and the browser) carries them. Workshop folders are
+  git-ignored: never leave shipped content there.
   (AGENTS.md: assets made through this loop need no human review.)
 - **Vehicles:** one prop per body: an `extrude` side profile across the width for the shell, separate
   glass, bumpers, trims, light parts named `head_l/r`, `tail_l/r`, doors as named parts (`door_l`,
   `door_r`), roof sign or light bar; a wheel prop per class. Check silhouettes at the chase camera.
 - **Materials:** `assets/materials/gtf/*.json` (asphalt with aggregate, concrete, stucco, brick,
   corrugated metal, glass curtain wall with the window kernel, sand, grass, terracotta, car paint
-  with metallic), checked with `asset_preview kind=material` swatches.
+  with metallic), checked with `asset_preview kind=material` swatches. Add `gtf` to the material
+  folders `pav_core/build.rs` embeds (today only `assets/materials/*.json` and `pb/`), and keep a
+  content test that every `MAT/…` and `LIB/…` name the game references resolves in the embedded
+  build.
 - **Animation:** reuse clips (§4); author missing poses (hands up, cower, drive-seated, cover lean,
   aim pistol low/high blend) with `anim_edit` into `anim/` WORKSHOP sets; credits kept.
 - **Sound and music:** cues in `sounds.toml`, stations in `radio.toml`. Listening is not possible in
@@ -1686,15 +1824,16 @@ build target.
 Goal: a game can pause, slow time, drive vehicles, describe its camera, UI, drawing, view and audio
 as data; the 10-foot UI kit renders it in the window and in headless captures.
 - [ ] E2 `InputFrame` v2 (+ host mapping for keyboard/mouse/gilrs/touch; `input` tool args).
-- [ ] E3 hook v2 (`time_scale`, `world_paused`, `vehicles`, `present`, `history_seconds`).
+- [ ] E3 hook v2 (`time_scale`, `world_paused`, `vehicles` with the `VehicleInput` type, `present`,
+      `history_seconds`, `legacy_controls`); E2's legacy-field fallback; PadScript analog triggers.
 - [ ] E4 `pav_core::present` types (+ serde, `ui` tool JSON dump), generic `SimEvent`s.
 - [ ] E5 `pav_ui`: theme, fonts (OFL: display + UI + script, each with its `OFL.txt`, from
       `https://raw.githubusercontent.com/google/fonts/main/ofl/<family>/<File>.ttf` — reachable from
       this environment in planning), glyphs, every widget type, minimap with a placeholder raster,
       headless render; `capture hud=true`.
 - [ ] E6 camera intent + DrawList rendering in `pav_view`; E13 hook-game shell in `pav_app`
-      (camera, UI, Esc routing, F1 dev menu, activity, device family, FPS readout, persistence of
-      `AppRequests`).
+      (camera, UI, Esc routing, F1 developer panel, clashing input defaults off, pointer → `ui.*`
+      commands, activity, device family, FPS readout, persistence of `AppRequests`).
 - [ ] E8 part 1: sound bank as data + `SimEvent::Sound`; loop voices with live params (engine,
       siren); FX bus skeleton.
 - [ ] `gtf_game`: frontend skeleton (boot → title → main menu → free roam), a **UI gallery** dev
@@ -1708,6 +1847,9 @@ as data; the 10-foot UI kit renders it in the window and in headless captures.
 ### M2 — The city (XL)
 Goal: Paloma Bay generated from data, streamed, lit by a sky and time of day, inside budgets; the
 dev district for tests.
+- [ ] E14 world regions for game cities: region provider (hub, pavilion rooms and wilderness off),
+      static meshes with trimesh colliders, speed-aware streaming, far LOD, camera near/far and fog
+      limits, entity unload policies. Do it first: the rest of M2 stands on it.
 - [ ] `pav_world`: macro map parser, roads and intersections, blocks/lots/buildings by zone, street
       dressing, terrain (hills), spline roads, elevated freeway + ramps (spline meshes with trimesh
       colliders), the Ditch, beach and ocean, docks; lane graph, signals, sidewalk graph, parking,
@@ -1715,16 +1857,18 @@ dev district for tests.
 - [ ] First `LIB/gtf_city` props needed by dressing (lamp, signal, hydrant, bin, bench, palm, tree,
       sign, bus stop, billboard, newspaper box, meter, power pole, AC unit, water tank, antenna,
       container, crane, barrier, cone) and `MAT/gtf` materials.
-- [ ] E7: sky pass, time of day + `ViewIntent` from `world.toml` presets, window kernel, culling with
-      persistent region batches, shadow follow; E6 `StaticBatch` emission.
+- [ ] E7: sky pass; time of day and weather (§5.6.12: states, transitions, rain particles, wet roads,
+      lightning) through `ViewIntent` from `world.toml`; window kernel; CPU region culling into the
+      global batches; merged chunk statics; shadow follow; E6 region bounds and far-LOD drawing.
 - [ ] `content/freeway/district.toml` (first full macro map), `dev_district.toml` (256 m: a signalized
       4-way, a T-junction, an on-ramp, a parking lot, a cover range, a jump ramp, the vehicle test
       pad), `views.toml`. Each dev-district area gets a 3D-text sign naming the system it exercises
       and the `gtf` command that checks it, so `freeway/dev` doubles as the engine's urban tech demo
       (the "developer demo level") and as the fast fixture for tests.
 - [ ] Tools: `citymap`, `lanes`, `perf`; the `freeway/view/<name>` scenes.
-- Acceptance: city hash stable across runs; connectivity tests pass; drive (scripted) across the
-  whole district with streaming and no holes (filmstrip); `perf view=all` within budget (no
+- Acceptance: city hash stable across runs; connectivity tests pass; a scripted camera path at
+  40 m/s over every road (interest point + camera intent; cars arrive in M3) streams with no holes
+  (filmstrip) and bounded active/dormant counts; `hills_vista` shows the whole district (far LOD); `perf view=all` within budget (no
   population yet); captures of all six views at three times of day look like a SoCal city (record
   what you changed after looking); web build boots into the city.
 
@@ -1740,14 +1884,16 @@ Goal: walking, sprinting, climbing and driving feel good; cars are cars.
 - [ ] GPS route ribbon + minimap route (pav_world routing).
 - [ ] Radio skeleton: station clock in the sim, one placeholder station rendering in `pav_audio`.
 - [ ] `vehicle_feel` tool + ranges test.
-- Acceptance: feel tests pass for every archetype; enter/exit/carjack/explosion tests pass;
+- Acceptance: feel tests pass for every archetype, including the slope, ramp and jump cases (cars
+  pitch and roll, land upright, self-right); enter/exit/carjack/explosion tests pass;
   filmstrips of driving and on-foot movement show no jitter or clipping; perf still in budget.
 
 ### M4 — Population (XL)
 Goal: the city lives.
 - [ ] Traffic agents (§5.6.6, §6.6.9) with signals, turns, lane changes, yielding, reactions, buses,
       parked cars, LOD switching.
-- [ ] Pedestrian agents (§5.6.7, §6.6.10) with crosswalks, scenarios, reactions, LOD; `peds.toml`
+- [ ] Pedestrian agents (§5.6.7, §6.6.10) with crosswalks, scenarios, reactions (witness reporting
+      arrives with heat in M5), the E11 character LOD mode; `peds.toml`
       archetypes with ≥ 30 distinct looks.
 - [ ] Population manager with zone/time densities; anomaly counters; `traffic`, `peds`, `soak` tools.
 - [ ] Ambience beds (city, crowd, surf, harbor) driven by population and place.
@@ -1764,7 +1910,7 @@ Goal: shoot, fight, get wanted, escape.
       roadblocks, spike strips), foot units, SPPD Air with searchlight, search zone + cones, flashing
       stars, evasion, respray, hide spots; Busted and Wasted flows; police scanner audio.
 - [ ] Hands-up/cower/arrest clips authored.
-- Acceptance: combat tests; heat tests including the 3★ evasion bot (≤ 180 s on 3 seeds) and
+- Acceptance: combat tests; heat tests including witness reporting and the 3★ evasion bot (≤ 180 s on 3 seeds) and
   busted/wasted; police never spawn in view (counter 0 in a roam soak); captures at 3★ night show
   the searchlight and cones.
 
@@ -1801,8 +1947,10 @@ Goal: the full player journey from boot to credits, and the kiosk loop.
       art with halftone/painterly filters), pause menu tabs, settings (all of §5.9), About/credits
       with the Source Information block and asset/font credits.
 - [ ] Attract director (§5.8): playlist, vignette setups, bots, shot lists, captions, logo/prompt
-      overlay, instant exit on any input, anomaly handling; `freeway/attract` scene.
-- [ ] Touch mode: attract only + gear overlay; touch controls disabled for the game.
+      overlay, instant exit on any input, anomaly handling, population reset per vignette (flat state
+      in the soak); `freeway/attract` scene.
+- [ ] Touch mode: attract only; the gear button is the only thing drawn over the world (no HUD,
+      captions, logo, prompt, or FPS unless enabled in the overlay); touch controls disabled.
 - Acceptance: `frontend.rs` and `attract.rs` pass; attract soak 30 min clean; `web-check.mjs`
   desktop and mobile flows pass with screenshots; every frontend screen captured with HUD.
 
@@ -1817,7 +1965,8 @@ Goal: it feels finished.
 - [ ] Performance pass: budgets with margin, quality presets, dynamic resolution, browser sim time.
 - [ ] Bug bash: roam/attract/traffic soaks, mission bots on more seeds (5), edge cases (water,
       falling, interiors, switching mid-chase, saving during heat is refused).
-- Acceptance: all D-items except D14–D15 demonstrably true in `PROGRESS.md` with evidence.
+- Acceptance: all D-items except D14–D15 (and D16's analysis table) demonstrably true in
+  `PROGRESS.md` with evidence.
 
 ### M10 — Release and handoff (S)
 - [ ] Builds: native, Windows `.exe` (zip), `dist/GrandTheftFreeway-BX.html` with the Source
@@ -1825,7 +1974,7 @@ Goal: it feels finished.
       its size), optional Vercel config updated.
 - [ ] Docs: `README.md` (final), `docs/gtf/ENGINE_ANALYSIS.md`, `docs/gtf/HANDOFF.md`, engine docs for
       every extension, `PROGRESS.md` final with the DoD evidence table complete.
-- [ ] Final verification run of D1–D13 commands; fix anything red.
+- [ ] Final verification run of the D1–D13 and D16 commands; fix anything red.
 - [ ] Push, update the PR description (summary, how to play, checklist), send the HTML and the zipped
       `.exe` with `SendUserFile`, final chat report (§12.4).
 
@@ -1853,7 +2002,9 @@ Goal: it feels finished.
 - Before each push: `cargo fmt --all`, `cargo clippy -p <touched crates> --all-targets -- -D
   warnings`, the tests of touched crates, `scripts/check-wgsl.sh` after shader edits.
 - At each milestone end: `cargo test --workspace --locked`, wasm clippy for `pav_app` and `gtf_app`,
-  the milestone's acceptance commands, a native smoke screenshot, a web build boot check.
+  the milestone's acceptance commands, a native smoke screenshot, a web build boot check. Perf
+  evidence, ignored long suites and soaks come from a release build of `gtf`
+  (`cargo build --release --locked -p gtf_app`), run in the background with logs under `out/`.
 - Disk is a fixed allowance: dev builds already use line-table debug info and no incremental cache;
   delete stale `target/` artefacts (e.g. old `target/debug/deps` binaries, `target/wasm32-*`) when
   space runs low.
@@ -1863,8 +2014,10 @@ Goal: it feels finished.
   why) and open issues. Keep its "Now / Next" section current: it is what a resumed or compacted
   session reads first.
 - Engine docs: when an engine extension lands, update `docs/MAKE_A_GAME.md` / `docs/REFERENCE.md`
-  in the same `engine:` commit (respect `docs_limits.rs`: `AGENTS.md` < 32 KiB and ~250 lines,
-  `docs/PROGRESS.md` ≤ 60 lines — the engine's own PROGRESS, not ours).
+  in the same `engine:` commit. Respect `pav_tools/tests/docs_limits.rs`: `AGENTS.md` < 32 KiB;
+  the engine's own `docs/PROGRESS.md` ≤ 60 lines; `docs/MAKE_A_GAME.md` < 16 KiB, and every
+  repository path it names in inline code must exist — keep its new section short and point to
+  `docs/REFERENCE.md` for the API.
 
 ### 10.4 Verify with tools, look at results
 - Prefer `gtf` tools over reading engine internals (doctrine 2–3; `MAKE_A_GAME.md` "Check with the
@@ -1913,7 +2066,10 @@ Goal: it feels finished.
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| City rendering too heavy (no culling today, per-frame uploads, many draw calls) | High | High | E7 batches + culling early in M2; measure at reference views before adding detail; chunk-merged decor meshes; distance classes; fog distance; quality presets |
+| City streaming and draw distance need engine work (streaming is off for game scenes and hard-wired to the pavilion; the view draws only loaded regions) | High | High | E14 first in M2: region provider, far LOD, speed-aware streaming, entity unload policies |
+| Cars locked to yaw: no pitch or roll on hills, ramps, jumps | High | High | E9 frees pitch/roll with stabilization; slope/ramp/jump cases in `vehicle_feel` |
+| Headless browser runs far below real time (tick cap per frame) | High | Low | Poll logs with long timeouts (`until:` steps); judge timing in native builds |
+| City rendering too heavy (no culling today, per-frame uploads, many draw calls) | High | High | E7 CPU region culling into the global batches early in M2; measure at reference views before adding detail; chunk-merged decor meshes; distance classes; fog distance; quality presets |
 | Simulation cost of traffic and peds (rapier controllers, raycast vehicles) | Medium | High | AI LOD tiers from the first agent version; population caps; profile with `bench` per system; kinematic rails |
 | Browser main-thread sim (no threads in wasm) | Medium | Medium | Same LOD; browser budget 8 ms; lower population preset on web/touch; attract vignettes chosen for cost |
 | egui can't reach a console-quality 10-foot look | Medium | Medium | Custom painting (meshes, gradients, shadows), real fonts, animation; compare captures; keep layouts simple and big |
@@ -1951,6 +2107,8 @@ Answer from experience, candidly:
    helped most.
 5. Numbers: lines of engine changes vs game code vs content data; build times; budgets reached.
 6. A list of `engine:` commits suitable for upstreaming.
+7. A table of the engine's systems — used, extended, unused — matching the `freeway/dev` stations
+   (D16).
 Also append a short entry for this game to the vendored `docs/FEEDBACK.md` "Games" section in its
 format.
 
@@ -1974,7 +2132,7 @@ the one change), known issues, and the PR link.
 ---
 
 ## 13. Stretch goals (not part of the Definition of Done)
-Motorbikes, boats, planes; a second district; clothing stores, barbers, tattoos; property purchases;
+Motorbikes, boats, planes, parachuting; a second district; clothing stores, barbers, tattoos; property purchases;
 golf, tennis, yoga; first-person camera; a stock market; in-game internet; the Big Wheel as a ride;
 cinematic replay editor; photo mode with filters; controller remapping UI beyond presets; co-op
 (the engine's on-hold plan); voice-like dialogue beyond babble.
@@ -1991,7 +2149,7 @@ vehicles, traffic and pedestrians, combat and heat, missions with the three-prot
 the 10-foot controller-first UI, attract mode (10 s idle → AI demo loop; any input returns; touch
 devices = attract only) and polish. Keep every milestone playable and green, push to the
 designated branch, keep the draft PR updated, and record evidence in PROGRESS.md.
-Done = every Definition of Done item D1-D15 in PLAN.md §2 is checked in PROGRESS.md with
+Done = every Definition of Done item D1-D16 in PLAN.md §2 is checked in PROGRESS.md with
 evidence, dist/GrandTheftFreeway-BX.html and the Windows .exe are built and sent to me,
 README.md carries the Source Information block and docs/gtf/ENGINE_ANALYSIS.md answers what you
 used, didn't use and the one engine change — and your final message reports both.
@@ -2005,15 +2163,17 @@ alias gtf=./target/debug/gtf
 gtf play scene=freeway/roam bot=true ticks=3600      # roam bot
 gtf play scene=freeway/mission/m1_repo_man bot=true seeds=3
 gtf capture scene=freeway/view/beach_sunset hud=true width=960 height=540 out=out/beach.png
-gtf perf view=all
-gtf soak mode=attract seconds=1800
+cargo build --release --locked -p gtf_app          # release gtf for perf evidence and soaks
+./target/release/gtf perf view=all
+./target/release/gtf soak mode=attract seconds=1800  # in the background; log to out/soak/
 gtf citymap out=out/city.png
 gtf vehicle_feel key=okami_kaze
 printf 'load scene=freeway/roam\nplay cmd="heat 3"\ninput pad=r2 stick_l=[0.3,0] ticks=120\ncapture hud=true out=out/a.png\n' | gtf repl
 cargo test -p gtf_game                               # game suites
 cargo test --workspace --locked                      # everything (milestone ends)
 scripts/build-gtf-web.sh                             # -> dist/GrandTheftFreeway-BX.html
-node scripts/web-check.mjs dist/GrandTheftFreeway-BX.html
+node scripts/web-check.mjs dist/GrandTheftFreeway-BX.html --wait 20000 \
+  --step "until:frontend: attract:240000" --step "press:Space:0" --step "until:frontend: title:120000"
 scripts/smoke-gtf.sh 20                              # native window under Xvfb, screenshots
 scripts/build-windows.sh                             # Windows .exe (after scripts/setup-linux.sh)
 ```
@@ -2035,3 +2195,4 @@ scripts/build-windows.sh                             # Windows .exe (after scrip
 | App shell, UI | `crates/pav_app/src/app.rs` (frame loop), `ui.rs`, `hud.rs`, `quality.rs`, `save.rs`, `settings.rs`, `touch.rs`, `platform.rs` |
 | Tools | `crates/pav_tools/src/tools.rs` (registry), `session.rs`, `play_tools.rs`, `bin/pav.rs` |
 | Web packaging | `scripts/build-web.sh`, `scripts/pack_single_html.py`, `web/index.html` |
+| Browser tick loop | `crates/pav_app/src/simhost.rs` (at most 8 ticks per frame; drops time when behind) |

@@ -15,10 +15,13 @@ resumed or compacted session reads first.
 - [ ] **M1 Platform** — E2 input v2, E3 hook v2, E4 presentation data, E5 `pav_ui` + headless HUD
       capture, E6 camera intent + draw list, E13 app shell, E8 part 1 (bank + loops), UI gallery,
       FPS readout.
-- [ ] **M2 City** — `pav_world` generator + graphs + streaming; city props/materials; E7 sky, time of
-      day, window kernel, culling; district + dev district + views; `citymap`, `lanes`, `perf`.
-- [ ] **M3 Player and vehicles** — on-foot controller, camera modes, E9 vehicles v2, enter/exit,
-      carjack, damage, helicopter, vehicle audio, GPS ribbon, radio skeleton, `vehicle_feel`.
+- [ ] **M2 City** — E14 world regions first (region provider, static meshes, speed-aware streaming,
+      far LOD, unload policies); `pav_world` generator + graphs; city props/materials; E7 sky, time of
+      day + weather, window kernel, CPU region culling, merged statics; district + dev district +
+      views; `citymap`, `lanes`, `perf`.
+- [ ] **M3 Player and vehicles** — on-foot controller, camera modes, E9 vehicles v2 (pitch/roll
+      freed with stabilization), enter/exit, carjack, damage, helicopter, vehicle audio, GPS ribbon,
+      radio skeleton, `vehicle_feel` incl. slopes and jumps.
 - [ ] **M4 Population** — traffic, pedestrians, population manager, LOD, buses, parked cars,
       ambience, soaks.
 - [ ] **M5 Combat and heat** — weapons, cover, vitals, enemy AI, wanted system, police AI, air unit,
@@ -52,6 +55,7 @@ resumed or compacted session reads first.
 | D13 Verification | ☐ | |
 | D14 Docs | ☐ | |
 | D15 Delivery | ☐ | |
+| D16 Developer demo level | ☐ | |
 
 ## Decisions
 - 2026-10-17 — **Name:** *Grand Theft Freeway-BX* (title #25 of 50 drawn with `secrets.randbelow`,
@@ -71,7 +75,15 @@ resumed or compacted session reads first.
   growing `pav_core` or putting reusable city systems in the game crate.
 - 2026-10-17 — **Model identifiers stay out of repository files** (environment rule); README, About
   screen and HTML give the lab and effort levels and point to the chat report for the exact model.
-- 2026-10-17 — **Rewind window** for the game set to ~10 s (dev tool; city snapshots are large).
+- 2026-10-17 — **Rewind** is a dev tool: off in release, web and touch builds, ~10 s in dev tools.
+- 2026-10-17 — **Planning review applied.** An independent review raised 27 findings; the key ones
+  were verified in the engine source and folded into PLAN.md: E14 (game scenes run with streaming
+  off, streaming is hard-wired to the pavilion, the view draws only loaded regions), E9 frees vehicle
+  pitch/roll (cars are locked to yaw today), a character LOD mode, CPU region culling into the
+  global batches instead of per-region buffers, the `docs_limits.rs` caps (MAKE_A_GAME.md < 16 KiB),
+  prop publish `pack=` and `gtf` material embedding, game tools through `pav_tools::cli::main_with`,
+  `until:` polling for browser checks, D16 (developer demo level), and touch devices showing only
+  the gear button.
 
 ## Open issues
 - None yet. (Planning-time unknowns to verify early: rapier body-type switching for vehicle LOD in
@@ -84,3 +96,5 @@ resumed or compacted session reads first.
   64 lights; single-file web build 3 min 06 s → 11.2 MB, boots in headless Chromium with the egui HUD
   visible; `scripts/vendor-engine.sh` tested on a throwaway clone (1,359 files; starter tests 4/4
   pass in the vendored tree). PLAN.md written.
+- 2026-10-17 — Independent plan review (27 findings) verified and applied; `scripts/web-check.mjs`
+  gained ordered `until:TEXT:TIMEOUT` steps (tested: a pass and a timeout failure).

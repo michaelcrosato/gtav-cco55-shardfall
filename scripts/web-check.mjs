@@ -4,14 +4,17 @@
 //
 //   node scripts/web-check.mjs <page.html> [--out DIR] [--mobile] [--wait MS]
 //        [--step "press:KEY:WAIT_MS"]... [--step "tap:X:Y:WAIT_MS"]... [--step "wait:MS"]...
-//        [--expect TEXT]... [--forbid TEXT]... [--query "a=1&b=2"]
+//        [--step "until:TEXT:TIMEOUT_MS"]... [--expect TEXT]... [--forbid TEXT]... [--query "a=1&b=2"]
 //
 // Each step runs after the initial wait, in order, with a screenshot after it (step-<n>.png).
-// --expect: the console must contain TEXT by the end (exit 1 if not); --forbid: it must not.
-// SwiftShader renders roughly 0.5-2 frames per second here, so waits are long and state is read
-// from the game's console log rather than from smooth video. Example (attract mode):
-//   node scripts/web-check.mjs dist/GrandTheftFreeway-BX.html --wait 15000 \
-//     --expect "frontend: attract" --step "press:Space:4000" --expect "frontend: title"
+// until: polls once a second until a console line logged AFTER the step started contains TEXT
+// (TEXT may contain colons; the timeout is the last field); on timeout the run fails and stops.
+// --expect: the console must contain TEXT somewhere by the end (exit 1 if not); --forbid: it must
+// not. SwiftShader renders roughly 0.5-2 frames per second here and the browser build runs at most
+// 8 sim ticks per frame (it drops time when behind), so game time runs far below real time: poll
+// with `until:` and generous timeouts. Example (attract mode, PLAN.md §7.4):
+//   node scripts/web-check.mjs dist/GrandTheftFreeway-BX.html --wait 20000 \
+//     --step "until:frontend: attract:240000" --step "press:Space:0" --step "until:frontend: title:120000"
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
@@ -60,9 +63,30 @@ await page.waitForTimeout(wait);
 await page.screenshot({ path: join(out, 'start.png') });
 
 let n = 0;
+let ok = true;
 for (const s of steps) {
   n += 1;
   const [kind, ...rest] = s.split(':');
+  if (kind === 'until') {
+    const body = s.slice('until:'.length);
+    const cut = body.lastIndexOf(':');
+    const wanted = cut > 0 ? body.slice(0, cut) : body;
+    const timeout = cut > 0 ? Number(body.slice(cut + 1)) : 60000;
+    const from = logs.length;
+    const t0 = Date.now();
+    let found = false;
+    while (Date.now() - t0 < timeout) {
+      if (logs.slice(from).some(l => l.includes(wanted))) { found = true; break; }
+      await page.waitForTimeout(1000);
+    }
+    await page.screenshot({ path: join(out, `step-${n}.png`) });
+    if (!found) {
+      console.error(`step ${n}: no console line containing "${wanted}" within ${timeout} ms`);
+      ok = false;
+      break;
+    }
+    continue;
+  }
   if (kind === 'press') {
     const [key, ms] = rest;
     await page.keyboard.press(key);
@@ -83,7 +107,6 @@ await browser.close();
 
 const text = logs.join('\n');
 writeFileSync(join(out, 'console.log'), text + '\n');
-let ok = true;
 for (const e of expects) if (!text.includes(e)) { console.error(`missing expected log: ${e}`); ok = false; }
 for (const f of forbids) if (text.includes(f)) { console.error(`forbidden log present: ${f}`); ok = false; }
 if (text.includes('[pageerror]')) { console.error('page errors (see console.log)'); ok = false; }
