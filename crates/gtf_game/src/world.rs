@@ -104,6 +104,31 @@ pub fn blips(city: &City) -> Vec<Blip> {
         .collect()
 }
 
+/// The sidewalk outside landmark `key` (its door, near enough): the walkable tile nearest the
+/// landmark's middle, on the ground.
+pub fn door(city: &City, key: &str) -> Option<Vec3> {
+    let l = city.def.landmark.iter().find(|l| l.key == key)?;
+    let [[x0, z0], [x1, z1]] = l.cells;
+    let a = city.cell_centre(glam::IVec2::new(x0, z0));
+    let b = city.cell_centre(glam::IVec2::new(x1, z1));
+    let mid = (a + b) * 0.5;
+    let half = ((b - a).abs() * 0.5 + Vec2::splat(12.0)).max_element();
+    // Spiral out from the middle until a sidewalk or path tile turns up.
+    for r in 0..40 {
+        let rr = r as f32 * 2.0;
+        for k in 0..16 {
+            let ang = k as f32 / 16.0 * std::f32::consts::TAU;
+            let p = mid + Vec2::new(ang.cos(), ang.sin()) * (half * 0.5 + rr);
+            let t = city.walk.tile_of(p);
+            if matches!(city.walk.get(t), pav_world::walk::Walk::Sidewalk | pav_world::walk::Walk::Path) {
+                let c = city.walk.centre(t);
+                return Some(Vec3::new(c.x, city.ground_y(c), c.y));
+            }
+        }
+    }
+    None
+}
+
 /// Ground-plane position of a world point (the map's coordinates).
 pub fn flat(p: Vec3) -> Vec2 {
     Vec2::new(p.x, p.z)

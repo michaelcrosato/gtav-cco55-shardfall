@@ -102,7 +102,7 @@ fn main() {
     // game.
     let props = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/props");
     let mut files = Vec::new();
-    for folder in ["templates", "lib/core", "lib/kaykit_adventurers", "lib/gtf_city"] {
+    for folder in ["templates", "lib/core", "lib/kaykit_adventurers", "lib/gtf_city", "lib/gtf_vehicles"] {
         let dir = props.join(folder);
         if dir.is_dir() {
             println!("cargo:rerun-if-changed={}", dir.display());

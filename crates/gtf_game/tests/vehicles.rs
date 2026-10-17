@@ -37,6 +37,10 @@ fn every_archetype_loads() {
         assert_eq!(a.def.color, a.colors[0], "{}: paint is its first colour", a.key);
         if !a.helicopter() {
             assert!(!a.def.seats.is_empty() && !a.def.doors.is_empty(), "{}: seats and doors", a.key);
+            // Its body and wheel props ship in every build (the browser's and a lone exe's).
+            for name in [&a.def.body_asset, &a.def.wheel_asset] {
+                assert!(pav_core::props::store::shipped(name), "{}: '{name}' is not a shipped asset", a.key);
+            }
         }
     }
     assert_eq!(all.iter().filter(|a| a.helicopter()).count(), 2);

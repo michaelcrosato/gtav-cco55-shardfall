@@ -119,3 +119,13 @@ layers = [
     { wave = "sine", freq = 95, freq_end = 55, glide = 0.05, decay = 0.11, volume = 0.45 },
     { wave = "noise", freq = 1, decay = 0.07, volume = 0.2, cutoff = 1600, cutoff_end = 300 },
 ]
+
+# The police scanner under everything at two stars and up: a squelch, then garbled talk.
+[cue."police.scanner"]
+layers = [
+    { wave = "noise", freq = 1, decay = 0.08, volume = 0.05, cutoff = 4200, cutoff_end = 2400 },
+    { wave = "square", freq = 1240, decay = 0.05, volume = 0.03, duty = 0.5, cutoff = 3000, delay = 0.08 },
+    { wave = "noise", freq = 1, attack = 0.02, decay = 0.6, sustain = 0.5, hold = 0.9, release = 0.1, volume = 0.05, cutoff = 1500, cutoff_end = 900, delay = 0.15 },
+    { wave = "square", freq = 210, freq_end = 260, glide = 0.4, attack = 0.02, decay = 0.5, sustain = 0.4, hold = 0.8, release = 0.1, volume = 0.02, duty = 0.3, cutoff = 1200, delay = 0.18 },
+    { wave = "square", freq = 1240, decay = 0.05, volume = 0.03, duty = 0.5, cutoff = 3000, delay = 1.25 },
+]

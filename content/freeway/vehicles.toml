@@ -1,7 +1,8 @@
 # Grand Theft Freeway-BX vehicle archetypes (PLAN.md §5.6.3, §6.8.2), read by
 # `gtf_game::vehicles` and spawned with `vehicles::spawn(sim, key, feet, yaw, paint)`.
 #
-# Each table is the engine's `pav_core::vehicle::VehicleDef` (docs/REFERENCE.md, "Vehicles")
+# Each table is the engine's `pav_core::vehicle::VehicleDef` (docs/REFERENCE.md, "Vehicles"; `body` and
+# `wheel` name the body and wheel props in LIB/gtf_vehicles, `accent` their `$pillar` colour)
 # plus the game's own fields: `name`, `colors` (paint picked per copy; the body prop's `$accent`
 # parts), `traffic_weight` (share of ambient traffic) and `sound` (engine cue family).
 #
@@ -16,6 +17,8 @@
 
 [fenwick_commuter]
 name = "Fenwick Commuter"
+body = "LIB/gtf_vehicles/fenwick_commuter"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "compact"
 colors = ["#c9c9c4", "#2c5aa0", "#9b1c25", "#1f2126", "#e0d9c6", "#4f7a4a"]
 traffic_weight = 0.30
@@ -42,6 +45,8 @@ radio = true
 
 [zephyr_wagon]
 name = "Zephyr Wagon"
+body = "LIB/gtf_vehicles/zephyr_wagon"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "wagon"
 colors = ["#7a8a7a", "#c9b892", "#3a4d6b", "#8c2f2f", "#d8d8d2"]
 traffic_weight = 0.10
@@ -68,6 +73,8 @@ radio = true
 
 [okami_kaze]
 name = "Okami Kaze"
+body = "LIB/gtf_vehicles/okami_kaze"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "sports"
 colors = ["#c81e2b", "#f2f2f2", "#1b1d22", "#2a6fdb", "#f2b705"]
 traffic_weight = 0.04
@@ -95,6 +102,8 @@ radio = true
 
 [bravura_stallion]
 name = "Bravura Stallion"
+body = "LIB/gtf_vehicles/bravura_stallion"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "muscle"
 colors = ["#e8b21f", "#1b1d22", "#a3241f", "#2d5f9a", "#4a8c3f"]
 traffic_weight = 0.06
@@ -121,6 +130,8 @@ radio = true
 
 [daimon_titan]
 name = "Daimon Titan"
+body = "LIB/gtf_vehicles/daimon_titan"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "SUV"
 colors = ["#1d1f24", "#e6e6e3", "#5b6168", "#24364f", "#6b2228"]
 traffic_weight = 0.15
@@ -148,6 +159,8 @@ radio = true
 
 [marlin_bay]
 name = "Marlin Bay"
+body = "LIB/gtf_vehicles/marlin_bay"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "pickup"
 colors = ["#b23a2a", "#e8e4da", "#3f5a3a", "#2a2d33", "#3d6a8f"]
 traffic_weight = 0.12
@@ -175,6 +188,9 @@ radio = true
 
 [fenwick_courier]
 name = "Fenwick Courier"
+body = "LIB/gtf_vehicles/fenwick_courier"
+wheel = "LIB/gtf_vehicles/wheel"
+accent = "#1f4f8a"
 class = "van"
 colors = ["#f1f1ee", "#1f4f8a", "#c9c9c4"]
 traffic_weight = 0.08
@@ -202,6 +218,8 @@ radio = true
 
 [paloma_cab]
 name = "Paloma Cab"
+body = "LIB/gtf_vehicles/paloma_cab"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "taxi"
 colors = ["#f2c230"]
 traffic_weight = 0.10
@@ -228,6 +246,9 @@ radio = true
 
 [sppd_interceptor]
 name = "SPPD Interceptor"
+body = "LIB/gtf_vehicles/sppd_interceptor"
+wheel = "LIB/gtf_vehicles/wheel"
+accent = "#f2f2f0"
 class = "police"
 colors = ["#14161b"]
 traffic_weight = 0.0
@@ -255,6 +276,8 @@ radio = true
 
 [metro_bus]
 name = "Metro Bus"
+body = "LIB/gtf_vehicles/metro_bus"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "bus"
 colors = ["#e2e2dc"]
 traffic_weight = 0.0
@@ -281,6 +304,8 @@ health = 3000
 
 [ironclad_armored]
 name = "Ironclad Armored Truck"
+body = "LIB/gtf_vehicles/ironclad_armored"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "armoured"
 colors = ["#3d4a3e"]
 traffic_weight = 0.0
@@ -307,6 +332,8 @@ health = 3500
 
 [city_works]
 name = "City Works Utility Truck"
+body = "LIB/gtf_vehicles/city_works"
+wheel = "LIB/gtf_vehicles/wheel"
 class = "utility"
 colors = ["#f2a51f"]
 traffic_weight = 0.03
@@ -333,6 +360,9 @@ health = 2000
 
 [sppd_tactical]
 name = "SPPD Tactical Van"
+body = "LIB/gtf_vehicles/sppd_tactical"
+wheel = "LIB/gtf_vehicles/wheel"
+accent = "#f2f2f0"
 class = "police"
 colors = ["#1a1d24"]
 traffic_weight = 0.0

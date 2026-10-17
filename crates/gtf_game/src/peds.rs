@@ -747,6 +747,13 @@ impl Peds {
         self.scare(sim, walk, from, 30.0);
     }
 
+    /// Forgets `id` if they died (an explosion, a crash).
+    pub fn forget_if_dead(&mut self, sim: &Sim, id: EntityId) {
+        if sim.state.entities.get(id).is_some_and(|e| e.name.starts_with("dead:")) {
+            self.forget(id);
+        }
+    }
+
     /// Someone left the crowd (killed, arrested): no longer walked by the manager.
     pub fn forget(&mut self, id: EntityId) {
         self.list.retain(|p| p.id != id);

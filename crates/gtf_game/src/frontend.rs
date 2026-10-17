@@ -562,4 +562,9 @@ impl Front {
     pub fn fade(&self, now: f32, secs: f32) -> f32 {
         (1.0 - (now - self.changed_at) / secs).clamp(0.0, 1.0)
     }
+
+    /// Fades the picture in from black again (a respawn).
+    pub fn fade_in(&mut self, now: f32) {
+        self.changed_at = now;
+    }
 }

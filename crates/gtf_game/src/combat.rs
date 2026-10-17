@@ -546,6 +546,12 @@ impl Combat {
         self.since_hurt = 0.0;
     }
 
+    /// Someone else's shot (the police's): its tracer and where it struck.
+    pub fn trace(&mut self, from: Vec3, to: Vec3, person: bool) {
+        let normal = (from - to).normalize_or(Vec3::Y);
+        self.traces.push(Trace { from, to, normal, person, age: 0.0 });
+    }
+
     /// Regeneration and the fallen: health creeps back to half after 5 s unharmed; bodies are
     /// taken away after a while.
     pub fn update(&mut self, sim: &mut Sim, dt: f32) {
