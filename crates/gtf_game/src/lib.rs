@@ -23,6 +23,7 @@ pub mod audio;
 pub mod camera;
 pub mod combat;
 pub mod content;
+pub mod cover;
 pub mod daytime;
 pub mod drive;
 pub mod fate;
@@ -149,6 +150,9 @@ pub struct Freeway {
     /// People recently struck by vehicles.
     #[serde(default)]
     pub struck: struck::Struck,
+    /// Cover the player has taken.
+    #[serde(default)]
+    pub cover: cover::Cover,
     /// The wanted level, the police, and the player's fate (Wasted, Busted).
     #[serde(default)]
     pub heat: heat::Heat,
@@ -255,6 +259,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         drive: drive::Drive::default(),
         traffic: traffic::Traffic::default(),
         struck: struck::Struck::default(),
+        cover: cover::Cover::default(),
         heat: heat::Heat::default(),
         police: police::Police::default(),
         fate: fate::Fate::default(),
@@ -933,6 +938,10 @@ impl Game for Freeway {
                         });
                     }
                 }
+                None if self.cover.at.is_some() => {
+                    prompts.push(Prompt { button: PadButton::L2, label: "Peek".into(), hold: None });
+                    prompts.push(Prompt { button: PadButton::R1, label: "Leave cover".into(), hold: None });
+                }
                 None if !self.drive.busy() => {
                     if drive::Drive::nearest(sim, feet).is_some() {
                         prompts.push(Prompt { button: PadButton::North, label: "Enter vehicle".into(), hold: None });
@@ -998,6 +1007,14 @@ impl Game for Freeway {
             world::signal_lamps(c, self.camera(sim).target, self.time, &mut draw.prims);
         }
         self.combat.draw(&mut draw);
+        if let (Some((from, vel)), true) = (self.combat.arc, page == Page::Play && self.combat.aiming) {
+            draw.ribbons.push(RibbonDraw {
+                points: combat::arc(sim, from, vel),
+                width: 0.06,
+                color: pav_core::Color::hex("#ffe14d"),
+                emissive: 1.5,
+            });
+        }
         self.police.draw(sim, !(6.3..19.5).contains(&self.sky.hour), &mut draw);
         let cam = self.camera(sim);
         let view = self.look_now();

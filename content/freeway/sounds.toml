@@ -129,3 +129,10 @@ layers = [
     { wave = "square", freq = 210, freq_end = 260, glide = 0.4, attack = 0.02, decay = 0.5, sustain = 0.4, hold = 0.8, release = 0.1, volume = 0.02, duty = 0.3, cutoff = 1200, delay = 0.18 },
     { wave = "square", freq = 1240, decay = 0.05, volume = 0.03, duty = 0.5, cutoff = 3000, delay = 1.25 },
 ]
+
+# Into cover: a scuff and a soft thud against the wall.
+[cue."cover.in"]
+layers = [
+    { wave = "noise", freq = 1, decay = 0.08, volume = 0.1, cutoff = 1400, cutoff_end = 400 },
+    { wave = "sine", freq = 110, freq_end = 70, glide = 0.05, decay = 0.07, volume = 0.18, delay = 0.03 },
+]

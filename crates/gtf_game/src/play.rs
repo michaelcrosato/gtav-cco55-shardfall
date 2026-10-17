@@ -49,6 +49,7 @@ impl Freeway {
             self.wheel = None;
         }
         let look = self.look();
+        let Some(city) = self.city.clone() else { return out };
         // The player (not in a reference view's still or on the streaming tour's flight; not
         // while wasted or busted).
         let pid = sim.state.player.filter(|_| self.view.is_none() && self.mode != "tour" && alive);
@@ -63,6 +64,11 @@ impl Freeway {
             self.drive.steer(sim, id, input, dt, &mut deeds, events);
         }
         let riding = self.drive.vehicle().and_then(|car| Some((car, crate::ride(sim, car)?)));
+        if (riding.is_some() || !alive || self.drive.busy()) && self.cover.at.is_some() {
+            if let Some(id) = sim.state.player {
+                self.cover.leave(sim, id);
+            }
+        }
         if !alive {
             // The camera circles the player; nothing answers the pad.
             self.fate = match self.fate {
@@ -85,8 +91,13 @@ impl Freeway {
         } else {
             self.radio_wheel = None;
             let (stick, world) = crate::pad::stick_or_move(input);
+            // (In cover the stick slides along the wall: the camera does not swing after it.)
             let moving = camera::Moving {
-                dir: if world { stick } else { self.cam.world_move(stick) }.clamp_length_max(1.0),
+                dir: if self.cover.at.is_some() {
+                    Vec2::ZERO
+                } else {
+                    if world { stick } else { self.cam.world_move(stick) }.clamp_length_max(1.0)
+                },
                 sprinting: self.foot.sprinting,
                 aiming: input.pad.l2 > 0.5 || input.pad.held & pad::L2 != 0,
             };
@@ -98,21 +109,43 @@ impl Freeway {
                 && crate::pad::pressed(input, pad::NORTH)
                 && self.drive.begin_enter(sim, feet);
             if let (Some(id), false, false) = (pid, entering, self.drive.busy()) {
-                let (frame, haste) = self.foot.input(input, &self.cam, 50.0, dt);
+                // R1 takes cover (when not aiming); in cover the cover decides the steps.
+                let cam_now = self.cam.intent();
+                let view = cam_now.target - cam_now.eye;
+                if self.cover.at.is_none()
+                    && !moving.aiming
+                    && crate::pad::pressed(input, pad::R1)
+                    && self.cover.enter(&city, feet, view)
+                {
+                    sounds.push("cover.in");
+                }
+                let in_cover = match self.cover.at {
+                    Some(_) => self.cover.step(&city, sim, id, input, &self.cam, dt),
+                    None => None,
+                };
+                let (frame, haste) = match in_cover {
+                    Some(f) => (f, 0.0),
+                    None => self.foot.input(input, &self.cam, 50.0, dt),
+                };
                 let wdef = combat::def().ok();
                 let gun = wdef.as_ref().and_then(|d| d.weapon.get(self.weapon)).is_some_and(|w| w.kind == combat::Kind::Gun);
                 let cam = self.cam.intent();
                 let look = (cam.target - cam.eye).normalize_or(Vec3::NEG_Z);
                 if let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut()) {
                     c.haste = haste;
-                    // Aiming a gun turns the body to the aim (strafing).
-                    c.face = (moving.aiming && gun).then(|| look.x.atan2(look.z));
+                    // Aiming a gun turns the body to the aim (strafing); in cover the wall decides.
+                    if moving.aiming && gun {
+                        c.face = Some(look.x.atan2(look.z));
+                    } else if self.cover.at.is_none() {
+                        c.face = None;
+                    }
                 }
                 out.insert(id, frame);
                 // The weapon in hand: fire, reload, melee.
                 if let Some(wdef) = wdef {
                     let facing = sim.state.entities.get(id).and_then(|e| e.character.as_ref()).map_or(0.0, |c| c.facing);
-                    let shooter = combat::Shooter { id, feet, facing, camera: &cam, moving: moving.dir.length() > 0.3 };
+                    let blind = self.cover.at.is_some() && !moving.aiming;
+                    let shooter = combat::Shooter { id, feet, facing, camera: &cam, moving: moving.dir.length() > 0.3, blind };
                     res = self.combat.tick(sim, &wdef, self.weapon, input, &shooter, &mut self.cam, dt, events);
                     melee = wdef.weapon.get(self.weapon).is_some_and(|w| w.kind == combat::Kind::Melee);
                 }
@@ -124,7 +157,12 @@ impl Freeway {
         self.after_deeds(sim, &deeds);
         // Crimes the player committed this tick (judged once the people and police have moved).
         let mut crimes: Vec<(Crime, Vec3)> = Vec::new();
-        let Some(city) = self.city.clone() else { return out };
+        // Grenades in flight go off.
+        for at in self.combat.grenades_tick(sim, dt, events) {
+            self.peds.scare(sim, &city.walk, at, 45.0);
+            self.peds.incident(sim, at, 60.0);
+            crimes.push((Crime::Shooting, at));
+        }
         if self.mode == "tour" {
             return out;
         }
@@ -325,6 +363,7 @@ impl Freeway {
             dispatch: self.heat.dispatch,
             night: !(6.3..19.5).contains(&self.sky.hour),
             hidden,
+            covered: self.cover.covered(),
             firing: self.crime_clock.iter().any(|c| matches!(c.0, Crime::Shooting | Crime::AttackPolice | Crime::KillPolice)),
             dt,
         };

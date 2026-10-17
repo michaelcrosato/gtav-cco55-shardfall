@@ -128,6 +128,45 @@ pub struct Trace {
     pub age: f32,
 }
 
+/// A grenade in flight: where, how fast, seconds left on its fuse.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Grenade {
+    pub pos: Vec3,
+    pub vel: Vec3,
+    pub fuse: f32,
+}
+
+/// A grenade's fuse (s), blast radius (m) and throw speed (m/s).
+pub const FUSE: f32 = 3.0;
+pub const BLAST: f32 = 6.0;
+const THROW: f32 = 13.0;
+
+/// Where a grenade leaves the hand and how fast, thrown along the camera's view.
+pub fn throw_from(s: &Shooter) -> (Vec3, Vec3) {
+    let dir = (s.camera.target - s.camera.eye).normalize_or(Vec3::NEG_Z);
+    let flat = Vec3::new(dir.x, 0.0, dir.z).normalize_or(Vec3::NEG_Z);
+    let from = s.feet + Vec3::Y * 1.6 + flat * 0.4;
+    (from, flat * THROW * (1.0 - dir.y.max(0.0) * 0.5) + Vec3::Y * (5.0 + dir.y * THROW))
+}
+
+/// The arc a throw would follow (preview points, up to two seconds or the first surface).
+pub fn arc(sim: &Sim, from: Vec3, vel: Vec3) -> Vec<Vec3> {
+    let (mut p, mut v) = (from, vel);
+    let mut out = vec![p];
+    let dt = 1.0 / 30.0;
+    for _ in 0..60 {
+        v.y -= 9.81 * dt;
+        let step = v * dt;
+        if let Some(h) = sim.raycast_static(p, step.normalize_or(Vec3::NEG_Y), step.length()) {
+            out.push(h.point);
+            break;
+        }
+        p += step;
+        out.push(p);
+    }
+    out
+}
+
 /// The player's arms and vitals, and everyone's health (part of the game's state).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -158,6 +197,11 @@ pub struct Combat {
     /// crossing halfway is a pull).
     pub aiming: bool,
     pub r2_last: f32,
+    /// Grenades in flight, and the throw a held aim would make (the preview arc).
+    #[serde(default)]
+    pub grenades: Vec<Grenade>,
+    #[serde(default)]
+    pub arc: Option<(Vec3, Vec3)>,
     /// Totals for tests and soaks.
     pub shots: u32,
     pub hits: u32,
@@ -182,6 +226,8 @@ impl Default for Combat {
             health: MAX_HEALTH,
             armor: 50.0,
             since_hurt: 9.0,
+            grenades: Vec::new(),
+            arc: None,
             hp: BTreeMap::new(),
             fallen: Vec::new(),
             aiming: false,
@@ -201,6 +247,8 @@ pub struct Shooter<'a> {
     pub facing: f32,
     pub camera: &'a CameraIntent,
     pub moving: bool,
+    /// Firing blind from cover (three times the spread).
+    pub blind: bool,
 }
 
 /// What combat did this tick, for the people and the heat.
@@ -293,6 +341,26 @@ impl Combat {
                     }
                 }
             }
+            Kind::Thrown => {
+                let (from, vel) = throw_from(s);
+                self.arc = aim.then_some((from, vel));
+                if fire_pressed && self.cooldown <= 0.0 && self.mag[weapon] > 0 {
+                    self.mag[weapon] -= 1;
+                    self.grenades.push(Grenade { pos: from, vel, fuse: FUSE });
+                    self.cooldown = 0.8;
+                    events.push(sound(&w.cue, s.feet, 1.0));
+                    if self.mag[weapon] == 0 && self.reserve[weapon] > 0 {
+                        self.mag[weapon] = 1;
+                        self.reserve[weapon] -= 1;
+                    }
+                    let clip = pav_core::clips::find_cached("MESH2MOTION/OverhandThrow");
+                    if let Some(c) = sim.state.entities.get_mut(s.id).and_then(|e| e.character.as_mut())
+                        && clip != 0
+                    {
+                        c.anim.replay_clip(clip, pav_core::clips::ONCE, 1.0);
+                    }
+                }
+            }
             Kind::Melee | Kind::None if circle || (w.kind == Kind::Melee && fire_pressed && !aim) => {
                 let fists = &def.weapon[0];
                 let mw = if w.kind == Kind::Melee { w } else { fists };
@@ -338,7 +406,9 @@ impl Combat {
         let body = Vec3::new(s.facing.sin(), 0.0, s.facing.cos());
         let right = Vec3::new(body.z, 0.0, -body.x);
         let muzzle = s.feet + Vec3::Y * 1.35 + body * 0.35 + right * 0.22;
-        let spread = (w.spread + self.bloom + if s.moving { 1.2 } else { 0.0 }) * if aim { 1.0 } else { 1.8 };
+        let spread = (w.spread + self.bloom + if s.moving { 1.2 } else { 0.0 })
+            * if aim { 1.0 } else { 1.8 }
+            * if s.blind { 3.0 } else { 1.0 };
         let reach = w.range + eye.distance(muzzle);
         for _ in 0..w.pellets.max(1) {
             let dir = scatter(forward, spread, &mut sim.state.rng);
@@ -546,6 +616,48 @@ impl Combat {
         self.since_hurt = 0.0;
     }
 
+    /// Grenades fly, bounce and go off: each blast pushes things (`Sim::explode`, whose event
+    /// hurts people) and wrecks vehicles near it (cars set burning go up after). Returns the
+    /// blasts' centres.
+    pub fn grenades_tick(&mut self, sim: &mut Sim, dt: f32, events: &mut Vec<SimEvent>) -> Vec<Vec3> {
+        let mut blasts = Vec::new();
+        for g in &mut self.grenades {
+            g.fuse -= dt;
+            g.vel.y -= 9.81 * dt;
+            let step = g.vel * dt;
+            let len = step.length();
+            match sim.raycast_static(g.pos, step / len.max(1e-6), len + 0.06) {
+                Some(h) if len > 1e-5 => {
+                    // Bounce, losing most of the speed.
+                    g.pos = h.point + h.normal * 0.07;
+                    g.vel = (g.vel - 2.0 * g.vel.dot(h.normal) * h.normal) * 0.35;
+                }
+                _ => g.pos += step,
+            }
+            if g.fuse <= 0.0 {
+                blasts.push(g.pos);
+            }
+        }
+        self.grenades.retain(|g| g.fuse > 0.0);
+        for &at in &blasts {
+            sim.explode(at, BLAST, events);
+            let near: Vec<(EntityId, f32)> = sim
+                .state
+                .entities
+                .iter()
+                .filter_map(|e| {
+                    let v = e.vehicle.as_ref()?;
+                    let d = e.pos.distance(at);
+                    (d < BLAST).then(|| (e.id, v.def.health * 1.2 * (1.0 - d / BLAST)))
+                })
+                .collect();
+            for (id, dmg) in near {
+                sim.damage_vehicle(id, dmg);
+            }
+        }
+        blasts
+    }
+
     /// Someone else's shot (the police's): its tracer and where it struck.
     pub fn trace(&mut self, from: Vec3, to: Vec3, person: bool) {
         let normal = (from - to).normalize_or(Vec3::Y);
@@ -585,6 +697,18 @@ impl Combat {
 
     /// Tracers for a frame or two, the muzzle flash, red puffs on people, marks on walls.
     pub fn draw(&self, draw: &mut DrawList) {
+        for g in &self.grenades {
+            draw.prims.push(PrimDraw {
+                shape: pav_core::shape::Shape::Sphere { radius: 0.07 },
+                pos: g.pos,
+                rot: glam::Quat::IDENTITY,
+                color: Color::hex("#3d4a2f"),
+                emissive: if (g.fuse * 4.0).fract() < 0.2 { 0.8 } else { 0.0 },
+                look: pav_core::shape::Look::Lit,
+                shadow: true,
+                glow: Default::default(),
+            });
+        }
         for t in &self.traces {
             if t.age < 0.06 {
                 draw.tracers.push(TracerDraw { from: t.from, to: t.to, color: Color::hex("#ffe9a8"), width: 0.025 });

@@ -157,6 +157,8 @@ pub struct Moment<'a> {
     pub night: bool,
     /// Crouched, or somewhere that halves sight (under the freeway, an alley).
     pub hidden: bool,
+    /// In cover and not peeking (shots mostly hit the wall).
+    pub covered: bool,
     /// The player fired recently (officers at 1★ shoot back).
     pub firing: bool,
     pub dt: f32,
@@ -661,7 +663,8 @@ impl Police {
                         let chance = 0.55
                             * (1.0 - dist / 45.0).clamp(0.15, 1.0)
                             * if speed > 5.0 { 0.55 } else { 1.0 }
-                            * if m.hidden { 0.5 } else { 1.0 };
+                            * if m.hidden { 0.5 } else { 1.0 }
+                            * if m.covered { 0.25 } else { 1.0 };
                         let hit = sim.state.rng.f32() < chance;
                         let muzzle = feet + Vec3::Y * 1.35 + fwd * 0.4;
                         let miss = Vec3::new(

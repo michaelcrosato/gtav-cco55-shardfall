@@ -142,3 +142,97 @@ fn the_aim_assist_puts_the_reticle_on_someone_near_it() {
     let miss = (to - ray * to.dot(ray)).length();
     assert!(miss < 0.35, "the view ray passes {miss:.2} m from the chest");
 }
+
+#[test]
+fn cover_slides_along_the_wall_and_r1_leaves_it() {
+    gtf_game::register();
+    let mut sim = Sim::new("freeway/roam", 5).unwrap();
+    for _ in 0..60 {
+        sim.step(&InputFrame::default());
+    }
+    // A cover point near the start, the player 1.5 m out from it, looking at the wall.
+    let city = gtf_game::world::city().unwrap();
+    let feet = sim.feet(sim.state.player.unwrap()).unwrap();
+    let p = *city
+        .cover
+        .points
+        .iter()
+        .filter(|p| p.pos.distance(feet) < 60.0 && !p.high)
+        .min_by(|a, b| a.pos.distance(feet).total_cmp(&b.pos.distance(feet)))
+        .or_else(|| city.cover.points.iter().min_by(|a, b| a.pos.distance(feet).total_cmp(&b.pos.distance(feet))))
+        .unwrap();
+    let out = Vec3::new(p.normal.x, 0.0, p.normal.y);
+    sim.set_position(sim.state.player.unwrap(), p.pos + out * 1.5 + Vec3::Y * 0.1);
+    {
+        let g = sim.state.play.as_mut().unwrap().get_mut::<Freeway>().unwrap();
+        // The camera looks at the wall (orbit yaw: 0 north, east positive).
+        g.cam.face((-out.x).atan2(out.z));
+    }
+    for _ in 0..30 {
+        sim.step(&InputFrame::default());
+    }
+    let mut r1 = InputFrame::default();
+    r1.pad.held = pad::R1;
+    r1.pad.pressed = pad::R1;
+    sim.step(&r1);
+    for _ in 0..30 {
+        sim.step(&InputFrame::default());
+    }
+    let spot = game(&sim).cover.at.expect("in cover");
+    let at = sim.feet(sim.state.player.unwrap()).unwrap();
+    assert!(Vec3::new(at.x - spot.pos.x, 0.0, at.z - spot.pos.z).length() < 0.6, "against the wall: {at} vs {:?}", spot.pos);
+    // Pushing along the wall moves the spot (where the cover lasts).
+    let start = spot.pos;
+    let tangent = Vec3::new(spot.normal.y, 0.0, -spot.normal.x);
+    let cam = game(&sim).cam.intent();
+    let right = (cam.target - cam.eye).cross(Vec3::Y).normalize();
+    let side = if tangent.dot(right) > 0.0 { 1.0 } else { -1.0 };
+    let mut push = InputFrame::default();
+    push.pad.stick_l = glam::Vec2::new(side, 0.0);
+    for _ in 0..60 {
+        sim.step(&push);
+    }
+    let moved = game(&sim).cover.at.map(|s| s.pos.distance(start)).unwrap_or(0.0);
+    eprintln!("cover: high {}, slid {moved:.2} m along the wall", spot.high);
+    assert!(game(&sim).cover.at.is_some(), "still in cover");
+    sim.step(&r1);
+    sim.step(&InputFrame::default());
+    assert!(game(&sim).cover.at.is_none(), "R1 again leaves");
+}
+
+#[test]
+fn a_grenade_flies_bounces_and_blows_up() {
+    gtf_game::register();
+    let mut sim = Sim::new("freeway/roam", 5).unwrap();
+    cmd(&mut sim, "time 12:30");
+    for _ in 0..120 {
+        sim.step(&InputFrame::default());
+    }
+    cmd(&mut sim, "weapon grenade");
+    let who = target(&mut sim, 7.0);
+    for _ in 0..10 {
+        sim.step(&InputFrame::default());
+    }
+    let before = game(&sim).combat.mag[6] + game(&sim).combat.reserve[6];
+    // Aim (the arc shows), then throw.
+    let mut aim = InputFrame::default();
+    aim.pad.held = pad::L2;
+    for _ in 0..10 {
+        sim.step(&aim);
+    }
+    assert!(game(&sim).combat.arc.is_some(), "the throw's arc is previewed");
+    let mut throw = aim.clone();
+    throw.pad.held |= pad::R2;
+    throw.pad.pressed = pad::R2;
+    sim.step(&throw);
+    assert_eq!(game(&sim).combat.grenades.len(), 1, "in flight");
+    let after = game(&sim).combat.mag[6] + game(&sim).combat.reserve[6];
+    assert_eq!(after + 1, before, "one fewer carried");
+    for _ in 0..(4 * 60) {
+        sim.step(&InputFrame::default());
+    }
+    assert!(game(&sim).combat.grenades.is_empty(), "it went off");
+    let hurt = sim.state.entities.get(who).is_none_or(|e| e.name.starts_with("dead:"))
+        || game(&sim).combat.hp.get(&who.0).is_some_and(|hp| *hp < 100.0);
+    assert!(hurt, "the stranger 7 m away was caught in the blast");
+}
