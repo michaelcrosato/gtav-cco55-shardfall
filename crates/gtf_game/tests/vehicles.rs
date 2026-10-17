@@ -6,110 +6,19 @@
 //! ranges), no roll-over on flat ground, a 15% grade at ≥ 60% of top speed (cars; heavy ones
 //! must climb it), and the kicker jump landed upright. The helicopters fly.
 
-use gtf_game::vehicles::{self, Archetype};
+use gtf_game::vehicles;
 use pav_core::vehicle::VehicleInput;
-use pav_core::vehicle::feel::{self, Feel, Test};
+use pav_core::vehicle::feel::{self, Test};
 use pav_core::{InputFrame, Sim};
-
-/// PLAN §5.6.3: (key, top speed m/s, 0–100 km/h seconds).
-const TABLE: &[(&str, f32, f32)] = &[
-    ("fenwick_commuter", 30.0, 9.0),
-    ("zephyr_wagon", 31.0, 8.5),
-    ("okami_kaze", 42.0, 3.8),
-    ("bravura_stallion", 38.0, 4.6),
-    ("daimon_titan", 31.0, 7.0),
-    ("marlin_bay", 30.0, 7.5),
-    ("fenwick_courier", 26.0, 11.0),
-    ("paloma_cab", 32.0, 8.0),
-    ("sppd_interceptor", 40.0, 5.0),
-    ("metro_bus", 20.0, 18.0),
-    ("ironclad_armored", 25.0, 14.0),
-    ("city_works", 24.0, 13.0),
-    ("sppd_tactical", 30.0, 9.0),
-];
-
-fn within(x: f32, target: f32, tol: f32) -> bool {
-    (x - target).abs() <= target * tol
-}
-
-/// What `a` misses of its targets (empty: all met).
-fn misses(a: &Archetype, f: &Feel, top: f32, accel: f32) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut check = |ok: bool, what: String| {
-        if !ok {
-            out.push(what);
-        }
-    };
-    let ts = f.top_speed.unwrap_or(0.0);
-    check(within(ts, top, 0.1), format!("top speed {ts:.1} m/s (target {top})"));
-    match f.accel_time {
-        Some(t) => check(within(t, accel, 0.1), format!("0-{:.0} km/h in {t:.2} s (target {accel})", f.accel_to * 3.6)),
-        None => check(false, format!("never reached {:.0} km/h", f.accel_to * 3.6)),
-    }
-    let d = f.brake_distance.unwrap_or(f32::MAX);
-    match a.def.class.as_str() {
-        "compact" => check((38.0..=50.0).contains(&d), format!("braking {d:.1} m (38-50)")),
-        "sports" => check((32.0..=40.0).contains(&d), format!("braking {d:.1} m (32-40)")),
-        _ => {
-            let g = f.brake_from * f.brake_from / (2.0 * d) / 9.81;
-            check((0.45..=1.15).contains(&g), format!("braking {d:.1} m from {:.1} m/s = {g:.2} g", f.brake_from))
-        }
-    }
-    let g = f.grip_g.unwrap_or(0.0);
-    let s = f.slide_deg.unwrap_or(0.0);
-    let climb = f.climb_share.unwrap_or(0.0);
-    if a.heavy() {
-        check((0.6..=1.1).contains(&g), format!("skidpad {g:.2} g (0.6-1.1)"));
-        check(s < 90.0, format!("handbrake slide {s:.0} deg spun it round"));
-        check(climb >= 0.15, format!("15% grade at {:.0}% of top speed (heavy: climbs it)", climb * 100.0));
-    } else {
-        check((0.9..=1.1).contains(&g), format!("skidpad {g:.2} g (0.9-1.1)"));
-        check((25.0..=45.0).contains(&s), format!("handbrake slide {s:.0} deg (25-45)"));
-        check(f.slide_recovered == Some(true), "did not straighten out after the slide".into());
-        check(climb >= 0.6, format!("15% grade at {:.0}% of top speed (>= 60%)", climb * 100.0));
-    }
-    check(!f.rolled_over, "rolled over on flat ground".into());
-    match &f.jump {
-        Some(j) => {
-            check(j.upright, format!("not upright after the jump ({j:?})"));
-            check(j.landing_pitch.abs() <= 20.0, format!("landed at {:.0} deg pitch", j.landing_pitch));
-            check(j.max_roll <= 15.0, format!("rolled {:.0} deg in the air", j.max_roll));
-        }
-        None => check(false, "no jump".into()),
-    }
-    out
-}
-
-fn row(a: &Archetype, f: &Feel) -> String {
-    let j = f.jump.clone().unwrap_or_default();
-    format!(
-        "{:18} top {:5.1}  0-{:.0} {:5.2}s  brake {:5.1}m  {:4.2}g  slide {:4.1}{}  climb {:4.0}%  jump {:+5.1}/{:+5.1}/{:+5.1} deg air {:.2}s {}",
-        a.key,
-        f.top_speed.unwrap_or(0.0),
-        f.accel_to * 3.6,
-        f.accel_time.unwrap_or(f32::NAN),
-        f.brake_distance.unwrap_or(f32::NAN),
-        f.grip_g.unwrap_or(f32::NAN),
-        f.slide_deg.unwrap_or(f32::NAN),
-        if f.slide_recovered == Some(true) { "" } else { "!" },
-        f.climb_share.unwrap_or(0.0) * 100.0,
-        j.takeoff_pitch,
-        j.max_pitch,
-        j.landing_pitch,
-        j.air_time,
-        if j.upright { "upright" } else { "NOT UPRIGHT" },
-    )
-}
 
 fn check_group(keys: &[&str]) {
     let all = vehicles::all().unwrap();
     let mut failures = Vec::new();
     for key in keys {
         let a = all.iter().find(|a| a.key == *key).unwrap_or_else(|| panic!("{key} is not in vehicles.toml"));
-        let &(_, top, accel) = TABLE.iter().find(|(k, _, _)| k == key).unwrap();
         let f = feel::run(&a.def, &Test::ALL);
-        println!("{}", row(a, &f));
-        for m in misses(a, &f, top, accel) {
+        println!("{}", vehicles::feel_row(a, &f));
+        for m in vehicles::feel_misses(a, &f) {
             failures.push(format!("{key}: {m}"));
         }
     }
@@ -120,7 +29,7 @@ fn check_group(keys: &[&str]) {
 fn every_archetype_loads() {
     let all = vehicles::all().unwrap();
     assert_eq!(all.len(), 15, "13 required + 2 optional archetypes (PLAN §5.6.3)");
-    for (key, _, _) in TABLE {
+    for (key, _, _) in vehicles::FEEL_TARGETS {
         assert!(all.iter().any(|a| a.key == *key), "{key}");
     }
     for a in all.iter() {

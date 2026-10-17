@@ -45,12 +45,17 @@ impl WheelState {
     /// Points the stick: past half way picks the slot in that direction (slot 0 at the top,
     /// clockwise); closer to the middle keeps the last pick.
     pub fn aim(&mut self, stick: Vec2) {
-        if stick.length() < 0.5 {
+        self.aim_n(stick, 8);
+    }
+
+    /// The same for a wheel of `n` slots.
+    pub fn aim_n(&mut self, stick: Vec2, n: usize) {
+        if stick.length() < 0.5 || n == 0 {
             return;
         }
         // Angle clockwise from up.
         let a = stick.x.atan2(stick.y).rem_euclid(std::f32::consts::TAU);
-        self.focus = Some(((a / std::f32::consts::TAU * 8.0 + 0.5).floor() as usize) % 8);
+        self.focus = Some(((a / std::f32::consts::TAU * n as f32 + 0.5).floor() as usize) % n);
     }
 
     pub fn ui(&self, current: usize) -> Wheel {

@@ -1,7 +1,7 @@
 //! The game's own agent tools, registered into `gtf` beside every engine tool
 //! (`pav_tools::tools::register`). They need the game's data, so they live here rather than in
-//! `pav_tools` (PLAN.md §6.5 E12): `perf`, `citymap` and `lanes` now; `perf`, `soak`, `traffic`, `peds`,
-//! `vehicle_feel` arrive with the systems they measure.
+//! `pav_tools` (PLAN.md §6.5 E12): `perf`, `citymap`, `lanes` and `vehicle_feel` now; `soak`,
+//! `traffic` and `peds` arrive with the systems they measure.
 
 use std::path::PathBuf;
 
@@ -45,7 +45,49 @@ pub static TOOLS: &[Tool] = &[
         ],
         run: t_lanes,
     },
+    Tool {
+        name: "vehicle_feel",
+        help: "Vehicle archetypes on the feel tracks against PLAN §5.6.3: top speed, 0-100 km/h, braking, skidpad g, handbrake slide, 15% climb, the kicker jump.",
+        args: &[arg("key", "string", "an archetype key from content/freeway/vehicles.toml, or all (default all)")],
+        run: t_vehicle_feel,
+    },
 ];
+
+fn t_vehicle_feel(_s: &mut Session, a: &Args) -> Result<Output> {
+    use pav_core::vehicle::feel::{self, Test};
+    let all = gtf_game::vehicles::all()?;
+    let key = a.get("key").and_then(Value::as_str).unwrap_or("all");
+    let chosen: Vec<_> = all.iter().filter(|v| (key == "all" && !v.helicopter()) || v.key == key).collect();
+    if chosen.is_empty() {
+        let keys: Vec<&str> = all.iter().map(|v| v.key.as_str()).collect();
+        bail!("no vehicle '{key}' (vehicles: {}, all)", keys.join(", "));
+    }
+    let mut rows = Vec::new();
+    for v in chosen {
+        if v.helicopter() {
+            rows.push(json!({ "key": v.key, "note": "helicopters fly (no road feel tracks); tests/vehicles.rs checks they climb and fly forward" }));
+            continue;
+        }
+        let f = feel::run(&v.def, &Test::ALL);
+        let misses = gtf_game::vehicles::feel_misses(v, &f);
+        let j = f.jump.clone().unwrap_or_default();
+        rows.push(json!({
+            "key": v.key,
+            "ok": misses.is_empty(),
+            "top_speed": f.top_speed.map(r1),
+            "accel_to_kmh": (f.accel_to * 3.6).round(),
+            "accel_s": f.accel_time.map(|t| (t * 100.0).round() / 100.0),
+            "brake_m": f.brake_distance.map(r1),
+            "skidpad_g": f.grip_g.map(|g| (g * 100.0).round() / 100.0),
+            "slide_deg": f.slide_deg.map(r1),
+            "climb_share": f.climb_share.map(|c| (c * 100.0).round() / 100.0),
+            "jump": { "takeoff": r1(j.takeoff_pitch), "landing": r1(j.landing_pitch), "air_s": (j.air_time * 100.0).round() / 100.0, "upright": j.upright },
+            "misses": misses,
+        }));
+    }
+    let failed = rows.iter().filter(|r| r["ok"] == json!(false)).count();
+    Ok(Output::Json(json!({ "vehicles": rows, "failed": failed })))
+}
 
 /// One budget row: (metric, budget, relaxed budget for `hills_vista`).
 const BUDGETS: &[(&str, f64, f64)] = &[

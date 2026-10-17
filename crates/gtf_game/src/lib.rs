@@ -19,10 +19,12 @@ use serde_json::json;
 
 pub mod about;
 pub mod ambience;
+pub mod audio;
 pub mod camera;
 pub mod combat;
 pub mod content;
 pub mod daytime;
+pub mod drive;
 pub mod frontend;
 pub mod gallery;
 pub mod gps;
@@ -61,6 +63,28 @@ pub fn register() {
 /// Seconds the weapon wheel button must be held before the wheel opens (a tap swaps to the last
 /// weapon).
 const WHEEL_DELAY: f32 = 0.18;
+/// Seconds D-pad left must be held in a car before the radio wheel opens (a tap steps back).
+const RADIO_WHEEL_DELAY: f32 = 0.3;
+
+/// The radio wheel: every station, then "Off".
+fn radio_wheel_ui(def: &radio::RadioDef, w: &WheelState, on: Option<usize>) -> Wheel {
+    let mut slots: Vec<WheelSlot> = def
+        .station
+        .iter()
+        .map(|s| WheelSlot { label: s.name.clone(), icon: "radio".into(), detail: Some(s.freq.clone()), enabled: true })
+        .collect();
+    slots.push(WheelSlot { label: "Off".into(), icon: "radio_off".into(), detail: None, enabled: true });
+    let focus = w.focus.or(on).unwrap_or(def.station.len());
+    let center = slots.get(focus).map(|s| format!("{}\n{}", s.label, s.detail.clone().unwrap_or_default())).unwrap_or_default();
+    Wheel { id: "radio".into(), slots, focus: Some(focus), center }
+}
+
+/// What the chase camera needs of the vehicle `car`.
+fn ride(sim: &Sim, car: EntityId) -> Option<camera::Ride> {
+    let c = drive::Car::read(sim, car)?;
+    let drift = sim.vehicle_status(car).map(|s| s.drift).unwrap_or(0.0);
+    Some(camera::Ride { center: c.center, yaw: c.yaw, vel: c.vel, half: c.half, drift, heli: c.heli })
+}
 
 /// The game's state (everything that changes during play lives here or in entities).
 #[derive(Clone, Serialize, Deserialize)]
@@ -105,9 +129,17 @@ pub struct Freeway {
     /// People on foot around the player.
     #[serde(default)]
     pub peds: peds::Peds,
-    /// The car radio (stations are live on the game clock).
+    /// The car radio (stations are live on the game clock), and its wheel (hold D-pad left).
     #[serde(default)]
     pub radio: radio::Radio,
+    #[serde(default)]
+    pub radio_wheel: Option<WheelState>,
+    /// Getting in and out of vehicles, driving.
+    #[serde(default)]
+    pub drive: drive::Drive,
+    /// The camera behind the vehicle being driven.
+    #[serde(default)]
+    pub chase: camera::ChaseCam,
     /// The district (rebuilt from its file when missing, e.g. after loading a snapshot; a
     /// cache, so not part of the state).
     #[serde(skip)]
@@ -185,6 +217,9 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         sky,
         foot: player::Foot::default(),
         radio: radio::Radio::default(),
+        radio_wheel: None,
+        drive: drive::Drive::default(),
+        chase: camera::ChaseCam::default(),
         peds: peds::Peds::default(),
         combat: combat::Combat::default(),
         tour: (mode_is_tour).then(|| Arc::new(tour::Tour::new(&city))),
@@ -247,6 +282,10 @@ impl Freeway {
                     _ => log::warn!("clock: '{k}' is not a speed (0-1000)"),
                 },
                 (Some("radio"), Some(arg)) => self.radio_cmd(arg),
+                (Some(verb @ ("car" | "drive")), Some(key)) => {
+                    let paint = w.next().and_then(|p| p.parse().ok());
+                    self.car_cmd(sim, key, paint, verb == "drive");
+                }
                 (Some("target"), Some(m)) => self.target_cmd(sim, m.parse().unwrap_or(8.0)),
                 (Some("weapon"), Some(arg)) => {
                     match combat::def().ok().and_then(|d| d.weapon.iter().position(|w| w.id == arg || w.icon == arg)) {
@@ -287,6 +326,118 @@ impl Freeway {
                 }
             }
             Err(e) => log::warn!("{e}"),
+        }
+    }
+
+    /// In a car: D-pad ←/→ step the stations (the card shows again); holding ← opens the radio
+    /// wheel, the left stick picks and letting go tunes (`real` seconds).
+    fn radio_controls(&mut self, input: &InputFrame, real: f32, sounds: &mut Vec<&'static str>) {
+        use pav_core::input::pad::{LEFT, RIGHT};
+        let Ok(def) = radio::def() else { return };
+        let n = def.station.len();
+        match (&mut self.radio_wheel, pad::held(input, LEFT)) {
+            (None, true) if pad::pressed(input, LEFT) => self.radio_wheel = Some(WheelState::default()),
+            (Some(w), true) => {
+                w.open_for += real;
+                if w.open_for >= RADIO_WHEEL_DELAY {
+                    let before = w.focus;
+                    w.aim_n(input.pad.stick_l, n + 1);
+                    if w.focus != before {
+                        sounds.push("wheel.slot");
+                    }
+                }
+            }
+            (Some(w), false) => {
+                let (open_for, focus) = (w.open_for, w.focus);
+                self.radio_wheel = None;
+                if open_for < RADIO_WHEEL_DELAY {
+                    // A tap steps back a station.
+                    self.radio.step(&def, -1);
+                } else if let Some(f) = focus {
+                    // The last slot is "Off".
+                    self.radio.tune((f < n).then_some(f));
+                    sounds.push("wheel.pick");
+                }
+                self.drive.card = 0.0;
+            }
+            _ => {}
+        }
+        if pad::pressed(input, RIGHT) && self.radio_wheel.is_none() {
+            self.radio.step(&def, 1);
+            self.drive.card = 0.0;
+        }
+    }
+
+    /// The radio wheel is open (past the tap delay).
+    pub fn radio_wheel_open(&self) -> bool {
+        self.radio_wheel.as_ref().is_some_and(|w| w.open_for >= RADIO_WHEEL_DELAY)
+    }
+
+    /// What getting in and out did: the radio comes on in a car, the cameras hand over, people
+    /// near a smashed window or a carjacking take fright.
+    fn after_deeds(&mut self, sim: &mut Sim, deeds: &[drive::Deed]) {
+        use drive::Deed;
+        for d in deeds {
+            match *d {
+                Deed::Entered { car } => {
+                    if let Some(c) = drive::Car::read(sim, car) {
+                        self.chase.place_behind(c.yaw);
+                        if c.radio {
+                            let last = self.radio.last;
+                            self.radio.tune(Some(last));
+                        }
+                    }
+                }
+                Deed::Exited { car } | Deed::Bailed { car, .. } => {
+                    self.radio.tune(None);
+                    self.radio.last = self.radio.last.min(radio::def().map(|d| d.station.len().saturating_sub(1)).unwrap_or(0));
+                    self.radio_wheel = None;
+                    // The on-foot camera carries on looking the way the chase camera did.
+                    let yaw = self.chase.yaw + self.chase.look;
+                    self.cam.face(std::f32::consts::PI - yaw);
+                    let _ = car;
+                }
+                Deed::Smashed { at, .. } => {
+                    if let Some(city) = self.city.clone() {
+                        self.peds.scare(sim, &city.walk, at, 12.0);
+                    }
+                }
+                Deed::Jacked { at, driver, .. } => {
+                    if let Some(city) = self.city.clone() {
+                        self.peds.scare(sim, &city.walk, at, 20.0);
+                    }
+                    let _ = driver;
+                }
+            }
+        }
+    }
+
+    /// `car <archetype> [paint]`: a vehicle standing 5 m ahead of the player, side on (the
+    /// Proving Grounds, bots and checks). `drive <archetype>`: and the player in its seat.
+    fn car_cmd(&mut self, sim: &mut Sim, key: &str, paint: Option<usize>, seat: bool) {
+        let Some(pid) = sim.state.player else { return };
+        let Some(feet) = sim.feet(pid) else { return };
+        let (f, _) = self.cam.axes();
+        let want = if seat { feet } else { feet + f * 5.0 };
+        // On the nearest street lane, along it; else where asked, side on to the camera (the
+        // driver's door toward the player), or along the view when driven.
+        let on_lane = self.city.as_ref().and_then(|c| {
+            use pav_world::lanes::LaneKind::*;
+            let keep = |l: &pav_world::lanes::Lane| !l.closed && matches!(l.kind, Street | Avenue | Boulevard | Alley);
+            let (lane, along, d) = c.lanes.nearest(want, keep)?;
+            (d < 25.0).then(|| {
+                let (p, dir) = c.lanes.lanes[lane as usize].at(along);
+                (p, dir.x.atan2(dir.z))
+            })
+        });
+        let (at, yaw) = on_lane.unwrap_or((want, f.x.atan2(f.z) - if seat { 0.0 } else { std::f32::consts::FRAC_PI_2 }));
+        match vehicles::spawn(sim, key, at + Vec3::Y * 0.05, yaw, paint) {
+            Ok(id) => {
+                if seat && self.drive.seat(sim, pid, id) {
+                    self.after_deeds(sim, &[drive::Deed::Entered { car: id }]);
+                }
+            }
+            Err(e) => log::warn!("{e:#}"),
         }
     }
 
@@ -347,14 +498,20 @@ impl Freeway {
     }
 
     /// The camera for this page.
-    fn camera(&self) -> CameraIntent {
+    fn camera(&self, sim: &Sim) -> CameraIntent {
         if let Some(v) = &self.view {
             return v.camera();
         }
         if let Some(t) = &self.tour {
             return t.camera(self.time * tour::SPEED);
         }
-        if self.drone_view() { camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0) } else { self.cam.intent() }
+        if self.drone_view() {
+            return camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0);
+        }
+        match self.drive.vehicle().and_then(|car| ride(sim, car)) {
+            Some(r) => self.chase.intent(&r),
+            None => self.cam.intent(),
+        }
     }
 
     /// The look of the moment: the clock and the weather.
@@ -435,34 +592,61 @@ impl Game for Freeway {
         let mut out = BTreeMap::new();
         if self.front.page == Page::Play {
             self.roam_age += real;
-            let (open, focus, notes) = (self.wheel_open(), self.wheel.as_ref().and_then(|w| w.focus), self.next_note);
-            self.wheel_tick(input, real);
-            match (open, self.wheel_open()) {
-                (false, true) => sounds.push("ui.slowmo_in"),
-                (true, false) => sounds.push(if self.next_note != notes { "wheel.pick" } else { "ui.slowmo_out" }),
-                _ => {}
-            }
-            if self.wheel_open() && self.wheel.as_ref().and_then(|w| w.focus) != focus {
-                sounds.push("wheel.slot");
-            }
-            if self.next_note != notes && !open {
-                sounds.push("ui.toast");
+            let (notes, was_open) = (self.next_note, self.wheel_open());
+            if self.drive.vehicle().is_none() {
+                let (open, focus) = (self.wheel_open(), self.wheel.as_ref().and_then(|w| w.focus));
+                self.wheel_tick(input, real);
+                match (open, self.wheel_open()) {
+                    (false, true) => sounds.push("ui.slowmo_in"),
+                    (true, false) => sounds.push(if self.next_note != notes { "wheel.pick" } else { "ui.slowmo_out" }),
+                    _ => {}
+                }
+                if self.wheel_open() && self.wheel.as_ref().and_then(|w| w.focus) != focus {
+                    sounds.push("wheel.slot");
+                }
+            } else {
+                self.wheel = None;
             }
             let look = self.look();
-            // Walls pull the camera in: the distance to the first surface along a ray.
-            // (The fixed world only: people and props walking past do not shove the camera.)
-            let hit = |o: Vec3, d: Vec3, max: f32| sim.raycast_static(o, d, max).map(|h| h.point.distance(o));
-            if self.wheel_open() {
+            // The player (not in a reference view's still or on the streaming tour's flight).
+            let pid = sim.state.player.filter(|_| self.view.is_none() && self.mode != "tour");
+            let mut deeds = Vec::new();
+            if let Some(id) = pid {
+                // Getting in or out, and driving.
+                if let Some(walk) = self.drive.tick(sim, id, input, dt, &mut deeds, events) {
+                    out.insert(id, walk);
+                }
+                self.drive.steer(sim, id, input, dt, &mut deeds, events);
+            }
+            let riding = self.drive.vehicle().and_then(|car| Some((car, ride(sim, car)?)));
+            if let Some((car, r)) = riding {
+                // Walls pull the camera in: the distance to the first surface along a ray.
+                // (The fixed world only: people and props walking past do not shove the camera.)
+                let hit = |o: Vec3, d: Vec3, max: f32| sim.raycast_static(o, d, max).map(|h| h.point.distance(o));
+                self.chase.update(input, &r, look, real, &hit);
+                self.radio_controls(input, real, &mut sounds);
+                // Headlights after dark and in bad weather.
+                let dark = !(6.3..19.5).contains(&self.sky.hour) || matches!(self.sky.weather.as_str(), "rain" | "storm" | "fog");
+                sim.set_vehicle_lights(car, dark);
+            } else if self.wheel_open() {
+                let hit = |o: Vec3, d: Vec3, max: f32| sim.raycast_static(o, d, max).map(|h| h.point.distance(o));
                 self.cam.update(&InputFrame::default(), feet, look, camera::Moving::default(), real, &hit);
             } else {
+                self.radio_wheel = None;
                 let (stick, world) = crate::pad::stick_or_move(input);
                 let moving = camera::Moving {
                     dir: if world { stick } else { self.cam.world_move(stick) }.clamp_length_max(1.0),
                     sprinting: self.foot.sprinting,
                     aiming: input.pad.l2 > 0.5 || input.pad.held & pav_core::input::pad::L2 != 0,
                 };
+                let hit = |o: Vec3, d: Vec3, max: f32| sim.raycast_static(o, d, max).map(|h| h.point.distance(o));
                 self.cam.update(input, feet, look, moving, real, &hit);
-                if let (Some(id), None, false) = (sim.state.player, &self.view, self.mode == "tour") {
+                // △ near a car starts getting in (the walk to its door begins next tick).
+                let entering = pid.is_some()
+                    && !self.drive.busy()
+                    && pad::pressed(input, pav_core::input::pad::NORTH)
+                    && self.drive.begin_enter(sim, feet);
+                if let (Some(id), false, false) = (pid, entering, self.drive.busy()) {
                     let (frame, haste) = self.foot.input(input, &self.cam, 50.0, dt);
                     let wdef = combat::def().ok();
                     let gun = wdef.as_ref().and_then(|d| d.weapon.get(self.weapon)).is_some_and(|w| w.kind == combat::Kind::Gun);
@@ -494,6 +678,10 @@ impl Game for Freeway {
                     }
                 }
             }
+            if self.next_note != notes && !was_open {
+                sounds.push("ui.toast");
+            }
+            self.after_deeds(sim, &deeds);
             // The people around the player (not on the streaming tour's flight).
             if let (Some(city), false) = (self.city.clone(), self.mode == "tour") {
                 // A reference view's crowd stands around its camera, not its target.
@@ -501,7 +689,7 @@ impl Game for Freeway {
                     Some(v) => Vec3::new(v.eye.x, 0.0, v.eye.z),
                     None => sim.state.player.and_then(|id| sim.feet(id)).unwrap_or(feet),
                 };
-                let m = peds::Moment { city: &city, player, camera: self.camera(), time: self.time, hour: self.sky.hour, dt };
+                let m = peds::Moment { city: &city, player, camera: self.camera(sim), time: self.time, hour: self.sky.hour, dt };
                 self.peds.tick(sim, &m, &mut out);
             }
         } else {
@@ -512,8 +700,9 @@ impl Game for Freeway {
         out
     }
 
-    fn post(&mut self, _sim: &mut Sim, dt: f32, _events: &mut Vec<SimEvent>) {
+    fn post(&mut self, _sim: &mut Sim, dt: f32, events: &mut Vec<SimEvent>) {
         self.time += dt;
+        audio::crash_sounds(events);
     }
 
     fn hud(&self, _sim: &Sim) -> Vec<String> {
@@ -538,6 +727,18 @@ impl Game for Freeway {
             "clock": daytime::format_time(self.sky.hour),
             "weather": self.sky.weather,
             "peds": peds,
+            "drive": match self.drive.phase {
+                drive::Phase::Foot => "foot",
+                drive::Phase::Enter { .. } => "entering",
+                drive::Phase::In { .. } => "driving",
+                drive::Phase::Stopping { .. } => "stopping",
+                drive::Phase::Exit { .. } => "exiting",
+            },
+            "vehicle": self.drive.vehicle().and_then(|car| {
+                let st = sim.vehicle_status(car)?;
+                let name = sim.state.entities.get(car).map(|e| e.name.clone())?;
+                Some(json!({ "key": name, "kmh": round(st.kmh), "gear": st.gear, "health": round(st.health), "siren": st.siren_on, "airborne": st.airborne }))
+            }),
             "radio": radio::def().ok().and_then(|d| self.radio.card(&d, self.time as f64)).map(|(head, line)| format!("{head}: {line}")),
             "web": self.web,
             "touch": self.touch,
@@ -555,6 +756,12 @@ impl Game for Freeway {
 
     fn legacy_controls(&self) -> bool {
         false
+    }
+
+    fn vehicles(&mut self, _sim: &mut Sim, _dt: f32) -> BTreeMap<EntityId, pav_core::vehicle::VehicleInput> {
+        let mut out = BTreeMap::new();
+        self.drive.inputs(&mut out);
+        out
     }
 
     fn present(&self, sim: &Sim) -> Option<PlayFrame> {
@@ -575,10 +782,17 @@ impl Game for Freeway {
         }
         if page == Page::Play {
             let heading = sim.player().and_then(|p| p.character.as_ref()).map(|c| c.facing).unwrap_or(0.0);
-            let help = (self.roam_age < 12.0).then_some((
-                "Move with ~btn:left_stick~ and look with ~btn:right_stick~. ~btn:west~ jumps, ~btn:start~ pauses.",
-                self.roam_age,
-            ));
+            let help = if self.drive.vehicle().is_some() {
+                (self.drive.card < 8.0).then_some((
+                    "~btn:r2~ accelerates, ~btn:l2~ brakes and reverses, ~btn:r1~ is the handbrake. ~btn:left~ ~btn:right~ change the station, ~btn:north~ gets out.",
+                    self.drive.card,
+                ))
+            } else {
+                (self.roam_age < 12.0).then_some((
+                    "Move with ~btn:left_stick~ and look with ~btn:right_stick~. ~btn:west~ jumps, ~btn:north~ enters vehicles, ~btn:start~ pauses.",
+                    self.roam_age,
+                ))
+            };
             let (hud, help, prompts) = hud::hud(&hud::HudInput {
                 player,
                 heading,
@@ -595,12 +809,46 @@ impl Game for Freeway {
                     .and_then(|d| d.weapon.get(self.weapon).cloned())
                     .and_then(|w| self.combat.crosshair(&w, self.combat.aiming, false)),
             });
+            let mut hud = hud;
+            let mut prompts = prompts;
+            match self.drive.vehicle().and_then(|car| drive::Car::read(sim, car)) {
+                Some(c) => {
+                    // The radar opens out with speed; the car's card shows for a while.
+                    if let Some(m) = &mut hud.minimap {
+                        m.radius = 60.0 + (c.vel.length() * 2.2).min(60.0);
+                    }
+                    hud.weapon = None;
+                    hud.crosshair = None;
+                    hud.objective = Some("Explore Paloma Bay.".into());
+                    if self.drive.card < 4.0 {
+                        let name = vehicles::get(&c.key).map(|a| a.name).unwrap_or_else(|_| c.key.clone());
+                        let card = radio::def().ok().and_then(|d| self.radio.card(&d, self.time as f64));
+                        hud.vehicle = Some(VehicleHud {
+                            name,
+                            station: card.as_ref().map(|c| c.0.clone()).or_else(|| c.radio.then(|| "RADIO OFF".to_string())),
+                            song: card.map(|c| c.1),
+                            age: self.drive.card,
+                        });
+                    }
+                }
+                None if !self.drive.busy() => {
+                    if drive::Drive::nearest(sim, feet).is_some() {
+                        prompts.push(Prompt { button: PadButton::North, label: "Enter vehicle".into(), hold: None });
+                    }
+                }
+                None => {}
+            }
             ui.hud = Some(hud);
             ui.help = help;
             ui.prompts = prompts;
             if self.wheel_open() {
                 ui.wheel = Some(self.wheel.as_ref().unwrap().ui(self.weapon));
                 ui.overlay.vignette = 0.45;
+            }
+            if self.radio_wheel_open() {
+                if let (Some(w), Ok(def)) = (&self.radio_wheel, radio::def()) {
+                    ui.wheel = Some(radio_wheel_ui(&def, w, self.radio.on));
+                }
             }
         }
         if page != Page::Gallery {
@@ -628,10 +876,10 @@ impl Game for Freeway {
             draw.ribbons.extend(self.gps.ribbon(feet, 160.0));
         }
         if let Some(c) = &self.city {
-            world::signal_lamps(c, self.camera().target, self.time, &mut draw.prims);
+            world::signal_lamps(c, self.camera(sim).target, self.time, &mut draw.prims);
         }
         self.combat.draw(&mut draw);
-        let cam = self.camera();
+        let cam = self.camera(sim);
         let view = self.look_now();
         // The beds: where the ears are, who is near, the weather and the hour.
         let crowd = self.peds.list.iter().filter_map(|p| sim.feet(p.id)).filter(|f| f.distance(cam.eye) < 25.0).count();
@@ -646,6 +894,10 @@ impl Game for Freeway {
             }),
             None => Vec::new(),
         };
+        let mut loops = loops;
+        if !menu {
+            audio::vehicle_loops(sim, cam.eye, self.drive.vehicle(), &self.drive.alarms, &mut loops);
+        }
         let listener =
             Some(pav_core::present::Listener { pos: cam.eye, forward: (cam.target - cam.eye).normalize_or(Vec3::NEG_Z) });
         Some(PlayFrame {
@@ -673,8 +925,14 @@ impl Game for Freeway {
                     .map(|json| SettingsRequest { serial: self.settings_serial, json: json.clone() }),
                 quit: self.quit,
                 vibrate: None,
-                keys: Some(if menu { pad::MENU_KEYS.clone() } else { pad::FOOT_KEYS.clone() }),
-                mouse_look: !menu && !self.wheel_open(),
+                keys: Some(if menu {
+                    pad::MENU_KEYS.clone()
+                } else if self.drive.vehicle().is_some() {
+                    pad::DRIVE_KEYS.clone()
+                } else {
+                    pad::FOOT_KEYS.clone()
+                }),
+                mouse_look: !menu && !self.wheel_open() && !self.radio_wheel_open(),
             },
         })
     }

@@ -106,3 +106,16 @@ layers = [
 
 [cue."grenade.throw"]
 layers = [{ wave = "noise", freq = 1, attack = 0.04, decay = 0.15, volume = 0.08, cutoff = 1500, cutoff_end = 400 }]
+
+# Vehicles: a door's latch clicking open, and its heavier thunk shut.
+[cue."car.door_open"]
+layers = [
+    { wave = "noise", freq = 1, decay = 0.04, volume = 0.12, cutoff = 4000, cutoff_end = 1500 },
+    { wave = "square", freq = 900, freq_end = 600, glide = 0.02, decay = 0.03, volume = 0.03, duty = 0.3, cutoff = 3000 },
+]
+
+[cue."car.door_close"]
+layers = [
+    { wave = "sine", freq = 95, freq_end = 55, glide = 0.05, decay = 0.11, volume = 0.45 },
+    { wave = "noise", freq = 1, decay = 0.07, volume = 0.2, cutoff = 1600, cutoff_end = 300 },
+]
