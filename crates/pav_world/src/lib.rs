@@ -18,6 +18,7 @@ use pav_core::statics::{Block, CHUNK_SIZE, Decor, StaticProp};
 use pav_core::terrain::TerrainPatch;
 use pav_core::zones::{Label, Zone};
 
+pub mod channel;
 pub mod def;
 mod dress;
 pub mod freeway;
@@ -70,6 +71,8 @@ pub struct City {
     pub buildings: Vec<Building>,
     /// Elevated freeways (deck centre lines and ramps).
     pub freeways: Vec<freeway::FreewayGeom>,
+    /// Storm channels (The Ditch).
+    pub channels: Vec<channel::ChannelGeom>,
     /// Chunk coordinate bounds, inclusive.
     pub chunk_bounds: (IVec2, IVec2),
     bins: BTreeMap<(i32, i32), Bin>,
@@ -103,6 +106,7 @@ impl City {
         let mut out = Out::default();
         ground::build(&def, &grid, &terrain, &mut out);
         ground::terrain_meshes(&def, &grid, &terrain, &mut out);
+        let channels = channel::build(&def, &grid, &terrain, &mut out);
         lots::build(&def, &grid, &terrain, &mut out);
         dress::build(&def, &grid, &terrain, &mut out);
         let freeways = freeway::build(&def, &grid, &terrain, &mut out);
@@ -134,7 +138,19 @@ impl City {
         }
         let map = Arc::new(raster::draw(&grid, &terrain, &out.buildings, &freeways, &def));
         let far = Arc::new(far_view(&grid, &terrain, &def, &out.buildings, &freeways));
-        Ok(City { name: def.name.clone(), grid, def, terrain, buildings: out.buildings, freeways, chunk_bounds, bins, map, far })
+        Ok(City {
+            name: def.name.clone(),
+            grid,
+            def,
+            terrain,
+            buildings: out.buildings,
+            freeways,
+            channels,
+            chunk_bounds,
+            bins,
+            map,
+            far,
+        })
     }
 
     /// Parses a district file and builds it.

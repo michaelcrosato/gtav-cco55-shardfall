@@ -54,20 +54,20 @@ cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccFFFFF
 ....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ....-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
-====-====-====-======-=====-=============-==CC=-=====-===-=FFFFF
-====-====-====-======-=====-=============-==CC=-=====-===-=FFFFF
-ssss-....-cccc-cccccc-ccccc-cccccc==ttttt-ttCCt-ttttt-ttt-tFFFFF
+====-====-====-======-=====-=============-=====-=====-===-=FFFFF
+====-====-====-======-=====-=============-=====-=====-===-=FFFFF
+ssss-....-cccc-cccccc-ccccc-cccccc==ttttt---CCt-ttttt-ttt-tFFFFF
 ssss-....-cccc-cccccc-ccccc-cccccc==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ----------------------------------==ttttt-ttCCt-ttttt-ttt-tF-F-F
-ssss-....-....-......-.....-......==--------CC------------------
+ssss-....-....-......-.....-......==----------------------------
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
-ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
+ssss-....-....-......-.....-......==ttttt-ttCC--ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ----------------------------------==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
-ssss-....-....-......-.....-......==--------CC-------------FFFFF
+ssss-....-....-......-.....-......==-----------------------FFFFF
 sbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb==hhhhhhhhCChhhhhhhhhhh-hFFFFF
 ssssssssssssssssssssbbssssssssssss==hhhhhhhhCCFFFFFFFFFFF-FFFFFF
 ssssssssssssssssssssbbssssssssssss==hhhhhhhhCCFFFFFFFFFFF-FFFFFF
@@ -375,3 +375,15 @@ kind = "off"
 from = [62.675, 40.0]
 to = [62.675, 50.5]
 kind = "on"
+
+# The Ditch: ramps down its walls from the driveways (map cell coordinates: the channel's first
+# column, the side the ramp hugs, and the rows of its top and bottom ends).
+[[channel_ramp]]
+col = 44
+side = "west"
+rows = [46.6, 49.6]
+
+[[channel_ramp]]
+col = 44
+side = "east"
+rows = [53.6, 56.4]

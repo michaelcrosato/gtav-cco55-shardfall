@@ -28,6 +28,8 @@ pub struct DistrictDef {
     pub landmark: Vec<Landmark>,
     #[serde(default)]
     pub freeway: Vec<Freeway>,
+    #[serde(default)]
+    pub channel_ramp: Vec<ChannelRamp>,
     /// Rows of characters, north first.
     pub map: String,
     /// Ground heights, one character per map cell (`0`-`9`, then `a`-`z`), in steps of
@@ -201,4 +203,16 @@ pub struct Ramp {
     pub from: [f32; 2],
     pub to: [f32; 2],
     pub kind: RampKind,
+}
+
+/// A ramp down a storm channel's wall to its bed.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChannelRamp {
+    /// A column of the channel (its cells run north-south).
+    pub col: i32,
+    /// The wall it hugs: `west` or `east`.
+    pub side: String,
+    /// Rows (map cell coordinates, fractions allowed) of its top end and its bottom end.
+    pub rows: [f32; 2],
 }

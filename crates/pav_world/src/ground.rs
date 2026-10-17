@@ -58,12 +58,18 @@ fn paint(min: Vec2, max: Vec2, color: Color) -> Block {
     slab(min, max, ROAD_Y, ROAD_Y + 0.012, color).with_flags(block_flags::GHOST)
 }
 
+/// Storm channels are their own network below the streets: a road meets only roads of its kind.
+fn same_level(a: RoadClass, b: RoadClass) -> bool {
+    (a == RoadClass::Channel) == (b == RoadClass::Channel)
+}
+
 /// How many drivable road cells run through `c` along `d` (both ways, itself included).
 fn run(grid: &Grid, c: IVec2, d: IVec2) -> i32 {
+    let Some(me) = grid.road(c) else { return 1 };
     let mut n = 1;
     for s in [d, -d] {
         let mut p = c + s;
-        while grid.road(p).is_some_and(|r| r.drivable()) {
+        while grid.road(p).is_some_and(|r| r.drivable() && same_level(r, me)) {
             n += 1;
             p += s;
         }
@@ -90,6 +96,7 @@ pub enum Role {
 }
 
 pub fn role(grid: &Grid, c: IVec2) -> Role {
+    let me = grid.road(c).unwrap_or(RoadClass::Street);
     let ew = run(grid, c, IVec2::X);
     let ns = run(grid, c, IVec2::Y);
     // A band at most 2 cells thick; longer runs both ways make a junction.
@@ -97,11 +104,15 @@ pub fn role(grid: &Grid, c: IVec2) -> Role {
     let along_z = ns >= 3 || (ns == 2 && ew == 1);
     match (along_x && ns <= 2, along_z && ew <= 2) {
         (true, false) => {
-            let i = (1..=2).take_while(|s| grid.road(c - IVec2::Y * *s).is_some_and(|r| r.drivable())).count() as i32;
+            let i = (1..=2)
+                .take_while(|s| grid.road(c - IVec2::Y * *s).is_some_and(|r| r.drivable() && same_level(r, me)))
+                .count() as i32;
             Role::Ew { k: ns, i }
         }
         (false, true) => {
-            let i = (1..=2).take_while(|s| grid.road(c - IVec2::X * *s).is_some_and(|r| r.drivable())).count() as i32;
+            let i = (1..=2)
+                .take_while(|s| grid.road(c - IVec2::X * *s).is_some_and(|r| r.drivable() && same_level(r, me)))
+                .count() as i32;
             Role::Ns { k: ew, i }
         }
         (true, true) if ns <= 2 && ew <= 2 => Role::Stub,
@@ -144,6 +155,7 @@ pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut
                         out.blocks.push(slab(lo, hi, -0.6, LOT_Y + rules.level, ground_color(&rules.ground)));
                     }
                 }
+                Cell::Road(RoadClass::Channel) => {}
                 Cell::Road(class) => road_cell(grid, c, class, lo, hi, white, yellow, out),
             }
         }
@@ -174,17 +186,28 @@ fn road_cell(grid: &Grid, c: IVec2, class: RoadClass, lo: Vec2, hi: Vec2, white:
     }
     // Sidewalks on edges facing anything that is not a road; corner squares where two roads meet
     // around a block corner.
-    let is_road = |d: IVec2| grid.road(c + d).is_some_and(|r| r != RoadClass::Path);
+    // A storm channel beside a road's length (a bridge's sides) gets a sidewalk; at a road's
+    // end (a driveway to a channel ramp) it does not.
+    let r = role(grid, c);
+    let is_road = |i: usize, d: IVec2| match grid.road(c + d) {
+        Some(RoadClass::Path) | None => false,
+        Some(RoadClass::Channel) if class != RoadClass::Channel => match r {
+            Role::Ew { .. } => i == 1 || i == 3,
+            Role::Ns { .. } => i == 0 || i == 2,
+            _ => false,
+        },
+        Some(_) => true,
+    };
     let mut walled = [false; 4];
     for (i, d) in DIRS.iter().enumerate() {
-        if !is_road(*d) {
+        if !is_road(i, *d) {
             walled[i] = true;
             let (a, b) = edge(lo, hi, i, SIDEWALK);
             out.blocks.push(slab(a, b, ROAD_Y, LOT_Y, sidewalk()));
         }
     }
     for (i, (d1, d2)) in [(0, 1), (1, 2), (2, 3), (3, 0)].iter().enumerate() {
-        if !walled[*d1] && !walled[*d2] && !is_road(DIRS[*d1] + DIRS[*d2]) {
+        if !walled[*d1] && !walled[*d2] && grid.road(c + DIRS[*d1] + DIRS[*d2]).is_none_or(|r| r == RoadClass::Path) {
             let corner = [Vec2::new(hi.x, lo.y), hi, Vec2::new(lo.x, hi.y), lo][i];
             let dir = Vec2::new(if corner.x == hi.x { -1.0 } else { 1.0 }, if corner.y == hi.y { -1.0 } else { 1.0 });
             let other = corner + dir * SIDEWALK;
