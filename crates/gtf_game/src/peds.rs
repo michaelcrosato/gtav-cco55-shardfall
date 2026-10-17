@@ -113,6 +113,14 @@ pub enum Doing {
     /// Running away from a threat (gunfire, a fight), or crouched where it could not get away.
     Flee,
     Cower,
+    /// Sitting on a bench (a scenario point).
+    Sit,
+    /// Filming an incident on the phone (a witness).
+    Film,
+    /// Going for the player with fists (tough people who were hit).
+    Fight,
+    /// Knocked down (struck by a car, a heavy blow): back up, then away.
+    Down,
 }
 
 /// One person.
@@ -129,6 +137,17 @@ pub struct Ped {
     pub check_t: f32,
     pub check: Vec2,
     pub run: bool,
+    /// What they film or fight (a point; the player for a fight), and the bench they head for.
+    #[serde(default)]
+    pub focus: Option<Vec3>,
+    #[serde(default)]
+    pub seat: Option<(Vec3, f32)>,
+    /// The idle clip they had before sitting or filming (put back afterwards).
+    #[serde(default)]
+    pub idle: Option<String>,
+    /// Seconds to the next punch.
+    #[serde(default)]
+    pub swing: f32,
 }
 
 /// Everyone out on foot (part of the game's state).
@@ -154,7 +173,26 @@ pub struct Moment<'a> {
     pub time: f32,
     pub hour: f32,
     pub dt: f32,
+    /// The player's feet when on foot (fights go for them), and whether a gun is drawn on
+    /// the people (they give up a fight and run).
+    pub player_on_foot: Option<Vec3>,
+    pub gun_out: bool,
 }
+
+/// What people did to the player this tick: punches landed (damage each).
+#[derive(Clone, Debug, Default)]
+pub struct Deeds {
+    pub punches: Vec<f32>,
+}
+
+/// Clips for the reactions.
+const SIT_IDLE: &str = "MESH2MOTION/Sitting_Idle";
+const PHONE_IDLE: &str = "MESH2MOTION/Idle_TalkingPhone";
+const PUNCHES: [&str; 2] = ["MESH2MOTION/Punch_Jab", "MESH2MOTION/Punch_Cross"];
+const KNOCKED: &str = "MESH2MOTION/Hit_Knockback";
+/// Archetypes that film incidents, and those that fight back when hit.
+const FILMERS: [&str; 2] = ["influencer", "tourist"];
+const FIGHTERS: [&str; 3] = ["worker", "security", "local"];
 
 fn pick<'a>(v: &'a [String], rng: &mut Rng) -> &'a str {
     &v[rng.below(v.len() as u32) as usize]
@@ -197,8 +235,9 @@ fn seen(cam: &CameraIntent, p: Vec3) -> bool {
 
 impl Peds {
     /// People per tick: the population pass twice a second, then everyone's next step.
-    pub fn tick(&mut self, sim: &mut Sim, m: &Moment, out: &mut BTreeMap<EntityId, InputFrame>) {
-        let Ok(def) = def() else { return };
+    pub fn tick(&mut self, sim: &mut Sim, m: &Moment, out: &mut BTreeMap<EntityId, InputFrame>) -> Deeds {
+        let mut deeds = Deeds::default();
+        let Ok(def) = def() else { return deeds };
         self.pass -= m.dt;
         if self.pass <= 0.0 {
             self.pass = 0.5;
@@ -215,13 +254,224 @@ impl Peds {
                 let d = at.distance(here);
                 c.lod = if c.lod { d > LOD_NEAR } else { d > LOD_FAR };
             }
-            let frame = self.step(i, sim, &def, m, at);
+            let frame = self.step(i, sim, &def, m, at, &mut deeds);
             out.insert(id, frame);
+        }
+        deeds
+    }
+
+    /// Sets (or puts back) a person's idle clip.
+    fn set_idle(sim: &mut Sim, p: &mut Ped, clip: Option<&str>) {
+        let Some(c) = sim.state.entities.get_mut(p.id).and_then(|e| e.character.as_mut()) else { return };
+        let Some(look) = c.puppet.as_deref() else { return };
+        let idle = match clip {
+            Some(clip) => {
+                if p.idle.is_none() {
+                    p.idle = Some(look.idle_clip.clone());
+                }
+                clip.to_string()
+            }
+            None => match p.idle.take() {
+                Some(back) => back,
+                None => return,
+            },
+        };
+        c.puppet = Some(Arc::new(PuppetDef { idle_clip: idle, ..look.clone() }));
+    }
+
+    /// Faces a point (turning in place).
+    fn face(sim: &mut Sim, id: EntityId, from: Vec2, to: Vec3) {
+        if let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut()) {
+            let d = Vec2::new(to.x, to.z) - from;
+            if d.length() > 0.1 {
+                c.face = Some(d.x.atan2(d.y));
+            }
         }
     }
 
+    /// Lets a person go back to walking about (clearing any held facing and clip).
+    fn release(sim: &mut Sim, p: &mut Ped, def: &PedsDef) {
+        Self::set_idle(sim, p, None);
+        if let Some(c) = sim.state.entities.get_mut(p.id).and_then(|e| e.character.as_mut()) {
+            c.face = None;
+        }
+        p.focus = None;
+        p.seat = None;
+        p.doing = Doing::Linger;
+        p.timer = 0.5;
+        p.run = def.archetype[p.arch as usize].run;
+    }
+
+    /// The reactions' steps: sitting, filming, fighting, getting up. None: walk as usual.
+    fn react(&mut self, i: usize, sim: &mut Sim, def: &PedsDef, m: &Moment, pos: Vec2, deeds: &mut Deeds) -> Option<InputFrame> {
+        let walk = &m.city.walk;
+        let p = &mut self.list[i];
+        match p.doing {
+            Doing::Sit => {
+                p.timer -= m.dt;
+                if p.timer <= 0.0 {
+                    Self::release(sim, p, def);
+                }
+                Some(InputFrame::default())
+            }
+            Doing::Film => {
+                p.timer -= m.dt;
+                if let Some(f) = p.focus {
+                    Self::face(sim, p.id, pos, f);
+                }
+                if p.timer <= 0.0 {
+                    Self::release(sim, p, def);
+                }
+                Some(InputFrame::default())
+            }
+            Doing::Down => {
+                p.timer -= m.dt;
+                if p.timer <= 0.0 {
+                    let at = p.focus.unwrap_or(Vec3::new(pos.x, 0.0, pos.y));
+                    p.doing = Doing::Walk;
+                    self.scare_one(i, sim, walk, at);
+                }
+                Some(InputFrame::default())
+            }
+            Doing::Fight => {
+                p.timer -= m.dt;
+                p.swing -= m.dt;
+                let Some(target) = m.player_on_foot else {
+                    Self::release(sim, p, def);
+                    return Some(InputFrame::default());
+                };
+                let to = Vec2::new(target.x, target.z) - pos;
+                if p.timer <= 0.0 || to.length() > 25.0 || m.gun_out {
+                    // Gives up (or a gun came out): away from the player.
+                    p.doing = Doing::Walk;
+                    self.scare_one(i, sim, walk, target);
+                    return Some(InputFrame::default());
+                }
+                if to.length() < 1.3 {
+                    Self::face(sim, p.id, pos, target);
+                    if p.swing <= 0.0 {
+                        p.swing = 1.1;
+                        let clip = pav_core::clips::find_cached(PUNCHES[sim.state.rng.below(2) as usize]);
+                        if let Some(c) = sim.state.entities.get_mut(p.id).and_then(|e| e.character.as_mut())
+                            && clip != 0
+                        {
+                            c.anim.replay_clip(clip, pav_core::clips::ONCE, 1.0);
+                        }
+                        deeds.punches.push(8.0);
+                    }
+                    return Some(InputFrame::default());
+                }
+                if let Some(c) = sim.state.entities.get_mut(p.id).and_then(|e| e.character.as_mut()) {
+                    c.face = None;
+                }
+                Some(InputFrame { move_dir: to.normalize_or(Vec2::ZERO), ..Default::default() })
+            }
+            _ => None,
+        }
+    }
+
+    /// One person runs from `at` (after a fight, getting up).
+    fn scare_one(&mut self, i: usize, sim: &mut Sim, walk: &pav_world::walk::WalkMap, at: Vec3) {
+        let mut one = Peds { list: vec![self.list[i].clone()], ..Default::default() };
+        one.list[0].doing = Doing::Walk;
+        one.scare(sim, walk, at, f32::MAX);
+        self.list[i] = one.list.pop().unwrap();
+    }
+
+    /// Someone took a hit from the player at `at`: tough people fight back, the rest run.
+    pub fn assaulted(&mut self, sim: &mut Sim, walk: &pav_world::walk::WalkMap, who: EntityId, at: Vec3) {
+        let Ok(def) = def() else { return };
+        let Some(i) = self.list.iter().position(|p| p.id == who) else { return };
+        let arch = def.archetype[self.list[i].arch as usize].id.clone();
+        if FIGHTERS.contains(&arch.as_str()) && sim.state.rng.f32() < 0.6 {
+            let p = &mut self.list[i];
+            Self::set_idle(sim, p, None);
+            p.doing = Doing::Fight;
+            p.timer = 12.0;
+            p.swing = 0.6;
+            p.run = true;
+        } else {
+            self.scare_one(i, sim, walk, at);
+        }
+    }
+
+    /// Someone was knocked down (struck by a car): on the ground a moment, then away from `at`.
+    pub fn knocked_down(&mut self, sim: &mut Sim, who: EntityId, at: Vec3) {
+        let Some(i) = self.list.iter().position(|p| p.id == who) else { return };
+        let p = &mut self.list[i];
+        Self::set_idle(sim, p, None);
+        p.doing = Doing::Down;
+        p.timer = 2.4;
+        p.focus = Some(at);
+        let clip = pav_core::clips::find_cached(KNOCKED);
+        if let Some(c) = sim.state.entities.get_mut(who).and_then(|e| e.character.as_mut())
+            && clip != 0
+        {
+            c.anim.replay_clip(clip, pav_core::clips::ONCE, 1.0);
+        }
+    }
+
+    /// An incident at `at` (a crash, a fight, a shooting heard from afar): people who film
+    /// things stop to film it from where they are (witnesses), within `radius`.
+    pub fn incident(&mut self, sim: &mut Sim, at: Vec3, radius: f32) {
+        let Ok(def) = def() else { return };
+        for i in 0..self.list.len() {
+            let p = &self.list[i];
+            if !matches!(p.doing, Doing::Walk | Doing::Wait | Doing::Linger) {
+                continue;
+            }
+            let Some(feet) = sim.feet(p.id) else { continue };
+            let d = feet.distance(at);
+            if d > radius || d < 6.0 {
+                continue;
+            }
+            let arch = def.archetype[p.arch as usize].id.as_str();
+            if !FILMERS.contains(&arch) || sim.state.rng.f32() > 0.7 {
+                continue;
+            }
+            let p = &mut self.list[i];
+            p.doing = Doing::Film;
+            p.timer = sim.state.rng.range(7.0, 12.0);
+            p.focus = Some(at);
+            Self::set_idle(sim, p, Some(PHONE_IDLE));
+        }
+    }
+
+    /// People filming right now (witnesses for heat).
+    pub fn filming(&self) -> impl Iterator<Item = &Ped> {
+        self.list.iter().filter(|p| p.doing == Doing::Film)
+    }
+
+    /// A bench within 30 m nobody else sits on: (where to sit, facing).
+    fn bench(&self, city: &City, at: Vec3) -> Option<(Vec3, f32)> {
+        let taken: Vec<Vec3> = self.list.iter().filter_map(|p| p.seat.map(|s| s.0)).collect();
+        city.props_near(at, 30.0).into_iter().filter(|s| s.asset.ends_with("/bench")).find_map(|s| {
+            let fwd = s.rot * Vec3::Z;
+            let spot = s.pos + fwd * 0.25;
+            (!taken.iter().any(|t| t.distance(spot) < 0.8)).then(|| (spot, fwd.x.atan2(fwd.z)))
+        })
+    }
+
     /// One person's next move.
-    fn step(&mut self, i: usize, sim: &mut Sim, def: &PedsDef, m: &Moment, pos: Vec2) -> InputFrame {
+    fn step(&mut self, i: usize, sim: &mut Sim, def: &PedsDef, m: &Moment, pos: Vec2, deeds: &mut Deeds) -> InputFrame {
+        if let Some(f) = self.react(i, sim, def, m, pos, deeds) {
+            return f;
+        }
+        // At a bench they were walking to: sit.
+        if let Some((spot, facing)) = self.list[i].seat
+            && self.list[i].doing == Doing::Walk
+            && Vec2::new(spot.x, spot.z).distance(pos) < 0.9
+        {
+            let p = &mut self.list[i];
+            sim.set_position(p.id, spot + Vec3::Y * 0.02);
+            if let Some(c) = sim.state.entities.get_mut(p.id).and_then(|e| e.character.as_mut()) {
+                c.face = Some(facing);
+            }
+            Self::set_idle(sim, p, Some(SIT_IDLE));
+            p.doing = Doing::Sit;
+            p.timer = sim.state.rng.range(10.0, 25.0);
+            return InputFrame::default();
+        }
         let walk = &m.city.walk;
         let p = &mut self.list[i];
         if p.doing == Doing::Cower {
@@ -237,6 +487,23 @@ impl Peds {
             p.timer -= m.dt;
             if p.timer > 0.0 {
                 return InputFrame::default();
+            }
+            // Sometimes a bench nearby instead of a walk somewhere.
+            let sit = sim.state.rng.f32() < 0.3;
+            let feet = Vec3::new(pos.x, m.city.ground_y(pos), pos.y);
+            let bench = if sit { self.bench(m.city, feet) } else { None };
+            let p = &mut self.list[i];
+            if let Some((spot, facing)) = bench {
+                let path = walk.path(pos, Vec2::new(spot.x, spot.z), 3000);
+                if path.len() >= 2 {
+                    p.path = path;
+                    p.next = 1;
+                    p.doing = Doing::Walk;
+                    p.seat = Some((spot, facing));
+                    p.check = pos;
+                    p.check_t = 0.0;
+                    return InputFrame::default();
+                }
             }
             let to = destination(walk, pos, &mut sim.state.rng);
             match to.map(|to| walk.path(pos, to, 6000)) {
@@ -255,6 +522,14 @@ impl Peds {
             p.next += 1;
         }
         if p.next >= p.path.len() {
+            if let Some((spot, _)) = p.seat {
+                // The walk ends at the bench: the last step onto it.
+                let to = Vec2::new(spot.x, spot.z) - pos;
+                if to.length() < 2.5 {
+                    return InputFrame { move_dir: to.normalize_or(Vec2::ZERO), held: buttons::FOCUS, ..Default::default() };
+                }
+                p.seat = None;
+            }
             let a = &def.archetype[p.arch as usize];
             // A flight ends in a breather, then the walk resumes at the usual pace.
             p.run = a.run;
@@ -387,6 +662,10 @@ impl Peds {
             check_t: 0.0,
             check: at,
             run: a.run,
+            focus: None,
+            seat: None,
+            idle: None,
+            swing: 0.0,
         });
         self.spawned += 1;
         true
@@ -397,8 +676,20 @@ impl Peds {
     pub fn scare(&mut self, sim: &mut Sim, walk: &pav_world::walk::WalkMap, at: Vec3, radius: f32) {
         let threat = Vec2::new(at.x, at.z);
         for p in &mut self.list {
-            if matches!(p.doing, Doing::Flee | Doing::Cower) {
+            if matches!(p.doing, Doing::Flee | Doing::Cower | Doing::Fight | Doing::Down) {
                 continue;
+            }
+            if matches!(p.doing, Doing::Sit | Doing::Film) {
+                let at3 = sim.feet(p.id).unwrap_or(at);
+                if at3.distance(at) > radius {
+                    continue;
+                }
+                Self::set_idle(sim, p, None);
+                if let Some(c) = sim.state.entities.get_mut(p.id).and_then(|e| e.character.as_mut()) {
+                    c.face = None;
+                }
+                p.seat = None;
+                p.focus = None;
             }
             let Some(feet) = sim.feet(p.id) else { continue };
             let pos = Vec2::new(feet.x, feet.z);
@@ -431,6 +722,29 @@ impl Peds {
             p.check = pos;
             p.check_t = 0.0;
         }
+    }
+
+    /// Someone outside the crowd joins it, running from `from` (a driver pulled from a car).
+    pub fn adopt(&mut self, sim: &mut Sim, walk: &pav_world::walk::WalkMap, id: EntityId, from: Vec3) {
+        if self.list.iter().any(|p| p.id == id) || sim.state.entities.get(id).is_none() {
+            return;
+        }
+        self.list.push(Ped {
+            id,
+            arch: 0,
+            doing: Doing::Walk,
+            path: Vec::new(),
+            next: 0,
+            timer: 0.0,
+            check_t: 0.0,
+            check: Vec2::ZERO,
+            run: false,
+            focus: None,
+            seat: None,
+            idle: None,
+            swing: 0.0,
+        });
+        self.scare(sim, walk, from, 30.0);
     }
 
     /// Someone left the crowd (killed, arrested): no longer walked by the manager.

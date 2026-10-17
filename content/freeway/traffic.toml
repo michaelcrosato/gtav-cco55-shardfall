@@ -1,0 +1,36 @@
+# Traffic (PLAN.md §5.6.6, §6.6.9): how many cars drive Paloma Bay's lanes, how they drive, the
+# bus route and the parked cars. Archetypes and their shares of traffic are in vehicles.toml
+# (`traffic_weight`). Distances in metres, times in seconds, speeds in m/s.
+
+[density]
+max = 34                  # cars driving around the player (the plan's 30-45 within 220 m)
+radius = 220.0            # kept within this of the player
+spawn = [120.0, 210.0]    # appear this far away, out of view
+despawn = 260.0           # leave when farther than this and out of view
+night = 0.3               # share of the day's traffic still out at 04:00
+full = 110.0              # nearer than this: full physics; farther: on rails along the lane
+rail = 130.0              # (back on rails beyond this: hysteresis)
+
+[drive]
+gap = 2.5                 # the gap kept to the car ahead when stopped
+headway = 1.4             # seconds of following distance
+accel = 2.2               # comfortable acceleration and braking (IDM a and b)
+decel = 3.2
+personality = [0.85, 1.1] # each driver's share of the limit
+honk_after = 3.0          # blocked this long: the horn
+reverse_after = 8.0       # blocked this long: back up and go around
+give_up = 30.0            # blocked and out of view this long: gone
+
+[parked]
+radius = 110.0            # spots within this of the player hold their parked cars
+despawn = 150.0
+share = 0.35              # share of parking spots with a car in them
+locked = 0.3              # share of parked cars that are locked
+
+[bus]
+key = "metro_bus"
+count = 2
+dwell = 6.0               # seconds at each stop
+# Stops (x, z), in order around the loop: Sunset Row west, middle and east, the avenue through
+# downtown, the south boulevard east and west.
+stops = [[-300.0, -236.0], [-60.0, -236.0], [200.0, -236.0], [52.0, -60.0], [20.0, 84.0], [-200.0, 84.0]]

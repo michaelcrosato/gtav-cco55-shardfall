@@ -46,12 +46,152 @@ pub static TOOLS: &[Tool] = &[
         run: t_lanes,
     },
     Tool {
+        name: "traffic",
+        help: "Traffic in the loaded freeway scene: counts by tier and mood, soak counters, the nearest cars (lane, speed, mood).",
+        args: &[arg("limit", "integer", "cars to list, nearest first (default 8)")],
+        run: t_traffic,
+    },
+    Tool {
+        name: "peds",
+        help: "People in the loaded freeway scene: counts by what they do and by archetype, soak counters, the nearest people.",
+        args: &[arg("limit", "integer", "people to list, nearest first (default 8)")],
+        run: t_peds,
+    },
+    Tool {
+        name: "soak",
+        help: "Runs Paloma Bay unattended (PLAN §7.5): mode traffic (autopilot cruising), peds (standing), roam (autopilot); reports anomaly counters, ms/tick, entity counts.",
+        args: &[
+            arg("mode", "string", "traffic, peds or roam (default traffic)"),
+            arg("seconds", "number", "game seconds to run (default 120)"),
+            arg("seed", "integer", "scene seed (default 1)"),
+        ],
+        run: t_soak,
+    },
+    Tool {
         name: "vehicle_feel",
         help: "Vehicle archetypes on the feel tracks against PLAN §5.6.3: top speed, 0-100 km/h, braking, skidpad g, handbrake slide, 15% climb, the kicker jump.",
         args: &[arg("key", "string", "an archetype key from content/freeway/vehicles.toml, or all (default all)")],
         run: t_vehicle_feel,
     },
 ];
+
+fn freeway(s: &Session) -> Result<&gtf_game::Freeway> {
+    s.sim
+        .play()
+        .and_then(|g| g.get::<gtf_game::Freeway>())
+        .ok_or_else(|| anyhow!("load a freeway scene first (load scene=freeway/roam)"))
+}
+
+fn t_traffic(s: &mut Session, a: &Args) -> Result<Output> {
+    let g = freeway(s)?;
+    let limit = a.get("limit").and_then(Value::as_u64).unwrap_or(8) as usize;
+    let me = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(Vec3::ZERO);
+    let mut cars: Vec<_> =
+        g.traffic.cars.iter().filter_map(|c| Some((s.sim.state.entities.get(c.car)?.pos.distance(me), c))).collect();
+    cars.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let list: Vec<Value> = cars
+        .iter()
+        .take(limit)
+        .map(|(d, c)| {
+            json!({ "car": c.car.0, "key": c.key, "dist": r1(*d), "lane": c.lane, "speed": r1(c.speed),
+                    "tier": format!("{:?}", c.tier).to_lowercase(), "mood": format!("{:?}", c.mood).to_lowercase(),
+                    "held": c.held, "bus": c.bus.is_some(), "autopilot": c.pilot })
+        })
+        .collect();
+    Ok(Output::Json(json!({ "summary": g.traffic.summary(), "nearest": list })))
+}
+
+fn t_peds(s: &mut Session, a: &Args) -> Result<Output> {
+    let g = freeway(s)?;
+    let limit = a.get("limit").and_then(Value::as_u64).unwrap_or(8) as usize;
+    let def = gtf_game::peds::def()?;
+    let me = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(Vec3::ZERO);
+    let mut doing = std::collections::BTreeMap::<String, usize>::new();
+    let mut kinds = std::collections::BTreeMap::<String, usize>::new();
+    let mut near = Vec::new();
+    for p in &g.peds.list {
+        *doing.entry(format!("{:?}", p.doing).to_lowercase()).or_default() += 1;
+        let kind = def.archetype.get(p.arch as usize).map(|a| a.id.clone()).unwrap_or_default();
+        *kinds.entry(kind.clone()).or_default() += 1;
+        if let Some(f) = s.sim.feet(p.id) {
+            near.push((f.distance(me), p.id.0, kind, format!("{:?}", p.doing).to_lowercase()));
+        }
+    }
+    near.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let list: Vec<Value> =
+        near.iter().take(limit).map(|(d, id, k, what)| json!({ "id": id, "kind": k, "dist": r1(*d), "doing": what })).collect();
+    Ok(Output::Json(json!({
+        "out": g.peds.list.len(), "doing": doing, "kinds": kinds,
+        "spawned": g.peds.spawned, "despawned": g.peds.despawned, "rerouted": g.peds.stuck,
+        "struck": g.struck.count, "nearest": list,
+    })))
+}
+
+fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
+    let mode = text(a, "mode").unwrap_or("traffic").to_string();
+    if !matches!(mode.as_str(), "traffic" | "peds" | "roam") {
+        bail!("soak: mode is traffic, peds or roam (attract arrives with the attract mode)");
+    }
+    let seconds = a.get("seconds").and_then(Value::as_f64).unwrap_or(120.0).clamp(5.0, 7200.0);
+    let seed = a.get("seed").and_then(Value::as_u64).unwrap_or(1);
+    let mut args = Args::new();
+    args.insert("scene".into(), json!("freeway/roam"));
+    args.insert("seed".into(), json!(seed));
+    pav_tools::call(s, "load", &args)?;
+    let cmd = |s: &mut Session, c: &str| s.sim.step(&pav_core::InputFrame { cmds: vec![c.into()], ..Default::default() });
+    cmd(s, "time 12:00");
+    if mode != "peds" {
+        cmd(s, "drive fenwick_commuter");
+        cmd(s, "autopilot on");
+    }
+    let ticks = (seconds * 60.0) as u64;
+    let (mut nan, mut fell, mut slowest, mut total_ms) = (0u32, 0u32, 0.0f64, 0.0f64);
+    let (mut fewest, mut most) = (usize::MAX, 0usize);
+    let start = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(Vec3::ZERO);
+    let mut travelled = 0.0f32;
+    let mut last = start;
+    for t in 0..ticks {
+        let input = if mode == "peds" { pav_core::InputFrame::default() } else { s.sim.bot_input() };
+        let clock = std::time::Instant::now();
+        s.sim.step(&input);
+        let ms = clock.elapsed().as_secs_f64() * 1000.0;
+        total_ms += ms;
+        slowest = slowest.max(ms);
+        if t % 60 == 0 {
+            let n = s.sim.state.entities.iter().count();
+            fewest = fewest.min(n);
+            most = most.max(n);
+            for e in s.sim.state.entities.iter() {
+                if !e.pos.is_finite() {
+                    nan += 1;
+                } else if e.pos.y < -40.0 {
+                    fell += 1;
+                }
+            }
+            let now = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(last);
+            travelled += now.distance(last);
+            last = now;
+        }
+        s.sim.drain_events();
+    }
+    let g = freeway(s)?;
+    let traffic = g.traffic.summary();
+    let peds = json!({ "out": g.peds.list.len(), "spawned": g.peds.spawned, "rerouted": g.peds.stuck, "struck": g.struck.count });
+    let stuck_cars = traffic["stuck_cars"].as_u64().unwrap_or(0);
+    let ai_crashes = traffic["ai_crashes"].as_u64().unwrap_or(0);
+    let in_view = traffic["spawn_in_view"].as_u64().unwrap_or(0) + traffic["despawn_in_view"].as_u64().unwrap_or(0);
+    let ok = stuck_cars == 0 && ai_crashes <= 3 && in_view == 0 && nan == 0 && fell == 0;
+    Ok(Output::Json(json!({
+        "mode": mode, "seconds": seconds, "seed": seed, "ok": ok,
+        "limits": "stuck_cars 0, ai_crashes <= 3, spawn/despawn in view 0, NaN 0, fell through 0",
+        "traffic": traffic, "peds": peds,
+        "nan_positions": nan, "fell_through_world": fell,
+        "ms_per_tick": (total_ms / ticks.max(1) as f64 * 1000.0).round() / 1000.0,
+        "slowest_tick_ms": (slowest * 100.0).round() / 100.0,
+        "entities": [fewest, most],
+        "player_travelled_m": travelled.round(),
+    })))
+}
 
 fn t_vehicle_feel(_s: &mut Session, a: &Args) -> Result<Output> {
     use pav_core::vehicle::feel::{self, Test};

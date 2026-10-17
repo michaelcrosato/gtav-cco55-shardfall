@@ -201,3 +201,33 @@ fn the_helicopter_climbs_on_r2() {
     eprintln!("helicopter climbed {:.1} m", y1 - y0);
     assert!(y1 - y0 > 5.0, "climbed: {}", y1 - y0);
 }
+
+#[test]
+fn a_car_throws_the_person_it_hits() {
+    let mut sim = roam();
+    cmd(&mut sim, "drive okami_kaze");
+    let car = newest(&sim, "okami_kaze");
+    // Someone standing 40 m down the road.
+    let c = gtf_game::drive::Car::read(&sim, car).unwrap();
+    let who = sim.spawn_npc("target", c.feet() + c.forward() * 40.0, 0.0, pav_core::puppet::PuppetDef::default(), None, None);
+    steps(&mut sim, 5, &InputFrame::default());
+    let mut hit_at = None;
+    for _ in 0..360 {
+        sim.step(&throttle(1.0));
+        if game(&sim).struck.count > 0 {
+            hit_at = sim.vehicle_status(car).map(|s| s.kmh);
+            break;
+        }
+    }
+    let kmh = hit_at.expect("the car struck the person");
+    let before = sim.feet(who).unwrap();
+    steps(&mut sim, 30, &InputFrame::default());
+    let e = sim.state.entities.get(who).unwrap();
+    let thrown = sim.feet(who).unwrap().distance(before);
+    eprintln!("struck at {kmh:.0} km/h; the person was thrown {thrown:.1} m, named {}", e.name);
+    assert!(thrown > 2.0, "thrown by the impact: {thrown}");
+    assert!(kmh > 43.0, "fast enough to be lethal: {kmh}");
+    assert!(e.name.starts_with("dead:"), "killed above 12 m/s");
+    // The car carried on rather than stopping dead.
+    assert!(sim.vehicle_status(car).unwrap().kmh > kmh * 0.5, "the car keeps going");
+}

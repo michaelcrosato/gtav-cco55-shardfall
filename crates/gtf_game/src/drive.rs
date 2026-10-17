@@ -73,6 +73,10 @@ impl Car {
                 Vec3::new(l.x, l.y, l.z)
             })
             .unwrap_or(Vec3::ZERO);
+        // The heading from the body (a car's own `yaw` is only kept for kinematic moves and
+        // helicopters).
+        let f = e.rot * Vec3::Z;
+        let yaw = if v.def.kind == VehicleKind::Helicopter || f.x.abs() + f.z.abs() < 1e-3 { v.yaw } else { f.x.atan2(f.z) };
         let seat = v.def.seats.first().copied().unwrap_or(Vec3::new(0.36, 0.55, 0.0));
         let left = seat.x >= 0.0;
         let door = v.def.doors.iter().position(|d| (d.side == Side::Left) == left);
@@ -81,7 +85,7 @@ impl Car {
             key: e.name.clone(),
             center: e.pos,
             rot: e.rot,
-            yaw: v.yaw,
+            yaw,
             vel,
             half: v.def.size,
             base: v.base,

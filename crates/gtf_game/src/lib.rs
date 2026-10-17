@@ -35,7 +35,9 @@ pub mod player;
 pub mod protagonists;
 pub mod radio;
 pub mod settings;
+pub mod struck;
 pub mod tour;
+pub mod traffic;
 pub mod vehicles;
 pub mod views;
 pub mod world;
@@ -137,6 +139,15 @@ pub struct Freeway {
     /// Getting in and out of vehicles, driving.
     #[serde(default)]
     pub drive: drive::Drive,
+    /// Cars on the roads, parked cars, buses.
+    #[serde(default)]
+    pub traffic: traffic::Traffic,
+    /// People recently struck by vehicles.
+    #[serde(default)]
+    pub struck: struck::Struck,
+    /// This tick's inputs for traffic (worked out in `pre`, handed over in `Game::vehicles`).
+    #[serde(skip)]
+    traffic_inputs: BTreeMap<EntityId, pav_core::vehicle::VehicleInput>,
     /// The camera behind the vehicle being driven.
     #[serde(default)]
     pub chase: camera::ChaseCam,
@@ -219,6 +230,9 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         radio: radio::Radio::default(),
         radio_wheel: None,
         drive: drive::Drive::default(),
+        traffic: traffic::Traffic::default(),
+        struck: struck::Struck::default(),
+        traffic_inputs: BTreeMap::new(),
         chase: camera::ChaseCam::default(),
         peds: peds::Peds::default(),
         combat: combat::Combat::default(),
@@ -282,6 +296,12 @@ impl Freeway {
                     _ => log::warn!("clock: '{k}' is not a speed (0-1000)"),
                 },
                 (Some("radio"), Some(arg)) => self.radio_cmd(arg),
+                (Some("autopilot"), Some(arg)) => {
+                    let car = if arg == "off" { None } else { self.drive.vehicle() };
+                    if let Some(city) = self.city.clone() {
+                        self.traffic.autopilot(sim, &city, car);
+                    }
+                }
                 (Some(verb @ ("car" | "drive")), Some(key)) => {
                     let paint = w.next().and_then(|p| p.parse().ok());
                     self.car_cmd(sim, key, paint, verb == "drive");
@@ -380,6 +400,7 @@ impl Freeway {
         for d in deeds {
             match *d {
                 Deed::Entered { car } => {
+                    self.traffic.unpark(car);
                     if let Some(c) = drive::Car::read(sim, car) {
                         self.chase.place_behind(c.yaw);
                         if c.radio {
@@ -389,6 +410,9 @@ impl Freeway {
                     }
                 }
                 Deed::Exited { car } | Deed::Bailed { car, .. } => {
+                    if let Some(city) = self.city.clone() {
+                        self.traffic.autopilot(sim, &city, None);
+                    }
                     self.radio.tune(None);
                     self.radio.last = self.radio.last.min(radio::def().map(|d| d.station.len().saturating_sub(1)).unwrap_or(0));
                     self.radio_wheel = None;
@@ -402,14 +426,43 @@ impl Freeway {
                         self.peds.scare(sim, &city.walk, at, 12.0);
                     }
                 }
-                Deed::Jacked { at, driver, .. } => {
+                Deed::Jacked { at, driver, car } => {
+                    self.traffic.release(car);
                     if let Some(city) = self.city.clone() {
                         self.peds.scare(sim, &city.walk, at, 20.0);
+                        self.peds.adopt(sim, &city.walk, driver, at);
                     }
-                    let _ = driver;
                 }
             }
         }
+    }
+
+    /// Someone struck by a vehicle: the player is hurt; a person dies above 12 m/s or is knocked
+    /// down and runs; people near film it or flee.
+    fn strike(&mut self, sim: &mut Sim, city: &pav_world::City, hit: struck::Strike, events: &mut Vec<SimEvent>) {
+        if Some(hit.who) == sim.state.player {
+            self.combat.hurt_player(hit.speed * 6.0);
+        } else {
+            let lethal = hit.speed >= struck::LETHAL;
+            let amount = if lethal { 500.0 } else { hit.speed * 5.0 };
+            let mut out = combat::Outcome::default();
+            self.combat.damage(sim, hit.who, hit.at, hit.dir, amount, 0.0, events, &mut out);
+            if out.killed.iter().any(|k| k.0 == hit.who) || lethal {
+                self.peds.forget(hit.who);
+                let clip = pav_core::clips::find_cached("QUATERNIUS/Hit_Knockback");
+                if let Some(c) = sim.state.entities.get_mut(hit.who).and_then(|e| e.character.as_mut()) {
+                    // Full detail while thrown, so the knock-back carries the body.
+                    c.lod = false;
+                    if clip != 0 {
+                        c.anim.replay_clip(clip, pav_core::clips::CLAMP, 1.0);
+                    }
+                }
+            } else {
+                self.peds.knocked_down(sim, hit.who, hit.at);
+            }
+        }
+        self.peds.scare(sim, &city.walk, hit.at, 12.0);
+        self.peds.incident(sim, hit.at, 35.0);
     }
 
     /// `car <archetype> [paint]`: a vehicle standing 5 m ahead of the player, side on (the
@@ -611,6 +664,7 @@ impl Game for Freeway {
             // The player (not in a reference view's still or on the streaming tour's flight).
             let pid = sim.state.player.filter(|_| self.view.is_none() && self.mode != "tour");
             let mut deeds = Vec::new();
+            let mut gunfire = None;
             if let Some(id) = pid {
                 // Getting in or out, and driving.
                 if let Some(walk) = self.drive.tick(sim, id, input, dt, &mut deeds, events) {
@@ -663,12 +717,21 @@ impl Game for Freeway {
                         let facing = sim.state.entities.get(id).and_then(|e| e.character.as_ref()).map_or(0.0, |c| c.facing);
                         let shooter = combat::Shooter { id, feet, facing, camera: &cam, moving: moving.dir.length() > 0.3 };
                         let res = self.combat.tick(sim, &wdef, self.weapon, input, &shooter, &mut self.cam, dt, events);
+                        gunfire = res.gunfire;
                         if let Some(city) = self.city.clone() {
                             if let Some(at) = res.gunfire {
                                 self.peds.scare(sim, &city.walk, at, 40.0);
                             }
-                            for &(_, at) in &res.hurt {
-                                self.peds.scare(sim, &city.walk, at, 15.0);
+                            let melee = wdef.weapon.get(self.weapon).is_some_and(|w| w.kind == combat::Kind::Melee);
+                            for &(who, at) in &res.hurt {
+                                if melee {
+                                    // Tough people fight back; the rest run.
+                                    self.peds.assaulted(sim, &city.walk, who, at);
+                                    self.peds.scare(sim, &city.walk, at, 8.0);
+                                } else {
+                                    self.peds.scare(sim, &city.walk, at, 15.0);
+                                }
+                                self.peds.incident(sim, at, 35.0);
                             }
                             for &(who, at) in &res.killed {
                                 self.peds.forget(who);
@@ -689,8 +752,76 @@ impl Game for Freeway {
                     Some(v) => Vec3::new(v.eye.x, 0.0, v.eye.z),
                     None => sim.state.player.and_then(|id| sim.feet(id)).unwrap_or(feet),
                 };
-                let m = peds::Moment { city: &city, player, camera: self.camera(sim), time: self.time, hour: self.sky.hour, dt };
-                self.peds.tick(sim, &m, &mut out);
+                // Vehicles about to run people over throw them first (before the physics step).
+                let on_foot = sim.state.player.filter(|_| self.drive.vehicle().is_none() && self.view.is_none());
+                // Everyone on foot near the player (the crowd, drivers who got out, the player).
+                let people: Vec<EntityId> = sim
+                    .state
+                    .entities
+                    .iter()
+                    .filter(|e| e.character.as_ref().is_some_and(|c| c.riding.is_none()) && !e.name.starts_with("dead:"))
+                    .filter(|e| e.pos.distance(player) < 120.0)
+                    .filter(|e| Some(e.id) != sim.state.player || on_foot.is_some())
+                    .map(|e| e.id)
+                    .collect();
+                for hit in self.struck.tick(sim, &people, dt, events) {
+                    self.strike(sim, &city, hit, events);
+                }
+                let gun_out = self.combat.aiming
+                    && combat::def()
+                        .ok()
+                        .and_then(|d| d.weapon.get(self.weapon).map(|w| w.kind == combat::Kind::Gun))
+                        .unwrap_or(false);
+                let m = peds::Moment {
+                    city: &city,
+                    player,
+                    camera: self.camera(sim),
+                    time: self.time,
+                    hour: self.sky.hour,
+                    dt,
+                    player_on_foot: on_foot.and_then(|id| sim.feet(id)),
+                    gun_out,
+                };
+                let done = self.peds.tick(sim, &m, &mut out);
+                for dmg in done.punches {
+                    self.combat.hurt_player(dmg);
+                }
+                // Traffic around the player (a reference view's around its camera).
+                self.traffic_inputs.clear();
+                {
+                    let sirens = sim
+                        .state
+                        .entities
+                        .iter()
+                        .filter_map(|e| {
+                            let v = e.vehicle.as_ref()?;
+                            v.state.siren_on.then(|| (e.pos, Vec3::new(v.yaw.sin(), 0.0, v.yaw.cos())))
+                        })
+                        .collect();
+                    let people = self
+                        .peds
+                        .list
+                        .iter()
+                        .filter_map(|p| sim.feet(p.id))
+                        .chain(sim.state.player.and_then(|id| sim.feet(id)).filter(|_| self.drive.vehicle().is_none()))
+                        .filter(|f| f.distance(player) < 160.0)
+                        .collect();
+                    let tm = traffic::Moment {
+                        city: &city,
+                        player,
+                        camera: self.camera(sim),
+                        time: self.time,
+                        hour: self.sky.hour,
+                        dt,
+                        player_car: self.drive.vehicle(),
+                        sirens,
+                        people,
+                        gunfire,
+                    };
+                    let mut inputs = BTreeMap::new();
+                    self.traffic.tick(sim, &tm, &mut inputs, &mut self.drive.locked);
+                    self.traffic_inputs = inputs;
+                }
             }
         } else {
             self.wheel = None;
@@ -700,8 +831,9 @@ impl Game for Freeway {
         out
     }
 
-    fn post(&mut self, _sim: &mut Sim, dt: f32, events: &mut Vec<SimEvent>) {
+    fn post(&mut self, sim: &mut Sim, dt: f32, events: &mut Vec<SimEvent>) {
         self.time += dt;
+        self.traffic.crashes(sim, events);
         audio::crash_sounds(events);
     }
 
@@ -727,6 +859,7 @@ impl Game for Freeway {
             "clock": daytime::format_time(self.sky.hour),
             "weather": self.sky.weather,
             "peds": peds,
+            "traffic": self.traffic.summary(),
             "drive": match self.drive.phase {
                 drive::Phase::Foot => "foot",
                 drive::Phase::Enter { .. } => "entering",
@@ -745,6 +878,20 @@ impl Game for Freeway {
         })
     }
 
+    fn bot(&self, _sim: &Sim) -> InputFrame {
+        // On autopilot: the traffic driver's pedals and wheel, as a controller would give them.
+        let mut f = InputFrame::default();
+        if let (Some(vi), Some(_)) = (self.traffic.pilot_input, self.drive.vehicle()) {
+            f.pad.r2 = vi.throttle;
+            f.pad.l2 = vi.brake;
+            f.pad.stick_l.x = vi.steer;
+            if vi.handbrake {
+                f.pad.held |= pav_core::input::pad::R1;
+            }
+        }
+        f
+    }
+
     fn time_scale(&self) -> f32 {
         if self.wheel_open() && self.settings.wheel_slowmo { 0.25 } else { 1.0 }
     }
@@ -759,7 +906,7 @@ impl Game for Freeway {
     }
 
     fn vehicles(&mut self, _sim: &mut Sim, _dt: f32) -> BTreeMap<EntityId, pav_core::vehicle::VehicleInput> {
-        let mut out = BTreeMap::new();
+        let mut out = self.traffic_inputs.clone();
         self.drive.inputs(&mut out);
         out
     }
