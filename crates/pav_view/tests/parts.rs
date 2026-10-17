@@ -17,7 +17,7 @@ fn build(sim: &mut Sim, view: &ViewSettings) -> Scene {
 
 /// (group, flags, style) of every mesh and SDF instance.
 fn instances(s: &Scene) -> Vec<(u32, u32, Style)> {
-    s.meshes.iter().map(|m| (m.group, m.flags, m.style)).chain(s.sdfs.iter().map(|d| (d.group, d.flags, d.style))).collect()
+    s.all_meshes().map(|m| (m.group, m.flags, m.style)).chain(s.all_sdfs().map(|d| (d.group, d.flags, d.style))).collect()
 }
 
 fn town() -> (Sim, u32, Vec<u32>, u32, u32) {
@@ -49,7 +49,7 @@ fn characters_and_objects_are_flagged_the_environment_is_not() {
     assert!(all.iter().any(|i| i.0 == crate_group) && object(crate_group), "a dynamic prop is an object");
     assert!(all.iter().any(|i| i.0 == scenery) && environment(scenery), "fixed scenery is environment");
     // The static level geometry comes first and is all environment.
-    assert!(s.meshes.first().is_some_and(|m| m.group == 1 && m.flags & flags::OBJECT == 0));
+    assert!(s.all_meshes().next().is_some_and(|m| m.group == 1 && m.flags & flags::OBJECT == 0));
 }
 
 #[test]

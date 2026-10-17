@@ -22,6 +22,16 @@ struct Globals {
     cut3: vec4<f32>,         // x front cut distance, y front cut on
     wind: vec4<f32>,         // xy direction (world x, z), z strength, w gust speed
     push: vec4<f32>,         // xyz the pusher's feet (grass bends away), w radius (0 = none)
+    sky_zenith: vec4<f32>,   // rgb straight up; w = 1 when the scene has a sky
+    sky_horizon: vec4<f32>,  // rgb at the horizon; w = the sun disc's angular radius (0 = none)
+    sky_ground: vec4<f32>,   // rgb well below the horizon; w = stars 0..1
+    sky_glow: vec4<f32>,     // rgb the sun's glow; w = cloud cover 0..1
+    sky_sun: vec4<f32>,      // xyz toward the sun; w = lightning flash 0..1
+    sky_sun_color: vec4<f32>,// rgb the sun disc's radiance (HDR); w = 1 when the moon is up
+    sky_moon: vec4<f32>,     // xyz toward the moon
+    sky_cloud: vec4<f32>,    // rgb the clouds' colour
+    sky_drift: vec4<f32>,    // xy how far the clouds have drifted (m, world x and z)
+    levels: vec4<f32>,       // x wetness, y street lights (NIGHT glow), z lit windows
 };
 
 struct PointLight {
@@ -44,6 +54,7 @@ const FLAG_PIXEL: u32 = 32u;
 const FLAG_OBJECT: u32 = 64u;
 const FLAG_SWAY: u32 = 128u;
 const FLAG_GRASS: u32 = 256u;
+const FLAG_NIGHT: u32 = 512u;
 
 // How far wind moves a vertex `h` metres above the bottom of its instance. Gusts roll across
 // the world as a slow wave along the wind (so a field of grass ripples), with a faster flutter
@@ -206,10 +217,44 @@ fn quantize(x: f32, bands: f32) -> f32 {
     return (f + smoothstep(0.45, 0.55, s - f)) / bands;
 }
 
-// `pbr`: a material's roughness and metallic; x < 0 keeps the legacy shading exactly.
-fn shade(p: vec3<f32>, n: vec3<f32>, albedo: vec3<f32>, emissive: f32, style: u32, flags: u32, pbr: vec2<f32>) -> vec3<f32> {
+// How wet a surface is in the scene's wet weather (x, 0..1: it darkens and turns glossy) and how
+// much of it is standing water (y: level ground pools into puddles, laid by world-space noise
+// that spreads as it gets wetter; walls and objects only get damp).
+fn wet_amount(p: vec3<f32>, n: vec3<f32>, flags: u32) -> vec2<f32> {
+    let w = g.levels.x;
+    let up = smoothstep(0.6, 0.92, n.y);
+    var pool = 0.0;
+    if (up > 0.0 && (flags & FLAG_OBJECT) == 0u) {
+        let k = vnoise(vec3<f32>(p.x * 0.31, 0.5, p.z * 0.31), 0x9e7u) * 0.65 + vnoise(vec3<f32>(p.x * 0.97, 2.5, p.z * 0.97), 0x9e8u) * 0.35;
+        // A third of level ground pools when soaked, less when merely wet.
+        pool = smoothstep(0.62 - 0.08 * w, 0.67 - 0.08 * w, k) * up * w;
+    }
+    return vec2<f32>(w * mix(0.5, 1.0, up), pool);
+}
+
+// What a mirror-like surface reflects toward `r`: the sky's gradient, or the ambient light's
+// sky and ground colours when the scene has no sky.
+fn sky_reflect(r: vec3<f32>) -> vec3<f32> {
+    if (sky_on()) {
+        return sky_gradient(r);
+    }
+    return mix(g.ground_color.rgb, g.sky_color.rgb, clamp(r.y * 0.5 + 0.5, 0.0, 1.0));
+}
+
+// `pbr`: a material's roughness and metallic; x < 0 keeps the legacy shading exactly. `refl`:
+// how mirror-like the surface is (a material's glass); wet weather adds its own.
+fn shade(p: vec3<f32>, n: vec3<f32>, albedo_in: vec3<f32>, emissive: f32, style: u32, flags: u32, pbr: vec2<f32>, refl_in: f32) -> vec3<f32> {
     if (style == 3u) {
-        return apply_fog(p, albedo * max(1.0, 1.0 + emissive));
+        return apply_fog(p, albedo_in * max(1.0, 1.0 + emissive));
+    }
+    var albedo = albedo_in;
+    var refl = refl_in;
+    var damp = 0.0;
+    if (g.levels.x > 0.0 && style != 0u) {
+        let wet = wet_amount(p, n, flags);
+        damp = wet.x;
+        albedo *= (1.0 - 0.45 * wet.x) * (1.0 - 0.35 * wet.y);
+        refl = max(refl, wet.y + 0.12 * wet.x * smoothstep(0.6, 0.92, n.y));
     }
     var sh = 1.0;
     if ((flags & FLAG_NO_RECEIVE_SHADOW) == 0u) {
@@ -237,14 +282,30 @@ fn shade(p: vec3<f32>, n: vec3<f32>, albedo: vec3<f32>, emissive: f32, style: u3
     } else {
         let dl = max(ndl, 0.0) * sh;
         let h = normalize(l + v);
+        // Wet surfaces shine more.
+        let gloss = 1.0 + 3.0 * damp;
         if (pbr.x < 0.0) {
-            let spec = pow(max(dot(n, h), 0.0), 40.0) * g.style.w * sh;
+            let spec = pow(max(dot(n, h), 0.0), 40.0 * gloss) * g.style.w * sh * gloss;
             col = albedo * (hemi + g.sun_color.rgb * dl) + g.sun_color.rgb * spec;
         } else {
-            let spec = pow(max(dot(n, h), 0.0), mix(80.0, 6.0, pbr.x)) * g.style.w * sh * (1.2 - pbr.x);
+            let spec = pow(max(dot(n, h), 0.0), mix(80.0, 6.0, pbr.x) * gloss) * g.style.w * sh * (1.2 - pbr.x) * gloss;
             let tint = mix(vec3<f32>(1.0), albedo, pbr.y);
             col = albedo * (1.0 - 0.6 * pbr.y) * (hemi + g.sun_color.rgb * dl) + g.sun_color.rgb * spec * tint;
         }
+        if (sky_on()) {
+            // Under a sky every lit surface catches a little of it, most at grazing angles
+            // (a rough dielectric's sheen): distant roads and walls pale toward the horizon.
+            let ndv = clamp(dot(n, v), 0.0, 1.0);
+            col += sky_reflect(reflect(-v, n)) * (0.03 + 0.1 * pow(1.0 - ndv, 5.0));
+        }
+    }
+    if (refl > 0.0) {
+        // Glass and standing water: the sky by Fresnel's law (a quarter even head-on), and the
+        // sun's glint where the reflection meets it.
+        let r = reflect(-v, n);
+        let f = refl * mix(0.25, 1.0, pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0));
+        col = col * (1.0 - f) + sky_reflect(r) * f;
+        col += g.sun_color.rgb * pow(max(dot(r, l), 0.0), 600.0) * 5.0 * f * sh;
     }
     let count = u32(g.params.y);
     for (var i = 0u; i < count; i++) {
@@ -265,10 +326,24 @@ fn shade(p: vec3<f32>, n: vec3<f32>, albedo: vec3<f32>, emissive: f32, style: u3
                 k = quantize(k, 3.0);
             }
             col += albedo * pl.color.rgb * k;
+            if (refl > 0.0 && style != 0u) {
+                // Lamps shine in wet streets and glass.
+                let hl = normalize(ld + v);
+                col += pl.color.rgb * pow(max(dot(n, hl), 0.0), 48.0) * att * refl * 1.5;
+            }
         }
     }
     col = col + albedo * emissive;
     return apply_fog(p, col);
+}
+
+// The colour fog fades into toward `p`: the sky's colour that way when the scene has a sky (so
+// fogged geometry melts into it looking up, level or down), else the fog's own.
+fn fog_color(p: vec3<f32>) -> vec3<f32> {
+    if (sky_on()) {
+        return sky_gradient(-view_dir(p));
+    }
+    return g.fog.rgb;
 }
 
 fn apply_fog(p: vec3<f32>, col: vec3<f32>) -> vec3<f32> {
@@ -276,7 +351,169 @@ fn apply_fog(p: vec3<f32>, col: vec3<f32>) -> vec3<f32> {
         return col;
     }
     let d = length(p.xz - g.fog2.xy);
-    return mix(col, g.fog.rgb, smoothstep(g.fog2.z, g.fog2.w, d));
+    return mix(col, fog_color(p), smoothstep(g.fog2.z, g.fog2.w, d));
+}
+
+// ---------------------------------------------------------------- sky
+
+fn sky_on() -> bool {
+    return g.sky_zenith.w > 0.5;
+}
+
+// The sky's colour toward `d` (unit) without its sun disc, moon, stars and clouds: the
+// gradient, the sun's glow and a lightning flash. Fog fades into it and wet ground and glass
+// reflect it.
+fn sky_gradient(d: vec3<f32>) -> vec3<f32> {
+    let y = clamp(d.y, -1.0, 1.0);
+    var col: vec3<f32>;
+    if (y >= 0.0) {
+        // The horizon's band thins out quickly upward.
+        col = mix(g.sky_zenith.rgb, g.sky_horizon.rgb, exp(-y * 4.5));
+    } else {
+        // Below it, distance haze keeps the horizon's colour a while before the ground's.
+        let t = smoothstep(0.0, 0.6, -y);
+        col = mix(g.sky_horizon.rgb, g.sky_ground.rgb, t * t);
+    }
+    // The sun's glow: broad and strongest along the horizon, plus a tight halo. It lingers on
+    // the horizon after sunset.
+    let mu = max(dot(d, g.sky_sun.xyz), 0.0);
+    let band = exp(-abs(y) * 3.0);
+    col += g.sky_glow.rgb * (pow(mu, 6.0) * (0.08 + 0.27 * band) + pow(mu, 64.0) * 0.3);
+    col += vec3<f32>(0.62, 0.68, 0.85) * (g.sky_sun.w * 0.55);
+    return col;
+}
+
+// The angle (radians) between unit vectors, accurate for small angles.
+fn angle_between(a: vec3<f32>, b: vec3<f32>) -> f32 {
+    return 2.0 * asin(clamp(length(a - b) * 0.5, 0.0, 1.0));
+}
+
+// Stars: one candidate per cell of a cube-sphere grid (about 0.6 degrees), a soft dot about a
+// pixel wide (`px`: radians per pixel), a few bright ones, twinkling.
+fn sky_stars(d: vec3<f32>, px: f32) -> vec3<f32> {
+    let a = abs(d);
+    var uv: vec2<f32>;
+    var face: i32;
+    if (a.x >= a.y && a.x >= a.z) {
+        uv = d.yz / a.x;
+        face = select(1, 0, d.x > 0.0);
+    } else if (a.y >= a.z) {
+        uv = d.xz / a.y;
+        face = select(3, 2, d.y > 0.0);
+    } else {
+        uv = d.xy / a.z;
+        face = select(5, 4, d.z > 0.0);
+    }
+    let n = 90.0;
+    let q = uv * n;
+    let cell = floor(q);
+    let h = hash3i(i32(cell.x), i32(cell.y), face, 0x51a2u);
+    if (rnd(h) > 0.055) {
+        return vec3<f32>(0.0);
+    }
+    let h2 = pcg(h);
+    let at = cell + vec2<f32>(0.2) + 0.6 * vec2<f32>(rnd(h2), rnd_lo(h2));
+    // A cell spans about 1/n radians at the face's centre, less toward its edges.
+    let dist = length(q - at) / (n * (1.0 + dot(uv, uv)));
+    let r = max(px * 0.8, 1e-5);
+    let bright = 0.3 + 3.5 * pow(rnd(pcg(h2)), 7.0);
+    let twinkle = 0.8 + 0.2 * sin(g.params.x * (1.7 + 2.3 * rnd_lo(h)) + rnd(h2) * 6.2832);
+    let tint = mix(vec3<f32>(0.75, 0.82, 1.0), vec3<f32>(1.0, 0.88, 0.72), rnd_lo(h2));
+    return tint * (bright * twinkle * exp(-dist * dist / (r * r)));
+}
+
+// The moon: a disc with darker seas and a soft halo. rgb added, a = how much of the pixel the
+// disc covers (it hides the stars behind it).
+fn sky_moon(d: vec3<f32>, px: f32) -> vec4<f32> {
+    let m = g.sky_moon.xyz;
+    let r = 0.0125;
+    let ang = angle_between(d, m);
+    let disc = 1.0 - smoothstep(r - px, r + px, ang);
+    let side = normalize(cross(m, vec3<f32>(1e-4, 1.0, 0.0)));
+    let up = cross(side, m);
+    let lp = vec2<f32>(dot(d - m, side), dot(d - m, up)) / r;
+    let seas = vnoise(vec3<f32>(lp * 2.2 + 3.7, 1.3), 0x6d6fu) * 0.6 + vnoise(vec3<f32>(lp * 5.1, 7.9), 0x6d70u) * 0.4;
+    let face = vec3<f32>(0.92, 0.94, 1.0) * (1.0 - 0.3 * smoothstep(0.45, 0.62, seas));
+    let halo = vec3<f32>(0.55, 0.62, 0.8) * (exp(-ang / 0.02) * 0.35 + exp(-ang / 0.12) * 0.06);
+    return vec4<f32>(face * (2.4 * disc) + halo * (1.0 - disc), disc);
+}
+
+// Clouds on a layer 1.4 km up, drifting with the wind: soft, warped fractal noise thinned by
+// the cover, darker where thick, edges lit toward the sun, fading into the horizon. rgb, a =
+// coverage.
+fn sky_clouds(d: vec3<f32>, px: f32) -> vec4<f32> {
+    let cover = g.sky_glow.w;
+    if (cover <= 0.001 || d.y <= 0.015) {
+        return vec4<f32>(0.0);
+    }
+    let t = max(1400.0 - g.eye.y, 200.0) / d.y;
+    let scale = 1.0 / 2200.0;
+    let p = (g.eye.xz + d.xz * t + g.sky_drift.xy) * scale;
+    // The footprint in noise units: grazing rays stretch a pixel over far more cloud.
+    let fw = px * t * scale / max(d.y, 0.08);
+    let q = vec3<f32>(p, g.params.x * 0.004);
+    let warp = vec2<f32>(fbm(q + vec3<f32>(5.2, 1.3, 0.0), 3u, 1.0, fw, 0xc11u), fbm(q + vec3<f32>(1.7, 9.2, 4.1), 3u, 1.0, fw, 0xc12u)) - 0.5;
+    let v = fbm(q + vec3<f32>(warp * 0.9, 0.0), 5u, 1.0, fw, 0xc13u);
+    let th = mix(0.67, 0.32, cover);
+    let a = smoothstep(th - 0.08, th + 0.1, v) * smoothstep(0.015, 0.16, d.y);
+    let thick = smoothstep(th, th + 0.28, v);
+    let mu = max(dot(d, g.sky_sun.xyz), 0.0);
+    var col = g.sky_cloud.rgb * mix(1.0, 0.62, thick * (0.35 + 0.65 * cover));
+    col += g.sky_glow.rgb * (pow(mu, 8.0) * (1.0 - thick) * 0.8);
+    // Lightning lights the clouds from inside, the thick ones most.
+    col *= 1.0 + g.sky_sun.w * (0.6 + 0.8 * thick);
+    return vec4<f32>(col, a);
+}
+
+struct SkyOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) ndc: vec2<f32>,
+};
+
+// A full-screen triangle at the far plane: drawn after the opaque geometry, it fills only what
+// that left.
+@vertex
+fn vs_sky(@builtin(vertex_index) vi: u32) -> SkyOut {
+    let uv = vec2<f32>(f32((vi << 1u) & 2u), f32(vi & 2u));
+    let ndc = uv * 2.0 - 1.0;
+    var o: SkyOut;
+    o.clip = vec4<f32>(ndc, 1.0, 1.0);
+    o.ndc = ndc;
+    return o;
+}
+
+@fragment
+fn fs_sky(in: SkyOut) -> FsOut {
+    var d = g.forward.xyz;
+    if (g.eye.w > 0.5) {
+        let far = g.inv_view_proj * vec4<f32>(in.ndc, 1.0, 1.0);
+        d = normalize(far.xyz / far.w - g.eye.xyz);
+    }
+    let px = g.params.w;
+    var col = sky_gradient(d);
+    let above = smoothstep(-0.004, 0.006, d.y);
+    let r = g.sky_horizon.w;
+    if (r > 0.0) {
+        // The sun's disc, darker toward its rim, hidden below the horizon.
+        let k = clamp(angle_between(d, g.sky_sun.xyz) / r, 0.0, 2.0);
+        let disc = 1.0 - smoothstep(1.0 - px / r, 1.0 + px / r, k);
+        col += g.sky_sun_color.rgb * (disc * (1.0 - 0.4 * min(k * k, 1.0)) * above);
+    }
+    var hidden = 0.0;
+    if (g.sky_sun_color.w > 0.5) {
+        let moon = sky_moon(d, px);
+        col += moon.rgb * above;
+        hidden = moon.a;
+    }
+    if (g.sky_ground.w > 0.0) {
+        col += sky_stars(d, px) * (g.sky_ground.w * smoothstep(0.02, 0.25, d.y) * (1.0 - hidden));
+    }
+    let clouds = sky_clouds(d, px);
+    col = mix(col, clouds.rgb, clouds.a);
+    var o: FsOut;
+    o.color = vec4<f32>(col, 1.0);
+    o.normal = vec4<f32>(0.0);
+    return o;
 }
 
 // The normal buffer's w is the outline group (folded into 1..1023, 0 = background) plus 1024
@@ -380,17 +617,22 @@ fn fs_mesh(in: MeshOut, @builtin(front_facing) front: bool) -> FsOut {
     var albedo = in.color.rgb;
     var emis = in.color.a;
     var pbr = vec2<f32>(-1.0, 0.0);
+    var refl = 0.0;
     let mid = in.params.w & 0xfffu;
     if (mid != 0u && (front || (in.params.y & FLAG_TWO_SIDED) != 0u)) {
         let side = select(-1.0, 1.0, front);
         let mo = eval_material(mid, in.params.w >> 12u, albedo, in.local, side * normalize(in.lnormal), in.world, side * normalize(in.normal), in.ext);
         albedo = mo.albedo;
         emis += mo.glow;
+        refl = mo.refl;
         pbr = materials[mid].pbr.xy;
+    }
+    if ((in.params.y & FLAG_NIGHT) != 0u) {
+        emis *= g.levels.y;
     }
     if (!front && (in.params.y & FLAG_TWO_SIDED) != 0u) {
         let nb = -normalize(in.normal);
-        o.color = vec4<f32>(shade(in.world, nb, albedo * 0.85, emis, in.params.x, in.params.y, pbr), 1.0);
+        o.color = vec4<f32>(shade(in.world, nb, albedo * 0.85, emis, in.params.x, in.params.y, pbr, refl), 1.0);
         o.normal = group_out(nb, in.params.z, in.params.y);
         return o;
     }
@@ -401,7 +643,7 @@ fn fs_mesh(in: MeshOut, @builtin(front_facing) front: bool) -> FsOut {
         return o;
     }
     let n = normalize(in.normal);
-    o.color = vec4<f32>(shade(in.world, n, albedo, emis, in.params.x, in.params.y, pbr), 1.0);
+    o.color = vec4<f32>(shade(in.world, n, albedo, emis, in.params.x, in.params.y, pbr, refl), 1.0);
     // The outline buffer always gets the geometric normal.
     o.normal = group_out(n, in.params.z, in.params.y);
     return o;
@@ -580,6 +822,7 @@ fn fs_sdf(in: SdfOut) -> SdfFsOut {
     var albedo = in.color.rgb;
     var emis = in.color.a;
     var pbr = vec2<f32>(-1.0, 0.0);
+    var refl = 0.0;
     let mid = in.params.w & 0xfffu;
     if (mid != 0u) {
         // The local frame runs along a->b, built as vs_sdf builds it; y is the axis.
@@ -599,9 +842,13 @@ fn fs_sdf(in: SdfOut) -> SdfFsOut {
         let mo = eval_material(mid, in.params.w >> 12u, albedo, lp, ln, p, n, vec3<f32>(r, len * 0.5 + r, r));
         albedo = mo.albedo;
         emis += mo.glow;
+        refl = mo.refl;
         pbr = materials[mid].pbr.xy;
     }
-    o.color = vec4<f32>(shade(p, n, albedo, emis, in.params.x, in.params.y, pbr), 1.0);
+    if ((in.params.y & FLAG_NIGHT) != 0u) {
+        emis *= g.levels.y;
+    }
+    o.color = vec4<f32>(shade(p, n, albedo, emis, in.params.x, in.params.y, pbr, refl), 1.0);
     o.normal = group_out(n, in.params.z, in.params.y);
     o.depth = clip.z / clip.w;
     return o;

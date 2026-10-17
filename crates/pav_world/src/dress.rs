@@ -27,6 +27,7 @@ fn decor(shape: Shape, pos: Vec3, rot: Quat, color: &str) -> Decor {
         collider: None,
         sway: Sway::None,
         material: None,
+        glow: Default::default(),
     }
 }
 

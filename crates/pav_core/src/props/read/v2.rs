@@ -2987,7 +2987,7 @@ mod tests {
             ),
             [
                 "materials.m.texture: unknown key — use layers:[{type,...}]",
-                r#"materials.m.layers[0].type: unknown pattern "plank" (expected noise, voronoi, wave, brick, checker, gradient, magic, planks, tiles, cobbles, stripes, dots, shingles, wood) — use planks"#,
+                r#"materials.m.layers[0].type: unknown pattern "plank" (expected noise, voronoi, wave, brick, checker, gradient, magic, planks, tiles, cobbles, stripes, dots, shingles, wood, windows) — use planks"#,
                 r#"materials.n.look: unknown look "cutout" (expected flat, cel, lit, unlit)"#,
                 "materials.n.color: missing — a material needs color, or a base to inherit it from",
             ]

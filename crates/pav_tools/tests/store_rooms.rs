@@ -394,7 +394,8 @@ fn store_showcase_shows_every_core_material() {
         .filter_map(|op| op["value"]["base"].as_str().map(str::to_owned))
         .collect();
     let library = pav_core::material::Library::core();
-    for id in library.names() {
+    // The engine's own materials: a game's embedded tier (`MAT/gtf/…`) is not on show here.
+    for id in library.names().filter(|id| !id.starts_with("MAT/gtf/")) {
         assert!(shown.contains(id), "store_showcase shows no cube of {id}: regenerate the room");
     }
     assert!(library.names().count() >= 18);

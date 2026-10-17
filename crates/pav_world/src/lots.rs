@@ -71,6 +71,7 @@ fn trim(min: Vec3, max: Vec3, c: Color) -> Decor {
         collider: None,
         sway: Default::default(),
         material: None,
+        glow: Default::default(),
     }
 }
 
@@ -318,6 +319,7 @@ fn landmark(def: &DistrictDef, grid: &Grid, i: usize, l: &crate::def::Landmark, 
                 collider: None,
                 sway: Default::default(),
                 material: None,
+                glow: Default::default(),
             });
             (h, Color::hex("#eae7df"))
         }

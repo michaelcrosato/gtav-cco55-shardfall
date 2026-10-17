@@ -1254,13 +1254,17 @@ fn t_camera(s: &mut Session, a: &Args) -> Result<Output> {
     }
 }
 
-/// What the last frame cost to draw (main pass), from the renderer's own counters.
+/// What the last frame cost to draw (main pass), from the renderer's own counters, plus the
+/// static regions it culled and the view's build time.
 pub(crate) fn render_stats(s: &mut Session) -> Result<Value> {
-    let st = s.gpu()?.renderer.stats;
+    let gpu = s.gpu()?;
+    let st = gpu.renderer.stats;
     Ok(json!({
         "triangles": st.triangles, "batches": st.batches, "mesh_instances": st.mesh_instances,
         "sdf": st.sdf_instances, "lights": st.lights, "materials": st.materials,
         "custom_meshes": st.custom_meshes, "mesh_kb": st.mesh_bytes.div_ceil(1024), "draw_calls": st.draw_calls,
+        "regions": st.regions, "regions_drawn": st.regions_drawn, "regions_shadow": st.regions_shadow,
+        "shadow_instances": st.shadow_instances, "view_ms": (gpu.view_ms * 100.0).round() / 100.0,
     }))
 }
 

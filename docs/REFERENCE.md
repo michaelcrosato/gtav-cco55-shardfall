@@ -3,6 +3,8 @@
 The detail behind `AGENTS.md`, read on demand: open the section you need, not the whole page.
 `pav help` lists every tool with its arguments.
 - [Code map](#code-map): what each crate and data folder holds.
+- [Sky, weather and night](#sky-weather-and-night): the sky dome, time of day and weather,
+  night lights, facade windows, static-region culling.
 - [Studios](#studios): animation, objects and creatures, edited live.
 - [Tools](#tools): each tool family with examples.
 - [Browser and phones](#browser-and-phones): running the web build headless, emulating a phone.
@@ -106,6 +108,52 @@ rooms/        room data files (TOML: info card, station guide `[learn]`, wing, p
               here is embedded in the exe at build time AND hot-reloaded at runtime.
               `_template.toml` documents every field.
 ```
+
+## Sky, weather and night
+The renderer's atmosphere (`pav_render::scene`), which the view fills each frame from a hook
+game's `ViewIntent` (`pav_core::present`):
+- `Scene::sky: Option<Sky>`: a sky dome drawn after the opaque geometry at the far plane
+  (`None` keeps the flat `clear_color` exactly). A zenith/horizon/ground gradient, the sun's disc
+  (`to_sun`, angular `sun_size`, HDR `sun_color`, so it blooms) and `glow`, the moon (`to_moon`),
+  `stars` 0..1, soft fbm `clouds` 0..1 in `cloud_color` drifting by `wind * time`, and a
+  `lightning` flash. With a sky, fog fades into the sky's own colour toward each pixel (no seam
+  looking up, level or down), sky pixels take the post haze as distant geometry does, and lit
+  surfaces catch a little of the sky at grazing angles.
+- `Scene::wetness` 0..1 (darker, glossier surfaces; puddles on level ground mirror the sky and
+  the lamps), `street_lights` 0..1 (scales the emissive of instances flagged `flags::NIGHT`),
+  `windows` 0..1 (lights the panes of `windows` material layers).
+- `Scene::regions`: `StaticRegion { min, max, meshes: Arc<..>, sdfs: Arc<..> }`, static regions'
+  cached instances, the same `Arc`s every frame until a region changes. The renderer culls each
+  box against the camera frustum (and the sun's shadow box for the shadow pass) and appends the
+  visible regions' instances to the per-mesh batches `Scene::meshes` fills: one instanced draw
+  per mesh kind. Distance classes (`Scene::cull`): `flags::SMALL` beyond 90 m, `flags::DETAIL`
+  beyond 150 m, whole regions past the fog's end (horizontal distance from the fog's centre).
+  `Scene::all_meshes()` and `all_sdfs()` walk the regions' instances, then the loose ones.
+- The view classes static dressing by size: decor under 0.5 m across (baked props under
+  1.2 m) is `SMALL`, under 6 m (8 m) `DETAIL`, bigger stays; glowing things never drop out.
+  `Decor::glow` and `PrimDraw::glow` = `Glow::Night` (serde default `always`) set
+  `flags::NIGHT`, and their glow lights follow `street_lights`. Blocks wearing an
+  object-mapped material are seeded by their position (facades differ building to building).
+- `ViewIntent` → scene (`pav_view::play::apply_view`): sun and ambient light, `sky` (`moon_dir`
+  points toward the moon; no sun disc when the light is the moonlight), `fog` (fades into the
+  sky), grading, `wetness`, `rain` (GPU streaks in a box ahead of the camera, drops per m² per
+  s, slanted by `wind`; a new shower starts in full swing), `wind` (clouds and foliage),
+  `SkyIntent::lightning` (sky flash and an ambient boost), `street_lights`, `windows`,
+  `shadow_radius` (the shadow square sits half a radius past the camera target along the view,
+  snapped to shadow texels). The look over the session's view settings (None keeps them):
+  `style`, `style_objects`, `style_environment` (`lit`, `cel`, `flat`, `per_object`), `outlines`,
+  `tonemap` (`clamp`, `soft_knee`, `aces`), `bloom_threshold`, `haze_height`, `gi`; static
+  region caches key on the resulting style.
+- Facades: the `windows` material layer (`docs/MATERIALS.md`) and `MAT/gtf/glass_curtain`,
+  `office_concrete`, `stucco_windows`, `brick_windows` (`assets/materials/gtf/`, embedded).
+- Looking at it: `set path=view.atmosphere value=dusk` (`scene`, `dawn`, `noon`, `golden`, `dusk`,
+  `night`, `rain`, `storm`, `lightning`, `fog`; `pav_view::atmosphere`) replaces any scene's
+  atmosphere and keeps a game's look and shadow radius (a tool session starts each new preset
+  without the last one's rain streaks). `capture stats=true` adds `regions`,
+  `regions_drawn`, `regions_shadow`, `shadow_instances` and `view_ms` (the view's CPU build).
+  `cargo test -p pav_tools --test e7_city -- --ignored` renders Paloma Bay with the facades from
+  the street, at the skyline, from the drone and into the sun, and the four facades side by
+  side, under every preset (`out/e7/city_*.png`).
 
 ## Studios
 Animation Studio: `scripts/animation-studio.sh` or `shardfall --animation-studio` opens an
@@ -360,7 +408,8 @@ part, styles per part, styles/haze reach the renderer, transition loop), `look.r
 sections, presets, whole looks), `water.rs` (ripples spread and fade, rain, pool strips merge)
 and `learn.rs` (station guides and the field guide stay consistent with the engine);
 `material_parity.rs` renders every material kernel on the GPU (lavapipe will do) and compares
-it with the CPU reference.
+it with the CPU reference (facade windows on a wall, by day and lit); `statics.rs` (regions'
+bounds and shared lists, night flags and lights, distance classes).
 Extend it when you add movement features; it is the cheapest way to catch feel regressions.
 Also, named for what they cover: `pav_core/tests/` `animation.rs`, `animation_preview.rs`,
 `asset_library.rs`, `bench_holdout.rs`, `fx.rs`, `genre.rs`, `prop_families.rs`,

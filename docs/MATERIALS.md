@@ -12,6 +12,8 @@ layers (planks, brick, cobbles, noise …). No images, no UVs. Props wear them b
   $floor dust at the foot), pillar_stone ($pillar drums), wall_cap (1 m coping stones).
   `assets kind=material [find=wood]` lists them with layers and cost.
 - Yours: MAT/workshop/x, saved as assets/materials/workshop/x.json.
+- The game's, embedded like core: MAT/gtf/x, assets/materials/gtf/x.json (facades with windows
+  below).
 
 ## On a prop
 
@@ -85,9 +87,23 @@ painted, or did not); seed. Sizes are feature sizes in the unit.
 | noise | size 50, detail 3 (1-4), distort, cover 0.5, soft 0.3 | 0.5 per detail |
 | magic | size 50, depth 2, distort 1, cover 0.5, soft 0.3 | 1.5 |
 | gradient | axis y, from 0, to 100 (cm above the part's bottom) | 1 |
+| windows | size [300,340] (bay, storey), pane [0.55,0.5], gap 8 (frame), detail 1, cover 0.5 | 1.5 |
 
 Cellular patterns (planks, brick, tiles, cobbles, shingles, voronoi, dots) also take vary (each
 cell's brightness), cells (2-4 colours, one per cell), cavity (dark joints) and bevel.
+
+Windows paint a facade on vertical faces only: bays `size[0]` wide and storeys `size[1]` high,
+each with a pane (`pane`: its share of the bay's width and height, a little above the middle)
+in a frame `gap` wide (`frame` colour; none = the wall darkened), split into `detail` panes
+across. `color` is the glass (default #28323b), `reflect` 0-1 how much sky it mirrors (0.5).
+Object and axis maps fit whole bays across each face and whole storeys up from its bottom, so
+corners are clean; a world map lays one grid over everything. At night the scene's windows level
+(`ViewIntent::windows`) lights `cover` × level of the panes, picked per pane (some floors busier
+than others), in one of the `cells` colours (default warm tungsten, warm white, cool fluorescent,
+amber; `vary` their brightness), glowing `glow` (1.6). A later layer `masked_by` `prev` touches
+only the windows (glass and frames), `not_prev` only the wall. The game's facades:
+`MAT/gtf/glass_curtain` (tower glass), `office_concrete`, `stucco_windows` (the part's pastel),
+`brick_windows`.
 
 ## Legibility
 

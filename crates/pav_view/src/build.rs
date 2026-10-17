@@ -13,7 +13,7 @@ use pav_core::props::{DEFAULT_ROLES, ResolvedPart};
 use pav_core::puppet::PuppetDef;
 use pav_core::shape::Sway;
 use pav_core::statics::Ladder;
-use pav_core::statics::{ChunkKey, block_flags};
+use pav_core::statics::{ChunkKey, Glow, block_flags};
 use pav_core::zones::{Label, LabelMode, Zone, ZoneKind};
 use pav_core::{Color, Look, RenderFrame, RenderObject, Shape, choice_enum};
 use pav_render::mesh::{MeshData, Vertex};
@@ -401,6 +401,9 @@ pub struct ViewSettings {
     pub filter: FilterSettings,
     /// How much of each procedural material is drawn: every layer, the first only, or none.
     pub material_detail: crate::materials::MaterialDetail,
+    /// A time of day or weather preset in place of the scene's own atmosphere (to look at a
+    /// scene at dusk, at night, in the rain...); `scene` keeps the scene's.
+    pub atmosphere: crate::atmosphere::Atmosphere,
 }
 
 impl Default for ViewSettings {
@@ -446,6 +449,7 @@ impl Default for ViewSettings {
             cutaway: CutawaySettings::default(),
             filter: FilterSettings::default(),
             material_detail: crate::materials::MaterialDetail::Full,
+            atmosphere: Default::default(),
         }
     }
 }
@@ -534,6 +538,11 @@ impl Tunable for ViewSettings {
             "material_detail",
             "Materials: full, first_layer (cheaper; phones), off (plain colours)",
         );
+        self.atmosphere.visit_choice(
+            v,
+            "atmosphere",
+            "Preview a time of day or weather (dawn, noon, golden, dusk, night, rain, storm, lightning, fog); scene = its own",
+        );
         nested(v, "light", &mut self.light);
         nested(v, "cutaway", &mut self.cutaway);
         nested(v, "filter", &mut self.filter);
@@ -611,13 +620,21 @@ struct Effect {
 struct RegionCache {
     version: u64,
     style: StyleOverride,
+    /// The environment's own style when `style` is per object (baked into the instances).
+    env_style: StyleOverride,
     /// `MaterialTable::instance_generation` when built (materials' colours are baked in) and
     /// the hash of the place's palette (its blocks' material roles).
     materials: u64,
     palette: u64,
-    meshes: Vec<MeshInstance>,
-    sdfs: Vec<SdfInstance>,
+    /// Every instance (terrain and static meshes included) and their world bounds: handed to
+    /// the renderer as one `StaticRegion`, the same lists every frame until the region changes.
+    meshes: Arc<Vec<MeshInstance>>,
+    sdfs: Arc<Vec<SdfInstance>>,
+    min: Vec3,
+    max: Vec3,
     lights: Vec<rs::PointLight>,
+    /// The glow lights of night-only decor (`Glow::Night`), dimmed by the street lights.
+    night_lights: Vec<rs::PointLight>,
     /// The terrain patch and the region's static meshes (a game city's roads and decks).
     terrain: Vec<(MeshKey, Arc<MeshData>)>,
     /// Generated meshes its baked props draw (every scene carries them).
@@ -658,6 +675,9 @@ pub struct ViewBuilder {
     draw_errors: HashSet<String>,
     /// A game's far view, converted for the renderer.
     far: crate::play::FarCache,
+    /// Rain near the camera: the fraction of a drop owed to the next frame (None: it was not
+    /// raining, so the next shower starts in full swing).
+    rain: Option<f32>,
 }
 
 /// Shortest-arc interpolation of object poses between two frames (both sorted by id).
@@ -713,6 +733,7 @@ impl ViewBuilder {
     pub fn clear_particles(&mut self) {
         self.emit_carry.clear();
         self.pending_particles.clear();
+        self.rain = None;
     }
 
     /// The material table: intern a material here (`MaterialTable::resolve`) and give its
@@ -963,6 +984,55 @@ impl ViewBuilder {
         }
     }
 
+    /// Rain streaks round the camera (GPU particles): `rain` drops per m² per second falling
+    /// through a box ahead of the camera, slanted by the wind (x, z, m/s). A new shower starts
+    /// in full swing.
+    fn emit_rain(&mut self, scene: &mut Scene, rain: f32, wind: glam::Vec2, dt: f32) {
+        if rain <= 0.0 {
+            return;
+        }
+        let cam = &scene.camera;
+        let ahead = Vec3::new(cam.forward.x, 0.0, cam.forward.z).normalize_or_zero();
+        let half = Vec3::new(14.0, 9.0, 14.0);
+        // Drops per second over the box's footprint, within the particle budget.
+        let rate = (rain * 4.0 * half.x * half.z).min(12_000.0);
+        let life = (1.4, 2.0);
+        let color = glam::Vec4::new(0.72, 0.78, 0.88, 0.5);
+        let mut burst = rs::ParticleBurst {
+            count: 0,
+            pos: cam.eye + ahead * 10.0 + Vec3::Y * 3.0,
+            area: half,
+            vel: Vec3::new(wind.x, -9.0, wind.y),
+            spread: 0.5,
+            gravity: 0.0,
+            drag: 0.0,
+            life,
+            size: (0.02, 0.02),
+            color0: color,
+            color1: color * glam::Vec4::new(1.0, 1.0, 1.0, 0.7),
+            additive: false,
+            stretch: true,
+            floor: None,
+            bounce: 0.0,
+            turbulence: 0.0,
+            prewarm: 0.0,
+        };
+        let carry = match self.rain {
+            Some(carry) => carry,
+            None => {
+                scene.particles.push(rs::ParticleBurst { count: (rate * life.1) as u32, prewarm: life.1, ..burst });
+                0.0
+            }
+        };
+        let owed = carry + rate * dt;
+        let n = owed.floor();
+        self.rain = Some(owed - n);
+        if n >= 1.0 {
+            burst.count = n as u32;
+            scene.particles.push(burst);
+        }
+    }
+
     /// One emitter's particles this frame; a new emitter starts in full swing.
     fn emit_particles(&mut self, scene: &mut Scene, e: &EmitterDef, pos: Vec3, key: (u32, u32), dt: f32) {
         let rate = crate::fx::emitter_rate(e);
@@ -998,6 +1068,17 @@ impl ViewBuilder {
         let time = (prev.time + (curr.time - prev.time) * alpha as f64) as f32;
         // A hook game's camera (`PlayFrame.camera`) replaces the rig's.
         let play = curr.present.as_deref();
+        // The atmosphere (the game's, or a preview preset) and the look it asks for, laid over
+        // the view settings before anything is emitted (region caches key on the result).
+        let atmosphere = crate::play::atmosphere_for(play.and_then(|p| p.view.as_ref()), settings.atmosphere);
+        let looked;
+        let settings = match atmosphere.as_deref().and_then(|v| crate::play::with_look(settings, v)) {
+            Some(s) => {
+                looked = s;
+                &looked
+            }
+            None => settings,
+        };
         let intent = play.and_then(|p| p.camera.as_ref());
         let camera = match intent {
             Some(c) => {
@@ -1159,21 +1240,33 @@ impl ViewBuilder {
         let roles: Vec<(&str, &str)> =
             palette_map.into_iter().flatten().map(|(role, hex)| (role.as_str(), hex.as_str())).collect();
         let palette = palette_hash(&roles);
+        // The environment's own style, baked into the region caches (per-object scenes only).
+        let env_style = if settings.style == StyleOverride::PerObject { settings.style_environment } else { settings.style };
+        // Night-only glows follow the street lights.
+        let street = atmosphere.as_deref().map_or(0.0, |v| v.street_lights.clamp(0.0, 1.0));
         for (key, chunk) in &curr.statics.chunks {
             let fresh = self.static_cache.get(key).is_some_and(|c| {
-                c.version == chunk.version && c.style == settings.style && c.materials == materials && c.palette == palette
+                c.version == chunk.version
+                    && c.style == settings.style
+                    && c.env_style == env_style
+                    && c.materials == materials
+                    && c.palette == palette
             });
             if !fresh {
                 let mut table = lock(&self.materials);
                 let mut sdfs = Vec::new();
                 let mut lights = Vec::new();
+                let mut night_lights = Vec::new();
                 let mut list = Vec::with_capacity(chunk.blocks.len());
                 for b in chunk.blocks.iter().filter(|b| b.alive) {
-                    // Blocks are world-mapped with seed 0, so neighbours (4 m floor tiles) join.
+                    // Blocks are world-mapped with seed 0, so neighbours (4 m floor tiles) join;
+                    // a material laid on the block's own faces (a facade) is seeded by its place.
+                    let at = b.center().to_array().map(f32::to_bits);
+                    let seed = materials::seed(at[0] ^ at[2].rotate_left(16), at[1]);
                     let material = b
                         .material
                         .as_deref()
-                        .map_or(0, |name| static_material(&mut table, &library, name, MapMode::World, 0, &roles));
+                        .map_or(0, |name| static_material(&mut table, &library, name, MapMode::World, seed, &roles));
                     let size = b.max - b.min;
                     let (mesh, scale, ext) = if b.has(block_flags::ROUNDED) {
                         (MeshKey::rounded_box(size * 0.5, (size.min_element() * 0.2).min(0.15)), Vec3::ONE, size * 0.5)
@@ -1208,14 +1301,23 @@ impl ViewBuilder {
                         let seed = materials::seed(at[0] ^ at[2].rotate_left(16), at[1]);
                         static_material(&mut table, &library, name, map, seed, &roles)
                     });
+                    // Night-only glows (lamps, signs, neon) carry the flag the renderer dims by
+                    // day; small dressing drops out with distance (glowing things never do).
+                    let night = d.glow == Glow::Night;
+                    let class = if d.emissive > 0.0 { 0 } else { distance_class(shape_radius(&d.shape), 0.5, 6.0) };
+                    let extra = class | if night { rs::flags::NIGHT } else { 0 };
                     match d.sway {
-                        Sway::Grass => list.push(grass_tuft(&d.shape, d.pos, d.rot, v3(d.color), style, material)),
+                        Sway::Grass => {
+                            let mut tuft = grass_tuft(&d.shape, d.pos, d.rot, v3(d.color), style, material);
+                            tuft.flags |= extra;
+                            list.push(tuft);
+                        }
                         sway => {
-                            let flags = if sway == Sway::Leaves { rs::flags::SWAY } else { 0 };
+                            let flags = extra | if sway == Sway::Leaves { rs::flags::SWAY } else { 0 };
                             emit_shape(
                                 &mut list,
                                 &mut sdfs,
-                                &mut lights,
+                                if night { &mut night_lights } else { &mut lights },
                                 &d.shape,
                                 d.pos,
                                 d.rot,
@@ -1253,9 +1355,24 @@ impl ViewBuilder {
                         scenery: false,
                     };
                     let mut surfaces = Surfaces { table: &mut table, library: &library, asset: &p.asset, roles: &chunk.palette };
+                    let (m0, s0) = (baked.meshes.len(), baked.sdfs.len());
                     for (i, part) in parts.parts.iter().enumerate().filter(|(_, part)| !part.hidden) {
                         let (color, material) = surfaces.part(part, materials::seed(id, i as u32));
                         emit_prim(&mut baked, &mut generated, part, &o, p.scale, settings.style, color, material);
+                    }
+                    // A small prop (a bin, a hydrant, a bench) drops out with distance as a
+                    // whole; its glowing parts never do.
+                    let reach = baked.meshes[m0..]
+                        .iter()
+                        .map(|m| m.transform.w_axis.truncate().distance(p.pos) + instance_radius(m))
+                        .chain(baked.sdfs[s0..].iter().map(|s| s.a.distance(p.pos).max(s.b.distance(p.pos)) + s.ra.max(s.rb)))
+                        .fold(0.0, f32::max);
+                    let class = distance_class(reach, 1.2, 8.0);
+                    for m in baked.meshes[m0..].iter_mut().filter(|m| m.emissive <= 0.0) {
+                        m.flags |= class;
+                    }
+                    for s in baked.sdfs[s0..].iter_mut().filter(|s| s.emissive <= 0.0) {
+                        s.flags |= class;
                     }
                     for (i, light) in parts.lights.iter().enumerate() {
                         let def = LightDef {
@@ -1274,7 +1391,7 @@ impl ViewBuilder {
                 list.append(&mut baked.meshes);
                 sdfs.append(&mut baked.sdfs);
                 lights.append(&mut baked.point_lights);
-                let custom = baked
+                let custom: Vec<(u64, Arc<MeshData>)> = baked
                     .custom_meshes
                     .into_iter()
                     .filter_map(|(mesh, data)| match mesh {
@@ -1282,7 +1399,7 @@ impl ViewBuilder {
                         _ => None,
                     })
                     .collect();
-                let terrain = chunk
+                let terrain: Vec<(MeshKey, Arc<MeshData>)> = chunk
                     .terrain
                     .iter()
                     .chain(chunk.meshes.iter())
@@ -1296,16 +1413,56 @@ impl ViewBuilder {
                         (MeshKey::Custom(h), Arc::new(terrain_mesh(t)))
                     })
                     .collect();
+                for (mk, _) in &terrain {
+                    list.push(MeshInstance {
+                        mesh: *mk,
+                        transform: Mat4::IDENTITY,
+                        color: Vec3::ONE,
+                        emissive: 0.0,
+                        style: style_of(Look::Cel, settings.style),
+                        flags: rs::flags::CUT_VERTEX,
+                        group: 1,
+                        material: 0,
+                        ext: Vec3::ZERO,
+                    });
+                }
+                // The environment's own style (per-object scenes), baked in like the rest.
+                if settings.style == StyleOverride::PerObject && env_style != StyleOverride::PerObject {
+                    for m in &mut list {
+                        m.style = part_style(m.style, env_style);
+                    }
+                    for s in &mut sdfs {
+                        s.style = part_style(s.style, env_style);
+                    }
+                }
+                // World bounds for culling (swaying parts move a little).
+                let boxes: HashMap<u64, (Vec3, Vec3)> = custom
+                    .iter()
+                    .map(|(k, d)| (*k, data_box(d)))
+                    .chain(terrain.iter().filter_map(|(mk, d)| match mk {
+                        MeshKey::Custom(k) => Some((*k, data_box(d))),
+                        _ => None,
+                    }))
+                    .collect();
+                let (min, max) = list
+                    .iter()
+                    .map(|m| instance_bounds(m, &boxes))
+                    .chain(sdfs.iter().map(sdf_bounds))
+                    .fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), (a, b)| (lo.min(a), hi.max(b)));
                 self.static_cache.insert(
                     *key,
                     RegionCache {
                         version: chunk.version,
                         style: settings.style,
+                        env_style,
                         materials,
                         palette,
-                        meshes: list,
-                        sdfs,
+                        meshes: Arc::new(list),
+                        sdfs: Arc::new(sdfs),
+                        min: min - Vec3::splat(1.0),
+                        max: max + Vec3::splat(1.0),
                         lights,
+                        night_lights,
                         terrain,
                         custom,
                         prop_lights,
@@ -1335,10 +1492,13 @@ impl ViewBuilder {
                 };
                 emit_label(&mut scene.texts, &label, &scene.camera);
             }
+            // The region's cached lists go to the renderer whole: it culls them by their bounds.
             let c = &self.static_cache[key];
-            scene.meshes.extend_from_slice(&c.meshes);
-            scene.sdfs.extend_from_slice(&c.sdfs);
+            scene.regions.push(rs::StaticRegion { min: c.min, max: c.max, meshes: c.meshes.clone(), sdfs: c.sdfs.clone() });
             scene.point_lights.extend_from_slice(&c.lights);
+            if street > 0.0 {
+                scene.point_lights.extend(c.night_lights.iter().map(|l| rs::PointLight { color: l.color * street, ..*l }));
+            }
             for (mesh, data) in &c.custom {
                 if self.generated.sent.insert(*mesh) {
                     scene.custom_meshes.push((MeshKey::Custom(*mesh), data.clone()));
@@ -1349,23 +1509,13 @@ impl ViewBuilder {
             }
             for (mk, data) in &c.terrain {
                 scene.custom_meshes.push((*mk, data.clone()));
-                scene.meshes.push(MeshInstance {
-                    mesh: *mk,
-                    transform: Mat4::IDENTITY,
-                    color: Vec3::ONE,
-                    emissive: 0.0,
-                    style: style_of(Look::Cel, settings.style),
-                    flags: rs::flags::CUT_VERTEX,
-                    group: 1,
-                    material: 0,
-                    ext: Vec3::ZERO,
-                });
             }
         }
         // A game's far view where nothing is loaded.
         if let Some(far) = play.and_then(|p| p.far.as_ref()) {
             let chunks = &curr.statics.chunks;
-            crate::play::emit_far(&mut scene, far, &mut self.far, |x, z| chunks.contains_key(&ChunkKey::Chunk(x, z)));
+            let style = style_of(Look::Cel, settings.style);
+            crate::play::emit_far(&mut scene, far, &mut self.far, style, |x, z| chunks.contains_key(&ChunkKey::Chunk(x, z)));
         }
         // Water catches up on longer gaps too (tools render a frame now and then).
         self.water_surfaces(&mut scene, curr, settings, since.min(0.5), to_sun);
@@ -1373,8 +1523,14 @@ impl ViewBuilder {
         let env_end = (scene.meshes.len(), scene.sdfs.len(), scene.dynamic.len());
         scene.fog =
             rs::Fog { enabled: settings.fog, center, start: settings.fog_start, end: settings.fog_end, color: scene.clear_color };
-        if let Some(v) = play.and_then(|p| p.view.as_ref()) {
+        if let Some(v) = atmosphere.as_deref() {
             crate::play::apply_view(&mut scene, v, center);
+            if settings.particles {
+                self.emit_rain(&mut scene, v.rain, v.wind, dt);
+            }
+        }
+        if !settings.particles || atmosphere.as_deref().is_none_or(|v| v.rain <= 0.0) {
+            self.rain = None;
         }
 
         // Dynamic objects.
@@ -1525,20 +1681,12 @@ fn mark_objects(scene: &mut Scene, from: (usize, usize, usize), scenery: &[u32])
 }
 
 /// Gives the characters and objects, and the environment, a surface style of their own
-/// (unlit markers, decals and glows keep theirs).
+/// (unlit markers, decals and glows keep theirs). Static regions bake the environment's in.
 fn restyle_parts(scene: &mut Scene, objects: StyleOverride, environment: StyleOverride) {
     if objects == StyleOverride::PerObject && environment == StyleOverride::PerObject {
         return;
     }
-    let pick = |style: Style, flags: u32| -> Style {
-        let ov = if flags & rs::flags::OBJECT != 0 { objects } else { environment };
-        match (style, ov) {
-            (Style::Unlit, _) | (_, StyleOverride::PerObject) => style,
-            (_, StyleOverride::Flat) => Style::Flat,
-            (_, StyleOverride::Cel) => Style::Cel,
-            (_, StyleOverride::Lit) => Style::Lit,
-        }
-    };
+    let pick = |style: Style, flags: u32| part_style(style, if flags & rs::flags::OBJECT != 0 { objects } else { environment });
     for m in &mut scene.meshes {
         m.style = pick(m.style, m.flags);
     }
@@ -1553,6 +1701,19 @@ fn restyle_parts(scene: &mut Scene, objects: StyleOverride, environment: StyleOv
 /// Flags every instance that passes `pick` (outline group, flags) as pixel art (groups are
 /// the entity id + 2 for objects and characters, 1 for level geometry).
 fn mark_pixel_art(scene: &mut Scene, pick: impl Fn(u32, u32) -> bool) {
+    // Static regions too: their shared lists are copied for this frame only when they change.
+    for r in &mut scene.regions {
+        if r.meshes.iter().any(|m| pick(m.group, m.flags)) {
+            for m in Arc::make_mut(&mut r.meshes).iter_mut().filter(|m| pick(m.group, m.flags)) {
+                m.flags |= rs::flags::PIXEL;
+            }
+        }
+        if r.sdfs.iter().any(|s| pick(s.group, s.flags)) {
+            for s in Arc::make_mut(&mut r.sdfs).iter_mut().filter(|s| pick(s.group, s.flags)) {
+                s.flags |= rs::flags::PIXEL;
+            }
+        }
+    }
     for m in &mut scene.meshes {
         if pick(m.group, m.flags) {
             m.flags |= rs::flags::PIXEL;
@@ -2173,6 +2334,86 @@ pub fn emit_shape(
     }
     if emissive > 0.5 {
         lights.push(rs::PointLight { position: pos, color: color * emissive, radius: 4.0 + emissive * 2.0, shadows: false });
+    }
+}
+
+/// A shape's bounding radius about its centre.
+fn shape_radius(shape: &Shape) -> f32 {
+    match *shape {
+        Shape::Box { half } | Shape::RoundedBox { half, .. } => half.length(),
+        Shape::Cylinder { half_height, radius } => (half_height * half_height + radius * radius).sqrt(),
+        Shape::Sphere { radius } => radius,
+        Shape::Capsule { half_height, radius } => half_height + radius,
+    }
+}
+
+/// The distance class of static dressing `radius` metres round: under `small` it drops out
+/// first (`flags::SMALL`), under `detail` next (`flags::DETAIL`); bigger things (buildings and
+/// their masses) stay to the fog's end.
+fn distance_class(radius: f32, small: f32, detail: f32) -> u32 {
+    if radius < small {
+        rs::flags::SMALL
+    } else if radius < detail {
+        rs::flags::DETAIL
+    } else {
+        0
+    }
+}
+
+/// An instance's half diagonal (built-in meshes fill the unit cube; parts built at their size
+/// carry it in `ext`).
+fn instance_radius(m: &MeshInstance) -> f32 {
+    if m.ext != Vec3::ZERO {
+        return m.ext.length();
+    }
+    let t = &m.transform;
+    0.5 * (t.x_axis.truncate().length_squared() + t.y_axis.truncate().length_squared() + t.z_axis.truncate().length_squared())
+        .sqrt()
+}
+
+/// The local box of an instance's mesh: built-ins fill the unit cube, rounded boxes are built at
+/// their size, custom meshes have their own (`custom`).
+fn mesh_box(mesh: MeshKey, custom: &HashMap<u64, (Vec3, Vec3)>) -> (Vec3, Vec3) {
+    match mesh {
+        MeshKey::RoundedBox { half_mm, .. } => {
+            let h = Vec3::new(half_mm[0] as f32, half_mm[1] as f32, half_mm[2] as f32) / 1000.0;
+            (-h, h)
+        }
+        MeshKey::Custom(k) => custom.get(&k).copied().unwrap_or((Vec3::splat(-0.5), Vec3::splat(0.5))),
+        _ => (Vec3::splat(-0.5), Vec3::splat(0.5)),
+    }
+}
+
+/// An instance's world bounds.
+fn instance_bounds(m: &MeshInstance, custom: &HashMap<u64, (Vec3, Vec3)>) -> (Vec3, Vec3) {
+    let (lo, hi) = mesh_box(m.mesh, custom);
+    let c = m.transform.transform_point3((lo + hi) * 0.5);
+    let h = (hi - lo) * 0.5;
+    let t = &m.transform;
+    let e = t.x_axis.truncate().abs() * h.x + t.y_axis.truncate().abs() * h.y + t.z_axis.truncate().abs() * h.z;
+    (c - e, c + e)
+}
+
+fn sdf_bounds(s: &SdfInstance) -> (Vec3, Vec3) {
+    let r = Vec3::splat(s.ra.max(s.rb));
+    (s.a.min(s.b) - r, s.a.max(s.b) + r)
+}
+
+/// The box round a mesh's vertices.
+fn data_box(d: &MeshData) -> (Vec3, Vec3) {
+    d.vertices
+        .iter()
+        .map(|v| Vec3::from(v.pos))
+        .fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), p| (lo.min(p), hi.max(p)))
+}
+
+/// A surface's style under a part's own override (unlit markers and glows keep theirs).
+fn part_style(style: Style, ov: StyleOverride) -> Style {
+    match (style, ov) {
+        (Style::Unlit, _) | (_, StyleOverride::PerObject) => style,
+        (_, StyleOverride::Flat) => Style::Flat,
+        (_, StyleOverride::Cel) => Style::Cel,
+        (_, StyleOverride::Lit) => Style::Lit,
     }
 }
 

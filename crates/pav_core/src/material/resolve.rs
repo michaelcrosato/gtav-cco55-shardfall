@@ -192,7 +192,7 @@ pub fn cost(layer: &LayerDoc) -> f32 {
     use Pattern::*;
     match layer.pattern {
         Brick | Planks | Tiles | Checker | Stripes | Gradient | Dots => 1.0,
-        Shingles | Wood | Wave | Magic => 1.5,
+        Shingles | Wood | Wave | Magic | Windows => 1.5,
         Voronoi | Cobbles => 2.5,
         Noise => 0.5 * layer.int("detail", 3) as f32,
     }

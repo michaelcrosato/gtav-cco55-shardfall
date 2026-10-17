@@ -58,7 +58,15 @@ pub mod kernel {
     pub const DOTS: u32 = 9;
     /// variant 0 round, 1 square, 2 point.
     pub const SHINGLES: u32 = 10;
+    /// Facade windows (lit at night by the scene's windows level).
+    pub const WINDOWS: u32 = 11;
 }
+
+/// The lit colours a windows layer uses when it names none: warm tungsten, warm white, a cool
+/// fluorescent and a dim amber.
+pub const WINDOW_LIGHTS: [&str; 4] = ["#ffc070", "#ffd9a0", "#cddcf5", "#f0a050"];
+/// A windows layer's glass when it names no colour (and no shade).
+pub const WINDOW_GLASS: &str = "#28323b";
 
 /// One pattern layer, laid out as `MatLayer` in the WGSL library.
 #[repr(C)]
@@ -146,20 +154,34 @@ pub struct Sample {
     pub seed: u32,
     /// Metres per pixel on the surface (see `footprint`).
     pub footprint: f32,
+    /// The scene's windows level (0..1, `Scene::windows` in the renderer): how many panes of
+    /// `windows` layers are lit.
+    pub windows: f32,
 }
 
 impl Sample {
-    /// A sample whose local frame is the world's (a world-mapped surface, or a test).
+    /// A sample whose local frame is the world's (a world-mapped surface, or a test), by day.
     pub fn at(p: Vec3, n: Vec3, footprint: f32) -> Self {
-        Sample { local: p, local_normal: n, world: p, world_normal: n, half_extents: Vec3::splat(0.5), seed: 0, footprint }
+        Sample {
+            local: p,
+            local_normal: n,
+            world: p,
+            world_normal: n,
+            half_extents: Vec3::splat(0.5),
+            seed: 0,
+            footprint,
+            windows: 0.0,
+        }
     }
 }
 
-/// The evaluated surface: linear albedo and the layers' glow (the instance's emissive adds).
+/// The evaluated surface: linear albedo, the layers' glow (the instance's emissive adds) and
+/// how mirror-like it is (glass: the renderer reflects the sky by that much).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Shaded {
     pub rgb: Vec3,
     pub glow: f32,
+    pub reflect: f32,
 }
 
 /// Metres per pixel on a surface, as the kernel computes it. `pixel` is `Globals.params.w`,
@@ -184,6 +206,7 @@ pub fn default_size(pattern: Pattern) -> [f32; 2] {
         Brick => return [0.4, 0.2],
         Planks => return [1.2, 0.2],
         Shingles => return [0.3, 0.2],
+        Windows => return [3.0, 3.4],
         Noise | Checker | Magic | Tiles => 0.5,
         Voronoi | Stripes => 0.3,
         Cobbles => 0.25,
@@ -202,6 +225,7 @@ pub fn default_gap(pattern: Pattern) -> Option<f32> {
         Brick | Cobbles => 0.03,
         Planks | Shingles => 0.015,
         Tiles | Voronoi => 0.02,
+        Windows => 0.08,
         _ => return None,
     })
 }
@@ -347,6 +371,13 @@ fn pack_layer(index: usize, l: &LayerDoc, turn: bool, roles: &[(&str, &str)]) ->
             cellular = (0.15, 0.4, 0.05);
             kernel::SHINGLES
         }
+        Windows => {
+            let s = l.size2(size);
+            let pane = l.pair("pane", [0.55, 0.5]);
+            o.a = [s[0], s[1], pane[0], pane[1]];
+            o.b = [l.num("cover", 0.5), 0.0, 0.0, 0.0];
+            kernel::WINDOWS
+        }
     };
     let (axis, dir) = match l.axis() {
         Some(Param::Vector(v)) => (3, v.normalize()),
@@ -368,7 +399,13 @@ fn pack_layer(index: usize, l: &LayerDoc, turn: bool, roles: &[(&str, &str)]) ->
         Some("not_prev") => 2,
         _ => 0,
     };
-    let cells = l.cells();
+    let default_lights: Vec<String>;
+    let cells = if l.pattern == Windows && l.cells().is_empty() {
+        default_lights = WINDOW_LIGHTS.iter().map(|c| c.to_string()).collect();
+        &default_lights[..]
+    } else {
+        l.cells()
+    };
     for (k, cell) in cells.iter().take(4).enumerate() {
         o.cells[k] = rgba8(cell, roles);
     }
@@ -385,6 +422,10 @@ fn pack_layer(index: usize, l: &LayerDoc, turn: bool, roles: &[(&str, &str)]) ->
             o.paint = linear(color, roles).extend(strength).to_array();
             0
         }
+        None if l.pattern == Windows && !l.params.contains_key("shade") => {
+            o.paint = linear(WINDOW_GLASS, roles).extend(strength).to_array();
+            0
+        }
         None => {
             o.paint = [l.num("shade", 0.6).powf(2.2), 0.0, 0.0, strength];
             1
@@ -398,6 +439,17 @@ fn pack_layer(index: usize, l: &LayerDoc, turn: bool, roles: &[(&str, &str)]) ->
         0,
         0,
     ];
+    if l.pattern == Windows {
+        // c: lit brightness variety, -, lit glow, frame width; head.z the frame colour (alpha 0:
+        // the wall darkened); head.w panes across; dir.x the glass's reflection.
+        o.c = [l.num("vary", 0.25), 0.0, l.num("glow", 1.6), l.num("gap", default_gap(Windows).unwrap_or(0.08))];
+        o.head[2] = match l.params.get("frame") {
+            Some(Param::Color(frame)) => rgba8(frame, roles),
+            _ => 0,
+        };
+        o.head[3] = l.int("detail", 1).clamp(1, 4);
+        o.dir = [l.num("reflect", 0.5), 0.0, 0.0, 0.0];
+    }
     o
 }
 
@@ -746,6 +798,7 @@ pub fn eval_packed(mat: &GpuMaterial, base: Vec3, s: &Sample) -> Shaded {
     let p3 = p - n * 1e-3;
     let mut c = base;
     let mut glow = 0.0;
+    let mut refl = 0.0;
     let mut prev = 0.0;
     for l in &mat.layers[..count] {
         let kind = l.head[0] & 0xff;
@@ -757,6 +810,27 @@ pub fn eval_packed(mat: &GpuMaterial, base: Vec3, s: &Sample) -> Shaded {
         let ncells = (l.head[0] >> 28) & 0xf;
         let salt = l.head[1].wrapping_add(seed.wrapping_mul(0x9e3779b9));
         let fw = fw0;
+        if kind == kernel::WINDOWS {
+            // Windows paint their own wall, frames, glass and lit panes, on vertical faces only.
+            let mut side = 1.0 - smoothstep(0.3, 0.7, wn.y.abs());
+            match facing {
+                1 => side *= smoothstep(0.3, 0.7, wn.y),
+                2 => side *= smoothstep(0.3, 0.7, -wn.y),
+                _ => {}
+            }
+            match maskby {
+                1 => side *= prev,
+                2 => side *= 1.0 - prev,
+                _ => {}
+            }
+            let w = pat_windows(p, n, ext * inv_scale, map != 1, l, fw, salt, c, s.windows);
+            let strength = side * l.paint[3];
+            c = c.lerp(w.col, strength);
+            glow += w.glow * strength;
+            refl += w.refl * strength;
+            prev = w.m * side;
+            continue;
+        }
         let dir = Vec3::new(l.dir[0], l.dir[1], l.dir[2]);
         let mut uv = if map == 2 && n.y.abs() < 0.7 {
             // around the part's local y axis: u = arc length, v = height
@@ -947,5 +1021,76 @@ pub fn eval_packed(mat: &GpuMaterial, base: Vec3, s: &Sample) -> Shaded {
         glow += l.c[2] * a;
         prev = m;
     }
-    Shaded { rgb: c, glow }
+    Shaded { rgb: c, glow, reflect: refl }
+}
+
+/// A windows layer's surface (`Win` in the WGSL library).
+struct Win {
+    col: Vec3,
+    glow: f32,
+    refl: f32,
+    /// How much of the pixel is window (frame and glass).
+    m: f32,
+}
+
+/// Facade windows on a part's vertical faces (`pat_windows` in the WGSL library): bays `a[0]`
+/// wide and storeys `a[1]` high, each with a pane `a[2]` x `a[3]` of its cell in a frame `c[3]`
+/// wide, split by `head[3]` - 1 mullions; `fit` (object and axis maps) fits whole bays across
+/// each face and whole storeys up from its bottom. After dark a share `b[0]` x `level` of the
+/// panes is lit, picked per pane by a hash (floors lean together), in one of the cells' colours.
+#[allow(clippy::too_many_arguments)]
+fn pat_windows(p: Vec3, n: Vec3, ext: Vec3, fit: bool, l: &GpuLayer, fw: f32, salt: u32, base: Vec3, level: f32) -> Win {
+    let a = n.abs();
+    let (mut u, mut eu, mut face) = (p.x, ext.x, if n.z > 0.0 { 2 } else { 3 });
+    if a.x >= a.z {
+        u = p.z;
+        eu = ext.z;
+        face = if n.x > 0.0 { 0 } else { 1 };
+    }
+    let mut v = p.y;
+    let (mut cw, mut ch) = (l.a[0], l.a[1]);
+    if fit {
+        cw = 2.0 * eu / (2.0 * eu / cw + 0.5).floor().max(1.0);
+        ch = 2.0 * ext.y / (2.0 * ext.y / ch + 0.5).floor().max(1.0);
+        u += eu;
+        v += ext.y;
+    }
+    let col = (u / cw).floor();
+    let row = (v / ch).floor();
+    let pw = l.a[2] * cw;
+    let ph = l.a[3] * ch;
+    let gap = l.c[3];
+    let du = (u / cw - col - 0.5) * cw;
+    let dv = (v / ch - row - 0.5 - 0.12 * (1.0 - l.a[3])) * ch;
+    let panes = l.head[3] as f32;
+    let mut glass = pulse(du, pw, fw) * pulse(dv, ph, fw);
+    if panes > 1.0 {
+        let x = (du / pw + 0.5) * panes;
+        glass *= 1.0 - pulse((x - (x + 0.5).floor()).abs() * pw / panes, gap, fw);
+    }
+    let opening = pulse(du, pw + 2.0 * gap, fw) * pulse(dv, ph + 2.0 * gap, fw);
+    // Windows a few pixels small fade to their mean.
+    let k = fade(pw.min(ph), fw);
+    let glass_mean = l.a[2] * l.a[3] * (1.0 - (panes - 1.0) * gap / pw).max(0.0);
+    let open_mean = ((pw + 2.0 * gap) * (ph + 2.0 * gap) / (cw * ch)).min(1.0);
+    glass = mix(glass_mean, glass, k);
+    let frame = (mix(open_mean, opening, k) - glass).max(0.0);
+    // After dark: each pane against the lit share, some floors busier than others.
+    let h = hash3i(col as i32, row as i32, face + 16, salt);
+    let busy = 0.4 + 1.2 * rnd(hash3i(face, row as i32, 23, salt));
+    let share = l.b[0] * level;
+    let lit = mix(share, if rnd(h) < share * busy { 1.0 } else { 0.0 }, k);
+    let ncells = ((l.head[0] >> 28) & 0xf).max(1);
+    let pick = ((rnd(pcg(h ^ 0x51)) * ncells as f32) as u32).min(ncells - 1);
+    let vary = 1.0 + l.c[0] * (2.0 * rnd(pcg(h ^ 0xa3)) - 1.0);
+    let mean = Vec3::new(l.b[1], l.b[2], l.b[3]);
+    let lit_col = mean.lerp(srgb8_to_linear(l.cells[pick as usize]) * (vary * vary), k);
+    let glass_col = if (l.head[0] >> 24) & 0xf == 1 { base * l.paint[0] } else { Vec3::new(l.paint[0], l.paint[1], l.paint[2]) };
+    let frame_col = if l.head[2] >> 24 != 0 { srgb8_to_linear(l.head[2]) } else { base * 0.62 };
+    Win {
+        col: base * (1.0 - glass - frame) + glass_col.lerp(lit_col, lit) * glass + frame_col * frame,
+        glow: l.c[2] * glass * lit,
+        refl: l.dir[0] * glass * (1.0 - lit),
+        m: glass + frame,
+    }
 }

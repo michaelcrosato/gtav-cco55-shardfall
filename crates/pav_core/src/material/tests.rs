@@ -43,7 +43,7 @@ fn errors_name_the_path_and_a_fix() {
         got,
         [
             r#"colour: unknown key — did you mean "color"?"#,
-            r#"layers[0].type: unknown pattern "brik" (expected noise, voronoi, wave, brick, checker, gradient, magic, planks, tiles, cobbles, stripes, dots, shingles, wood) — did you mean "brick"?"#,
+            r#"layers[0].type: unknown pattern "brik" (expected noise, voronoi, wave, brick, checker, gradient, magic, planks, tiles, cobbles, stripes, dots, shingles, wood, windows) — did you mean "brick"?"#,
             r#"layers[1].sise: unknown key — did you mean "size"?"#,
             "layers[2].rings: unknown key — rings is for wave; a stripes takes size, axis, cover, soft, color, shade, strength, glow, facing, masked_by, seed",
             r##"layers[2].color: "red" is not a #rrggbb colour or a role (expected #rrggbb or $floor, $floor2, $wall, $pillar, $accent, $light) — use a hex colour such as "#ff0000""##,
@@ -300,7 +300,8 @@ fn golden_samples(material: &Material) -> String {
                 }
                 _ => (Vec3::new(a * 6.0, b * 1.9 + 1.9, 0.0), Vec3::Z, Vec3::splat(2.0)),
             };
-            let sample = Sample { local: p, local_normal: n, world: p, world_normal: n, half_extents: ext, seed, footprint };
+            let sample =
+                Sample { local: p, local_normal: n, world: p, world_normal: n, half_extents: ext, seed, footprint, windows: 0.0 };
             let shaded = packed.eval(&sample);
             out += &crate::color::to_hex(crate::Color(shaded.rgb.to_array()));
             out += &format!("{} ", (shaded.glow * 32.0).round());
@@ -339,8 +340,12 @@ const GOLDEN: &[(&str, u64)] = &[
 #[test]
 fn eval_matches_its_golden() {
     let core = Library::core();
-    let got: Vec<(String, u64)> =
-        core.names().map(|name| (name.to_string(), fnv(&golden_samples(core.get(name).unwrap())))).collect();
+    // The engine's own materials; a game's embedded tier (`MAT/gtf/…`) tunes freely.
+    let got: Vec<(String, u64)> = core
+        .names()
+        .filter(|name| !name.starts_with("MAT/gtf/"))
+        .map(|name| (name.to_string(), fnv(&golden_samples(core.get(name).unwrap()))))
+        .collect();
     let text: Vec<String> = got.iter().map(|(name, hash)| format!("    ({name:?}, {hash:#018x}),")).collect();
     let want: Vec<(String, u64)> = GOLDEN.iter().map(|(name, hash)| (name.to_string(), *hash)).collect();
     assert_eq!(
@@ -350,6 +355,97 @@ fn eval_matches_its_golden() {
         text.join("\n"),
         &golden_samples(core.get("MAT/oak_planks").unwrap())[..120]
     );
+}
+
+/// A facade sample on a wall face (local normal +z) of a part with half extents `half`.
+fn facade_sample(half: Vec3, x: f32, y: f32, n: Vec3, level: f32, footprint: f32) -> Sample {
+    let p = Vec3::new(x, y, half.z);
+    Sample { local: p, local_normal: n, world: p, world_normal: n, half_extents: half, seed: 9, footprint, windows: level }
+}
+
+#[test]
+fn windows_fit_each_face_and_light_up_after_dark() {
+    let layer = json!({"type": "windows", "size": [300, 350], "pane": [0.5, 0.5], "cover": 0.5, "frame": "#ffffff"});
+    let lib = library(&[("facade", json!({"color": "#c0b0a0", "map": "object", "layers": [layer]}))]);
+    let material = lib.get("MAT/facade").unwrap();
+    assert!(material.check().is_empty(), "{:?}", material.check());
+    let packed = material.pack(MapMode::Object, &[]);
+    let l = packed.gpu.layers[0];
+    assert_eq!(l.head[0] & 0xff, kernel::WINDOWS);
+    assert_eq!(l.head[0] >> 28, 4, "the default lit colours");
+    assert_eq!((l.a, l.b[0], l.c[3], l.head[3]), ([3.0, 3.5, 0.5, 0.5], 0.5, 0.08, 1));
+    assert_eq!(l.head[2], 0xffff_ffff, "the frame colour, opaque");
+
+    // A 10 m wide, 7 m high face: three bays of 3.33 m, two storeys of 3.5 m.
+    let half = Vec3::new(5.0, 3.5, 0.2);
+    let eval = |x: f32, y: f32, n: Vec3, level: f32| packed.eval(&facade_sample(half, x, y, n, level, 0.002));
+    let (bay, storey) = (10.0 / 3.0, 3.5);
+    let pane = |col: f32, row: f32| (-5.0 + (col + 0.5) * bay, -3.5 + (row + 0.56) * storey);
+    let glass = Vec3::from_array(crate::Color::hex(WINDOW_GLASS).0);
+    let (x, y) = pane(0.0, 0.0);
+    let day = eval(x, y, Vec3::Z, 0.0);
+    assert!((day.rgb - glass).abs().max_element() < 1e-5 && day.glow == 0.0 && day.reflect > 0.4, "{day:?}");
+    // The last bay ends at the face's edge: its pane is whole and centred.
+    let (x, y) = pane(2.0, 1.0);
+    assert!((eval(x, y, Vec3::Z, 0.0).rgb - glass).abs().max_element() < 1e-5);
+    let base = packed.base;
+    assert_eq!(eval(-4.98, -3.48, Vec3::Z, 0.0).rgb, base, "the face's corner is wall");
+    // Frames round the pane: white.
+    let (x, y) = pane(1.0, 0.0);
+    let frame = eval(x + 0.25 * bay + 0.04, y, Vec3::Z, 0.0).rgb;
+    assert!((frame - Vec3::ONE).abs().max_element() < 1e-5, "{frame}");
+    // Roofs and floors take no windows.
+    assert_eq!(eval(x, y, Vec3::Y, 1.0).rgb, base);
+
+    // By day no pane is lit; at full night about the cover's share is, whole floors leaning.
+    let big = Vec3::new(60.0, 70.0, 0.2);
+    let lit = |level: f32| {
+        let mut n = 0;
+        for col in 0..40 {
+            for row in 0..40 {
+                let (x, y) = (-60.0 + (col as f32 + 0.5) * 3.0, -70.0 + (row as f32 + 0.56) * 3.5);
+                n += (packed.eval(&facade_sample(big, x, y, Vec3::Z, level, 0.002)).glow > 0.0) as usize;
+            }
+        }
+        n as f32 / 1600.0
+    };
+    assert_eq!(lit(0.0), 0.0);
+    let night = lit(1.0);
+    assert!((night - 0.5).abs() < 0.07, "lit share {night}");
+    assert!(lit(0.4) < night * 0.6, "fewer at a lower level");
+    // Far away the panes are below a pixel: the mean glow, the same everywhere.
+    let far = |x: f32| packed.eval(&facade_sample(big, x, 1.3, Vec3::Z, 1.0, 2.0));
+    assert!(far(0.4).glow > 0.0 && (far(0.4).glow - far(17.9).glow).abs() < 1e-6);
+}
+
+#[test]
+fn windows_layers_explain_their_mistakes() {
+    let got = problems(json!({
+        "color": "#808080",
+        "layers": [{"type": "windows", "glass": "#203040", "lit": "#ffcc88", "pane": [0.5, 1.5], "mullions": 2}],
+    }));
+    assert_eq!(
+        got[..3],
+        [
+            "layers[0].glass: unknown key — use color (the glass)",
+            "layers[0].lit: unknown key — use cells (the lit colours) and cover (the share lit at night)",
+            "layers[0].mullions: unknown key — use detail (panes across, 1-4)",
+        ]
+    );
+    assert!(got.len() == 4 && got[3].starts_with("layers[0].pane[1]: 1.5 is outside"), "{got:?}");
+    let got = problems(json!({"color": "#808080", "layers": [{"type": "facade"}]}));
+    assert!(got[0].contains("use windows"), "{got:?}");
+}
+
+#[test]
+fn the_game_facades_load() {
+    let core = Library::core();
+    for name in ["glass_curtain", "office_concrete", "stucco_windows", "brick_windows"] {
+        let full = format!("MAT/gtf/{name}");
+        let material = core.get(&full).unwrap_or_else(|| panic!("{full}: {:?}", core.issues().get(&full)));
+        assert!(material.layers.iter().any(|l| l.pattern == crate::props::doc::Pattern::Windows), "{full}");
+        assert!(core.issues().get(&full).is_none(), "{full}: {:?}", core.issues().get(&full));
+    }
 }
 
 #[test]

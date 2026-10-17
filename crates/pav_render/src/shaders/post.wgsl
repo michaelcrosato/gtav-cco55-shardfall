@@ -26,7 +26,7 @@ struct Post {
     sun_color: vec4<f32>,      // rgb sunlight (linear, times intensity), w = point light count
     sky: vec4<f32>,            // ambient sky light: the haze's own glow
     air: vec4<f32>,            // haze density, haze height (m), haze base height (m), light shafts
-    air2: vec4<f32>,           // forward scattering (0..0.95), lamp halos
+    air2: vec4<f32>,           // forward scattering (0..0.95), lamp halos, z = 1 with a sky
 };
 
 struct PointLight {
@@ -186,9 +186,10 @@ fn air_light(px: vec2<i32>, dims: vec2<i32>) -> vec4<f32> {
     var light = vec3<f32>(0.0);
     var trans = 1.0;
     let sigma0 = post.air.x * 0.05;
-    // Pixels with no surface (sky, or the void around a level) get no haze: their ray would
-    // run for ever through it.
-    if (sigma0 > 0.0 && d < 1.0) {
+    // Pixels with no surface (the void around a level) get no haze: their ray would run for
+    // ever through it. A drawn sky takes it like distant geometry (the ray stops at 150 m), so
+    // the horizon and what stands on it agree.
+    if (sigma0 > 0.0 && (d < 1.0 || post.air2.z > 0.5)) {
         let h = post.air.y;
         let base = post.air.z;
         // March only where there is haze to speak of: from a few haze heights above its base

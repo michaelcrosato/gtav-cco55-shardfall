@@ -14,6 +14,10 @@ pub struct Gpu {
     studio_mode: pav_core::prop_preview::StudioMode,
     /// The UI kit's offscreen renderer for `capture hud=true`, made on first use.
     ui: Option<pav_ui::Offscreen>,
+    /// How long the last scene took the view to build (CPU milliseconds).
+    pub view_ms: f64,
+    /// The `view.atmosphere` of the last scene: a new preset starts without the last one's rain.
+    atmosphere: pav_view::atmosphere::Atmosphere,
 }
 
 impl Gpu {
@@ -24,6 +28,26 @@ impl Gpu {
             self.renderer.clear_particles();
             self.studio_mode = studio_mode;
         }
+    }
+
+    /// Builds one still scene of `frame`, timing the view (`view_ms`).
+    fn build(
+        &mut self,
+        frame: &RenderFrame,
+        camera: &CameraRig,
+        aspect: f32,
+        view: &ViewSettings,
+        focus: Vec3,
+    ) -> pav_render::Scene {
+        if view.atmosphere != self.atmosphere {
+            self.atmosphere = view.atmosphere;
+            self.builder.clear_particles();
+            self.renderer.clear_particles();
+        }
+        let t = std::time::Instant::now();
+        let scene = self.builder.build(frame, frame, 1.0, camera, aspect, view, focus);
+        self.view_ms = t.elapsed().as_secs_f64() * 1000.0;
+        scene
     }
 }
 
@@ -160,6 +184,8 @@ impl Session {
                 builder: ViewBuilder::new(),
                 studio_mode: pav_core::prop_preview::StudioMode::World,
                 ui: None,
+                view_ms: 0.0,
+                atmosphere: Default::default(),
             });
         }
         Ok(self.gpu.as_mut().unwrap())
@@ -332,7 +358,7 @@ impl Session {
         if !frame.studio_active() {
             gpu.builder.add_events(&events);
         }
-        let scene = gpu.builder.build(&frame, &frame, 1.0, &camera, width as f32 / height as f32, &view, focus);
+        let scene = gpu.build(&frame, &camera, width as f32 / height as f32, &view, focus);
         pav_render::capture::render_to_rgba(&mut gpu.renderer, &scene, width, height)
     }
 
@@ -354,7 +380,7 @@ impl Session {
         if !frame.studio_active() {
             gpu.builder.add_events(&events);
         }
-        let scene = gpu.builder.build(&frame, &frame, 1.0, &camera, width as f32 / height as f32, &view, focus);
+        let scene = gpu.build(&frame, &camera, width as f32 / height as f32, &view, focus);
         let host = pav_ui::HostInfo {
             device: pav_core::input::Device::PlayStation,
             keys: play.app.keys.as_deref(),
@@ -377,7 +403,7 @@ impl Session {
         let view = self.view_for(frame);
         let gpu = self.gpu()?;
         gpu.prepare_frame(frame);
-        let scene = gpu.builder.build(frame, frame, 1.0, &camera, width as f32 / height as f32, &view, frame.focus);
+        let scene = gpu.build(frame, &camera, width as f32 / height as f32, &view, frame.focus);
         pav_render::capture::render_to_rgba(&mut gpu.renderer, &scene, width, height)
     }
 
@@ -394,7 +420,7 @@ impl Session {
         if !frame.studio_active() {
             gpu.builder.add_events(&events);
         }
-        let scene = gpu.builder.build(&frame, &frame, 1.0, &camera, width as f32 / height as f32, &view, focus);
+        let scene = gpu.build(&frame, &camera, width as f32 / height as f32, &view, focus);
         let vp = scene.camera.proj * scene.camera.view;
         Ok((pav_render::capture::render_to_rgba(&mut gpu.renderer, &scene, width, height)?, vp))
     }

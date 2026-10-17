@@ -2,18 +2,20 @@
 //! and the things it draws from game state (markers, held items, route ribbons, tracers,
 //! decals, extra lights, world text).
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use glam::{Mat4, Quat, Vec3, Vec4};
+use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
 use pav_core::Color;
-use pav_core::present::{CameraIntent, DrawList, FarView, ViewIntent};
+use pav_core::present::{CameraIntent, DrawList, FarView, Glow, SurfaceStyle, ToneCurve, ViewIntent};
 use pav_render::CameraData;
 use pav_render::mesh::{MeshData, Vertex};
 use pav_render::scene::{self as rs, MeshInstance, MeshKey, Scene, Style};
 use pav_render::text::{Anchor, Text3d};
 
-use crate::build::{StyleOverride, style_of};
+use crate::atmosphere::Atmosphere;
+use crate::build::{StyleOverride, TonemapChoice, ViewSettings, style_of};
 
 /// Draw-list outline group: one group for everything a game draws this way.
 const GROUP: u32 = 0x7f2;
@@ -60,22 +62,136 @@ pub fn camera(prev: Option<&CameraIntent>, curr: &CameraIntent, alpha: f32, aspe
     CameraData { view, proj, eye, forward, ortho: false }
 }
 
-/// Lays the game's atmosphere over the scene the view settings made: sun, ambient light, sky
-/// colour, fog, exposure, bloom, haze, light shafts and grading. `center` is where the camera
-/// looks (shadows and fog are centred there).
+/// The atmosphere a frame is drawn with: a preview preset (`view.atmosphere`) in place of the
+/// game's, keeping the game's look and shadow radius, or the game's own.
+pub fn atmosphere_for(game: Option<&ViewIntent>, preset: Atmosphere) -> Option<Cow<'_, ViewIntent>> {
+    let Some(mut v) = preset.intent() else { return game.map(Cow::Borrowed) };
+    if let Some(g) = game {
+        v.shadow_radius = g.shadow_radius;
+        v.style = g.style;
+        v.style_objects = g.style_objects;
+        v.style_environment = g.style_environment;
+        v.outlines = g.outlines;
+        v.tonemap = g.tonemap;
+        v.bloom_threshold = g.bloom_threshold;
+        v.haze_height = g.haze_height;
+        v.gi = g.gi;
+    }
+    Some(Cow::Owned(v))
+}
+
+fn style_override(s: SurfaceStyle) -> StyleOverride {
+    match s {
+        SurfaceStyle::PerObject => StyleOverride::PerObject,
+        SurfaceStyle::Flat => StyleOverride::Flat,
+        SurfaceStyle::Cel => StyleOverride::Cel,
+        SurfaceStyle::Lit => StyleOverride::Lit,
+    }
+}
+
+/// The view settings with the game's look laid over them (`ViewIntent::style`, outlines,
+/// tonemap, bloom threshold, haze height, GI), or None when the intent sets none of it.
+pub fn with_look(settings: &ViewSettings, v: &ViewIntent) -> Option<ViewSettings> {
+    let looks = v.style.is_some()
+        || v.style_objects.is_some()
+        || v.style_environment.is_some()
+        || v.outlines.is_some()
+        || v.tonemap.is_some()
+        || v.bloom_threshold.is_some()
+        || v.haze_height.is_some()
+        || v.gi.is_some();
+    if !looks {
+        return None;
+    }
+    let mut s = settings.clone();
+    if let Some(style) = v.style {
+        s.style = style_override(style);
+    }
+    if let Some(style) = v.style_objects {
+        s.style_objects = style_override(style);
+    }
+    if let Some(style) = v.style_environment {
+        s.style_environment = style_override(style);
+    }
+    if let Some(on) = v.outlines {
+        s.outlines = on;
+    }
+    if let Some(curve) = v.tonemap {
+        s.tonemap = match curve {
+            ToneCurve::Clamp => TonemapChoice::Clamp,
+            ToneCurve::SoftKnee => TonemapChoice::SoftKnee,
+            ToneCurve::Aces => TonemapChoice::Aces,
+        };
+    }
+    if let Some(t) = v.bloom_threshold {
+        s.bloom_threshold = t.max(0.0);
+    }
+    if let Some(h) = v.haze_height {
+        s.haze_height = h.max(0.1);
+    }
+    if let Some(gi) = v.gi {
+        s.gi = gi.max(0.0);
+    }
+    Some(s)
+}
+
+/// Where the sun's shadow square goes: ahead of the camera, half its radius past the point it
+/// looks at, along the view's ground direction (the renderer snaps it to shadow texels).
+pub fn shadow_center(cam: &CameraData, center: Vec3, radius: f32) -> Vec3 {
+    let ahead = Vec3::new(cam.forward.x, 0.0, cam.forward.z).normalize_or_zero();
+    center + ahead * (radius * 0.5)
+}
+
+/// The sun disc's radiance per unit of sunlight (it must bloom).
+const SUN_DISC: f32 = 14.0;
+
+/// Lays the game's atmosphere over the scene the view settings made: sun and its shadows,
+/// ambient light, the sky dome, fog, exposure, bloom, haze, light shafts, grading, wet surfaces,
+/// lightning, street lights and lit windows. `center` is where the camera looks (the shadow
+/// square sits ahead of it); fog is measured from the camera.
 pub fn apply_view(scene: &mut Scene, v: &ViewIntent, center: Vec3) {
     scene.sun.direction = v.sun_dir.normalize_or(Vec3::NEG_Y);
     scene.sun.color = v3(v.sun_color) * v.sun_intensity.max(0.0);
-    scene.sun.shadow_center = center;
     scene.sun.shadow_radius = v.shadow_radius.max(5.0);
-    scene.ambient.sky = v3(v.ambient_sky) * v.ambient;
-    scene.ambient.ground = v3(v.ambient_ground) * v.ambient;
+    scene.sun.shadow_center = shadow_center(&scene.camera, center, scene.sun.shadow_radius);
+    // A lightning flash lights everything for a moment, a little blue.
+    let flash = v.sky.as_ref().map_or(0.0, |s| s.lightning.clamp(0.0, 1.0));
+    let boost = Vec3::new(0.55, 0.6, 0.75) * (flash * 0.7);
+    scene.ambient.sky = v3(v.ambient_sky) * v.ambient + boost;
+    scene.ambient.ground = v3(v.ambient_ground) * v.ambient + boost * 0.6;
     if let Some(sky) = &v.sky {
         scene.clear_color = v3(sky.horizon);
+        let wind = if v.wind == Vec2::ZERO { Vec2::new(3.0, 1.0) } else { v.wind * 3.0 };
+        scene.sky = Some(rs::Sky {
+            zenith: v3(sky.zenith),
+            horizon: v3(sky.horizon),
+            ground: v3(sky.ground),
+            to_sun: -scene.sun.direction,
+            sun_size: sky.sun_size.max(0.0),
+            sun_color: v3(v.sun_color) * (v.sun_intensity.max(0.0) * SUN_DISC),
+            glow: v3(sky.glow),
+            to_moon: sky.moon_dir.map(|m| m.normalize_or(Vec3::Y)),
+            stars: sky.stars,
+            clouds: sky.clouds,
+            cloud_color: v3(sky.cloud_color),
+            wind,
+            lightning: flash,
+        });
     }
+    if v.wind != Vec2::ZERO {
+        // Foliage, banners and grass lean with the game's wind.
+        scene.wind.direction = v.wind.normalize();
+        scene.wind.strength = (v.wind.length() * 0.25).min(3.0);
+    }
+    scene.wetness = v.wetness.clamp(0.0, 1.0);
+    scene.street_lights = v.street_lights.clamp(0.0, 1.0);
+    scene.windows = v.windows.clamp(0.0, 1.0);
     match &v.fog {
         Some(f) => {
-            scene.fog = rs::Fog { enabled: true, center, start: f.start, end: f.end.max(f.start + 1.0), color: v3(f.color) };
+            // Measured from the camera: haze grows with distance from the viewer, whatever the
+            // camera looks at (a drone shot's target is hundreds of metres away).
+            let eye = scene.camera.eye;
+            scene.fog = rs::Fog { enabled: true, center: eye, start: f.start, end: f.end.max(f.start + 1.0), color: v3(f.color) };
         }
         None => {
             scene.fog.enabled = false;
@@ -121,12 +237,14 @@ pub fn emit_draw(scene: &mut Scene, draw: &DrawList, cam: &CameraData, ov: Style
         }
     }
     for p in &draw.prims {
-        let flags = rs::flags::NO_CUT | if p.shadow { 0 } else { rs::flags::NO_SHADOW };
+        let night = if p.glow == Glow::Night { rs::flags::NIGHT } else { 0 };
+        let flags = rs::flags::NO_CUT | night | if p.shadow { 0 } else { rs::flags::NO_SHADOW };
         let style = style_of(p.look, ov);
+        let mut glows = Vec::new();
         crate::build::emit_shape(
             &mut scene.meshes,
             &mut scene.sdfs,
-            &mut scene.point_lights,
+            &mut glows,
             &p.shape,
             p.pos,
             p.rot,
@@ -137,6 +255,9 @@ pub fn emit_draw(scene: &mut Scene, draw: &DrawList, cam: &CameraData, ov: Style
             flags,
             0,
         );
+        // A night glow lights the street only as far as the street lights are on.
+        let k = if night != 0 { scene.street_lights } else { 1.0 };
+        scene.point_lights.extend(glows.into_iter().filter(|_| k > 0.0).map(|l| rs::PointLight { color: l.color * k, ..l }));
     }
     for l in &draw.lights {
         scene.point_lights.push(rs::PointLight {
@@ -218,8 +339,9 @@ fn visible(planes: &[Vec4; 6], min: Vec3, max: Vec3) -> bool {
     planes.iter().all(|p| p.truncate().dot(c) + p.w >= -radius * p.truncate().length())
 }
 
-/// Draws the far view's chunks that streaming has not loaded (`active`) and the camera sees.
-pub fn emit_far(scene: &mut Scene, far: &FarView, cache: &mut FarCache, active: impl Fn(i32, i32) -> bool) {
+/// Draws the far view's chunks that streaming has not loaded (`active`) and the camera sees, in
+/// the environment's surface `style`.
+pub fn emit_far(scene: &mut Scene, far: &FarView, cache: &mut FarCache, style: Style, active: impl Fn(i32, i32) -> bool) {
     let planes = frustum(scene.camera.proj * scene.camera.view);
     for ((x, z), mesh) in &far.chunks {
         if active(*x, *z) || mesh.indices.is_empty() || !visible(&planes, mesh.min, mesh.max) {
@@ -250,7 +372,7 @@ pub fn emit_far(scene: &mut Scene, far: &FarView, cache: &mut FarCache, active: 
             transform: Mat4::IDENTITY,
             color: Vec3::ONE,
             emissive: 0.0,
-            style: Style::Cel,
+            style,
             flags: rs::flags::NO_SHADOW | rs::flags::NO_CUT,
             group: 1,
             material: 0,
@@ -283,5 +405,96 @@ mod tests {
         assert!(b(150.0, -300.0), "ahead to the right");
         assert!(!b(0.0, 600.0), "behind the camera");
         assert!(!b(2000.0, 0.0), "far to the side");
+    }
+
+    fn street_camera() -> (CameraIntent, Scene) {
+        let c = CameraIntent {
+            eye: Vec3::new(0.0, 2.0, 10.0),
+            target: Vec3::new(0.0, 1.0, 0.0),
+            up: Vec3::Y,
+            fov: 55.0,
+            near: 0.1,
+            far: 1500.0,
+            cut: true,
+            shake: 0.0,
+        };
+        let scene = Scene { camera: camera(None, &c, 1.0, 16.0 / 9.0, 0.0), ..Default::default() };
+        (c, scene)
+    }
+
+    #[test]
+    fn the_atmosphere_reaches_the_scene() {
+        let (c, mut scene) = street_camera();
+        let v = Atmosphere::Storm.intent().unwrap();
+        apply_view(&mut scene, &v, c.target);
+        let sky = scene.sky.expect("a sky");
+        let s = v.sky.as_ref().unwrap();
+        assert!((sky.to_sun + v.sun_dir.normalize()).length() < 1e-5, "the sun opposite the light");
+        assert_eq!((sky.clouds, sky.sun_size, sky.zenith), (s.clouds, s.sun_size, v3(s.zenith)));
+        assert_eq!(scene.clear_color, v3(s.horizon));
+        assert_eq!((scene.wetness, scene.street_lights, scene.windows), (v.wetness, v.street_lights, v.windows));
+        // The wind drifts the clouds and bends the foliage.
+        assert!(sky.wind.length() > v.wind.length() && scene.wind.strength > 0.0);
+        // The shadow square sits ahead of the camera, half its radius past the target.
+        let ahead = c.target + Vec3::NEG_Z * (v.shadow_radius * 0.5);
+        assert!((scene.sun.shadow_center - ahead).length() < 1e-3, "{}", scene.sun.shadow_center);
+        assert_eq!(scene.sun.shadow_radius, v.shadow_radius);
+        // Fog fades into the sky; without a sky the clear colour stays the view's own.
+        assert!(scene.fog.enabled && scene.fog.center == scene.camera.eye, "fog grows from the camera");
+        let (_, mut plain) = street_camera();
+        let clear = plain.clear_color;
+        apply_view(&mut plain, &ViewIntent::default(), c.target);
+        assert!(plain.sky.is_none() && plain.clear_color == clear);
+    }
+
+    #[test]
+    fn lightning_flashes_the_ambient_light() {
+        let (c, mut calm) = street_camera();
+        let (_, mut flash) = street_camera();
+        let storm = Atmosphere::Storm.intent().unwrap();
+        apply_view(&mut calm, &storm, c.target);
+        apply_view(&mut flash, &Atmosphere::Lightning.intent().unwrap(), c.target);
+        assert_eq!(flash.sky.unwrap().lightning, 1.0);
+        assert!(flash.ambient.sky.min_element() > calm.ambient.sky.max_element());
+    }
+
+    #[test]
+    fn presets_replace_the_atmosphere_and_keep_the_games_look() {
+        let game =
+            ViewIntent { style: Some(SurfaceStyle::Lit), outlines: Some(false), shadow_radius: 99.0, ..Default::default() };
+        assert_eq!(atmosphere_for(Some(&game), Atmosphere::Scene).as_deref(), Some(&game));
+        assert!(atmosphere_for(None, Atmosphere::Scene).is_none());
+        let night = atmosphere_for(Some(&game), Atmosphere::Night).unwrap();
+        assert_eq!((night.style, night.outlines, night.shadow_radius), (Some(SurfaceStyle::Lit), Some(false), 99.0));
+        assert_eq!(night.street_lights, 1.0);
+        assert!(night.sky.as_ref().unwrap().moon_dir.is_some() && night.sky.as_ref().unwrap().stars > 0.0);
+        // Every preset has a sky, and fog in its horizon's colour.
+        for (i, name) in <Atmosphere as pav_core::params::ChoiceParam>::NAMES.iter().enumerate().skip(1) {
+            let v = <Atmosphere as pav_core::params::ChoiceParam>::from_index(i).intent().unwrap();
+            let (sky, fog) = (v.sky.unwrap(), v.fog.unwrap());
+            assert_eq!(fog.color, sky.horizon, "{name}");
+        }
+    }
+
+    #[test]
+    fn the_games_look_overrides_the_view_settings() {
+        let settings = ViewSettings::default();
+        assert!(with_look(&settings, &ViewIntent::default()).is_none(), "nothing to change");
+        let v = ViewIntent {
+            style: Some(SurfaceStyle::PerObject),
+            style_environment: Some(SurfaceStyle::Lit),
+            outlines: Some(false),
+            tonemap: Some(ToneCurve::Aces),
+            bloom_threshold: Some(1.0),
+            haze_height: Some(10.0),
+            gi: Some(0.5),
+            ..Default::default()
+        };
+        let s = with_look(&settings, &v).unwrap();
+        assert_eq!(
+            (s.style, s.style_environment, s.style_objects),
+            (StyleOverride::PerObject, StyleOverride::Lit, settings.style_objects)
+        );
+        assert_eq!((s.outlines, s.tonemap, s.bloom_threshold, s.haze_height, s.gi), (false, TonemapChoice::Aces, 1.0, 10.0, 0.5));
     }
 }

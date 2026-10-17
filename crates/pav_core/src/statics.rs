@@ -230,6 +230,26 @@ pub struct Decor {
     /// capsule. None draws the plain colour.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub material: Option<String>,
+    /// When its emissive shows (and lights the street): always, or only after dark (street
+    /// lamps, signs, neon: the game's street-light level dims them by day). Drawing only.
+    #[serde(default, skip_serializing_if = "Glow::is_always")]
+    pub glow: Glow,
+}
+
+/// When a glowing thing glows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Glow {
+    #[default]
+    Always,
+    /// Only after dark: its glow follows `ViewIntent::street_lights`.
+    Night,
+}
+
+impl Glow {
+    pub fn is_always(&self) -> bool {
+        *self == Glow::Always
+    }
 }
 
 fn quat_id() -> Quat {

@@ -51,6 +51,7 @@ pub const FILE_FIELDS: &[(&str, &str)] = &[
 pub const LAYER_KEYS: &[&str] = &[
     "type",
     "size",
+    "pane",
     "radius",
     "offset",
     "jitter",
@@ -72,6 +73,8 @@ pub const LAYER_KEYS: &[&str] = &[
     "soft",
     "color",
     "shade",
+    "frame",
+    "reflect",
     "strength",
     "glow",
     "facing",
@@ -101,6 +104,10 @@ pub fn own_params(pattern: Pattern) -> &'static [&'static str] {
         Dots => &["size", "radius", "offset", "jitter", "axis"],
         Shingles => &["size", "shape", "gap", "axis"],
         Wood => &["size", "axis", "distort", "cover", "soft"],
+        // size: one bay [width, storey]; pane: the glass's share of it; gap: the frame's
+        // width; detail: panes across (mullions); cover: the share lit at full night; cells:
+        // the lit colours.
+        Windows => &["size", "pane", "gap", "detail", "cover", "vary", "cells", "frame", "reflect"],
     }
 }
 
@@ -118,7 +125,7 @@ fn is_linear(pattern: Pattern) -> bool {
 /// Patterns whose size may be `[w,h]`.
 fn takes_pair(pattern: Pattern) -> bool {
     use Pattern::*;
-    matches!(pattern, Brick | Planks | Tiles | Shingles)
+    matches!(pattern, Brick | Planks | Tiles | Shingles | Windows)
 }
 
 /// The parameters a layer of `pattern` takes, in canonical order.
@@ -168,6 +175,15 @@ impl LayerDoc {
     /// `[w,h]`; a single number is a square.
     pub fn size2(&self, default: [f32; 2]) -> [f32; 2] {
         match self.params.get("size") {
+            Some(Param::Pair(pair)) => *pair,
+            Some(Param::Num(x)) => [*x, *x],
+            _ => default,
+        }
+    }
+
+    /// A pair of numbers (`[a,b]`); a single number is both.
+    pub fn pair(&self, key: &str, default: [f32; 2]) -> [f32; 2] {
+        match self.params.get(key) {
             Some(Param::Pair(pair)) => *pair,
             Some(Param::Num(x)) => [*x, *x],
             _ => default,
@@ -625,6 +641,17 @@ impl Reader {
                 let h = self.length(&format!("{path}[1]"), &items[1], false);
                 Param::Pair([w?, h?])
             }
+            "pane" if value.is_array() => {
+                let items = value.as_array()?;
+                if items.len() != 2 {
+                    self.push(Issue::error(path, Code::InvalidType, format!("expected 2 fractions [w,h], got {}", items.len())));
+                    return None;
+                }
+                let w = self.ranged(&format!("{path}[0]"), &items[0], 0.05, 1.0);
+                let h = self.ranged(&format!("{path}[1]"), &items[1], 0.05, 1.0);
+                Param::Pair([w?, h?])
+            }
+            "pane" => Param::Num(self.ranged(path, value, 0.05, 1.0)?),
             "from" | "to" => Param::Num(self.measure(path, value, -reach, reach)?),
             "size" => Param::Num(self.length(path, value, false)?),
             "radius" | "gap" | "bevel" => Param::Num(self.length(path, value, true)?),
@@ -636,7 +663,7 @@ impl Reader {
             // Wood's rings are a smooth step, which needs a width.
             "soft" if pattern == Wood => Param::Num(self.ranged(path, value, 0.01, 1.0)?),
             "rings" => Param::Flag(self.boolean(path, value)?),
-            "color" => Param::Color(self.color(path, value)?),
+            "color" | "frame" => Param::Color(self.color(path, value)?),
             "cells" => {
                 let Some(items) = value.as_array() else {
                     self.push(wrong_type(path, "2-4 colours", value));
@@ -718,9 +745,18 @@ fn layer_hint(pattern: Pattern, key: &str, allowed: &[&str]) -> Option<String> {
         "darken" | "darkness" | "dark" | "tint" => "use shade (multiplies brightness; 0.6 darkens)".into(),
         "emissive" | "emission" => "use glow (0-8)".into(),
         "angle" | "rotation" | "rotate" => "angle is not available yet: use axis, or turn:true on the material".into(),
-        "colors" | "colours" | "palette" if is_cellular(pattern) => "use cells (2-4 colours, one per cell)".into(),
+        "colors" | "colours" | "palette" if is_cellular(pattern) || pattern == Pattern::Windows => {
+            "use cells (2-4 colours, one per cell)".into()
+        }
         "colors" | "colours" | "palette" | "cells" => format!("a {} has no cells; use color", pattern.name()),
         "octaves" => "use detail (1-4)".into(),
+        "glass" if pattern == Pattern::Windows => "use color (the glass)".into(),
+        "lit" | "lights" | "lit_color" if pattern == Pattern::Windows => {
+            "use cells (the lit colours) and cover (the share lit at night)".into()
+        }
+        "frame_width" | "mullion" if pattern == Pattern::Windows => "use gap (the frame's width)".into(),
+        "panes" | "mullions" if pattern == Pattern::Windows => "use detail (panes across, 1-4)".into(),
+        "reflection" | "reflectivity" | "mirror" => "use reflect (0-1)".into(),
         "width" | "height" | "length" => format!("use size{}", if takes_pair(pattern) { " [w,h]" } else { "" }),
         _ if LAYER_KEYS.contains(&key) => {
             let takers: Vec<&str> = Pattern::NAMES
@@ -748,6 +784,7 @@ fn pattern_hint(text: &str) -> Option<&'static str> {
         "scales" | "roof" | "tiles_roof" => "use shingles (scales: size [8,6] cm)",
         "polka" | "spots" | "dot" => "use dots",
         "checkerboard" | "checkers" | "check" => "use checker",
+        "window" | "facade" | "glazing" | "curtain_wall" => "use windows",
         "ramp" | "fade" => "use gradient",
         _ => return None,
     })
