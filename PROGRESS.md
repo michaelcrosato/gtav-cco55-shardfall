@@ -5,35 +5,29 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase:** M2 City done (2026-10-17); M3 next. The user paused the helpers until 11:59 PDT (18:59
-  UTC; a scheduled message resumes); the goal check kept forcing turns, so solo work went on
-  meanwhile. Landed for M2: E14 regions; `pav_world` + Paloma Bay; Mirador Hills; Route 404 +
-  ramps + broken end; The Ditch; lane graph, signals, parking, walk tiles, cover; time of day +
-  weather; the Proving Grounds; the streaming tour test (10.6 km at 40 m/s, no holes, <= 146
-  active chunks); GPS; sprint/crouch; `gtf citymap`, `gtf perf`; `LIB/gtf_city` (44 props) +
-  `MAT/gtf`; the city dressed, mast-arm signals with live lamps; **E7 merged** (sky, weather,
-  night lights, facade windows, static culling, render-style `ViewIntent` fields); **facades by
-  building style** from the district's `[facades]` (windows lit at night, `out/fac_night.png`);
-  the Catalogue fits big props (store tests green again).
-- **Perf:** `gtf perf view=all` passes every budget after E7's culling (downtown_street 1.51 M
-  triangles, hills_vista 2.90 M under its relaxed budget); mesh LOD is no longer urgent.
-- **Open:** street lamps are props and stay dark at night: prop parts need a night glow (flag
-  `NIGHT` + glow lights) — next for the E7 helper, then mesh LOD; tune the presets with the
-  render-style fields (lit style, tonemap) toward the GTA V look; E7's saved
-  `cloud_through.patch` (sun through thin cloud) in the session scratchpad.
-- **Helpers (worktrees; resume with SendMessage):** E7 renderer in
-  `.claude/worktrees/agent-a73e1fb49a0cee6a4` (merged at 367da03); E9 vehicles v2 +
-  `gtf_vehicles` + `vehicles.toml` + feel test in `.claude/worktrees/agent-ab25c5efa06c05e86`
-  (at d6a5c61; its stale workspace build files were deleted for disk; it must merge the branch).
-- **Web:** boots into the city in headless Chromium (HUD, minimap, `out/web-m2/fixed_*`). The
-  crash after the first frame was the app asking for pointer lock without a click (fixed in
-  `pav_app`: the web asks on each click while the game wants mouse look).
-- **Disk:** a fixed allowance, about 2 GB free; prune duplicate build artefacts (keep the newest
-  per crate) and avoid workspace-wide test builds in worktrees.
-- **Next:** E7 helper: prop night glow + lamp lights, then mesh LOD; E9 helper: resume; me: tune
-  presets, captures of every view at three times of day, web build booting into the city, close
-  M2; merge E9 and start M3 (driving, enter/exit, camera modes, vehicle audio, radio skeleton).
-- **Branch / PR:** the session's designated branch; the draft PR opened with the plan.
+- **Phase (2026-10-17, end of session 1):** M0-M2 done. M3, M4 and M5 are partly done; the next
+  session continues them in the order of `HANDOFF.md`. Read `HANDOFF.md` first, then this file.
+- **Landed since M2:** the on-foot camera (shoulder, walls, recentre, sprint FOV, aim and R3
+  shoulder swap); the radio skeleton (live stations from `radio.toml`, procedural songs, the
+  `audio_capture` mix); E9 vehicles v2 in the engine (free pitch and roll, tyres, damage to fire
+  and explosions, seats and doors, kinematic traffic mode, helicopter flight, water) with all 15
+  archetypes in `vehicles.toml` and the feel test; pedestrians (archetypes in `peds.toml`,
+  population manager, walk-tile routes, crossings on the walk light, flee and cower, E11 low
+  detail); ambience beds by place, crowd and weather; on-foot combat (weapons in `weapons.toml`,
+  hitscan, aim assist and magnetism, melee combos, vitals, deaths); E7 night glow for prop parts
+  (street lamps light the street at night) and mesh detail by screen size.
+- **Perf:** `gtf perf view=all` passes every budget with the crowd (downtown_street 0.24 M
+  triangles, sim 0.99 ms; hills_vista 0.43 M). Night downtown: `out/final/downtown_night.png`.
+- **Tests:** pav_core 305, pav_render 5, pav_view 43, pav_world 9, pav_audio 10, pav_ui 18,
+  pav_app 25, pav_tools 119, gtf_game 44, all green; clippy -D warnings clean; WGSL in Tint.
+- **Web:** boots into the city in headless Chromium (`out/web-m2/fixed_*`); `scripts/web-check.mjs`
+  keeps its console log when a page crashes and takes `--shot-timeout`.
+- **Helpers:** none running. Both worktrees are merged and their build caches removed.
+- **Disk:** a fixed allowance (~39 GB in all); a workspace build plus tests needs ~8 GB. Prune
+  duplicate artefacts (keep the newest per crate) and never run workspace-wide test builds in
+  helper worktrees.
+- **Branch / PR:** session 1 merged its draft PR into `main` at the user's request; a new session
+  works on its own designated branch and opens a new draft PR.
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)
 - [x] **M0 Bootstrap** — engine vendored; baseline tests; E1 registry, `pav_tools::cli`, `pav_app`
@@ -48,10 +42,22 @@ resumed or compacted session reads first.
 - [ ] **M3 Player and vehicles** — on-foot controller, camera modes, E9 vehicles v2 (pitch/roll
       freed with stabilization), enter/exit, carjack, damage, helicopter, vehicle audio, GPS ribbon,
       radio skeleton, `vehicle_feel` incl. slopes and jumps.
+      *Done:* on-foot controller (sprint, crouch; the engine's jump, vault, climb, swim), on-foot
+      and aim cameras, E9 vehicles v2 + 15 archetypes + feel ranges test (all 13 road archetypes
+      in range), GPS ribbon, radio skeleton. *Left:* `gtf_vehicles` body props, game-side
+      enter/exit/carjack/locked cars, driving input and the vehicle chase/cinematic cameras,
+      vehicle audio loops from `vehicle_status`, the `vehicle_feel` tool, helicopter controls,
+      captures and filmstrips.
 - [ ] **M4 Population** — traffic, pedestrians, population manager, LOD, buses, parked cars,
       ambience, soaks.
+      *Done:* pedestrians (archetypes, population manager, crossings, flee/cower, E11 low
+      detail), ambience beds. *Left:* traffic agents, buses, parked cars, scenario points,
+      `traffic`/`peds`/`soak` tools.
 - [ ] **M5 Combat and heat** — weapons, cover, vitals, enemy AI, wanted system, police AI, air unit,
       busted/wasted.
+      *Done:* on-foot weapons (hitscan, aim assist, recoil, spread, reload, melee), vitals,
+      people's hit reactions and deaths. *Left:* grenades, cover, held weapon props, enemy AI,
+      heat and police, Busted/Wasted.
 - [ ] **M6 Structure** — mission DSL + runtime + bots, protagonists + switching + abilities, phone,
       economy and shops, save/load.
 - [ ] **M7 Content** — final district, landmarks, interiors, all vehicles and props, missions m1–m3,
@@ -84,6 +90,21 @@ resumed or compacted session reads first.
 | D16 Developer demo level | ☐ | |
 
 ## Decisions
+- 2026-10-17 — Vehicles (E9): okami_kaze is AWD (the plan's example said RWD; RWD could not make
+  3.8 s 0-100); holding the brake when nearly stopped reverses; an empty car with no input holds
+  still with its brakes on; the engine explodes a burning car itself after 5 s; the engine demo's
+  cars got free pitch and roll, the new tyres and softer springs (the drift room's guide updated).
+- 2026-10-17 — People go low detail (E11: no character controller, one ground ray) beyond 30 m
+  and back within 24 m: full detail out to 60 m cost 3.85 ms a tick downtown in the debug build;
+  30 m gives 1.07 ms. The walk-map A* keeps its costs in flat arrays reused between searches.
+- 2026-10-17 — Pedestrian density: a cap of 60 within 120 m, shared out by the zones around the
+  player and the hour (night share 0.35); a new scene fills at once, in view too, from 15 m out;
+  reference views centre their crowd on the camera.
+- 2026-10-17 — Aim assist judges its 12° cone by heading (35° of pitch allowed) because the
+  on-foot camera looks down at the player; with nobody in the cone, L2 levels the view to chest
+  height ahead.
+- 2026-10-17 — The format-2 field guide cap moved 7,200 -> 7,350 chars for the new `glow` field;
+  `audio_capture`'s help was trimmed so `tools/list` stays under 48,000.
 - 2026-10-17 — Aim camera at 2.0 m behind and 0.65 m right of the shoulder, its target at head height (PLAN §5.6.2 said 1.6 m / 0.6 m): at 1.6 m the stand-in body filled half the frame (`out/m3/cam_aim.png` vs `cam_aim2.png`). The on-foot camera's walls are five rays from the pivot (a stand-in for a sphere cast; the engine has rays only).
 - 2026-10-17 — **Name:** *Grand Theft Freeway-BX* (title #25 of 50 drawn with `secrets.randbelow`,
   ID "BX" from `secrets.choice` over A–Z0–9; PLAN.md §3).
@@ -187,4 +208,8 @@ resumed or compacted session reads first.
   pav_render + pav_view (46), WGSL in Tint; clippy clean on the touched crates. Carried: street
   lamps are dark at night (props need a night glow), mesh LOD (E7 helper); pier deck and Big Wheel
   (M7).
+- 2026-10-17 — **Session 1 ends (handoff).** After M2: on-foot camera (`600975f`), radio skeleton
+  (`1da78ce`), pedestrians + E11 low detail (`44f379d`), ambience (`fcf0e72`), on-foot combat
+  (`ab0af1d`), E9 vehicles v2 merged (`06b7a62`), E7 night glow + mesh detail merged (`cbff7b1`).
+  `HANDOFF.md` lists the state, the next steps in value order and the known issues.
 

@@ -9,8 +9,8 @@ Auto V*, on the Pavilion engine (vendored from https://github.com/michaelcrosato
 commit pinned in `scripts/vendor-engine.sh`).
 
 ## Start here, every session
-1. `PROGRESS.md` — where things stand and what is next. Read it first (also after a context
-   compaction or a resumed session).
+1. `HANDOFF.md`, then `PROGRESS.md` — where things stand and what is next. Read them first (also
+   after a context compaction or a resumed session).
 2. `PLAN.md` — the source of truth: scope, design, architecture, engine extensions, milestones and
    the Definition of Done (§2). Read §0–§4 and §10 once; afterwards read the sections the current
    milestone names, not the whole file.
@@ -21,8 +21,9 @@ commit pinned in `scripts/vendor-engine.sh`).
 
 ## Rules (PLAN.md §10 is the full version)
 - **Git:** work on the session's designated branch; push often (cloud containers are temporary);
-  keep the existing draft PR updated; never merge it, never force-push. `AGENTS.md`'s
-  "merge into main" convention does not apply in this repository.
+  open a draft PR for it (session 1's PR was merged into `main` at the user's request) and keep it
+  updated; merge only when the user asks; never force-push. `AGENTS.md`'s "merge into main"
+  convention does not apply in this repository.
 - **Commits:** prefixes `engine:` (engine crates and engine docs only — keep them upstreamable),
   `game:`, `content:`, `docs:`, `build:`. Apart from the session's prescribed attribution lines, no
   model identifiers in commits, PRs, code or docs (state the model in chat only).

@@ -1,0 +1,70 @@
+--- a/crates/pav_render/src/shaders/scene.wgsl	2026-10-17 15:30:12.677705079 +0000
++++ b/crates/pav_render/src/shaders/scene.wgsl	2026-10-17 15:29:55.012907612 +0000
+@@ -439,12 +439,22 @@
+ }
+ 
+ // Clouds on a layer 1.4 km up, drifting with the wind: soft, warped fractal noise thinned by
+-// the cover, darker where thick, edges lit toward the sun, fading into the horizon. rgb, a =
+-// coverage.
+-fn sky_clouds(d: vec3<f32>, px: f32) -> vec4<f32> {
++// the cover, darker where thick, edges lit toward the sun, fading into the horizon: their
++// colour, coverage, and how much of the sun's disc shines through (a veil, or hidden).
++struct Cloud {
++    col: vec3<f32>,
++    a: f32,
++    through: f32,
++};
++
++fn sky_clouds(d: vec3<f32>, px: f32) -> Cloud {
++    var c: Cloud;
++    c.col = vec3<f32>(0.0);
++    c.a = 0.0;
++    c.through = 1.0;
+     let cover = g.sky_glow.w;
+     if (cover <= 0.001 || d.y <= 0.015) {
+-        return vec4<f32>(0.0);
++        return c;
+     }
+     let t = max(1400.0 - g.eye.y, 200.0) / d.y;
+     let scale = 1.0 / 2200.0;
+@@ -460,9 +470,14 @@
+     let mu = max(dot(d, g.sky_sun.xyz), 0.0);
+     var col = g.sky_cloud.rgb * mix(1.0, 0.62, thick * (0.35 + 0.65 * cover));
+     col += g.sky_glow.rgb * (pow(mu, 8.0) * (1.0 - thick) * 0.8);
++    // Thin cloud before the sun glows with it (in HDR, so it blooms).
++    col += g.sky_sun_color.rgb * (pow(mu, 120.0) * (1.0 - thick) * 0.06);
+     // Lightning lights the clouds from inside, the thick ones most.
+     col *= 1.0 + g.sky_sun.w * (0.6 + 0.8 * thick);
+-    return vec4<f32>(col, a);
++    c.col = col;
++    c.a = a;
++    c.through = 1.0 - a * mix(0.55, 1.0, thick);
++    return c;
+ }
+ 
+ struct SkyOut {
+@@ -493,11 +508,12 @@
+     var col = sky_gradient(d);
+     let above = smoothstep(-0.004, 0.006, d.y);
+     let r = g.sky_horizon.w;
++    var sun = vec3<f32>(0.0);
+     if (r > 0.0) {
+         // The sun's disc, darker toward its rim, hidden below the horizon.
+         let k = clamp(angle_between(d, g.sky_sun.xyz) / r, 0.0, 2.0);
+         let disc = 1.0 - smoothstep(1.0 - px / r, 1.0 + px / r, k);
+-        col += g.sky_sun_color.rgb * (disc * (1.0 - 0.4 * min(k * k, 1.0)) * above);
++        sun = g.sky_sun_color.rgb * (disc * (1.0 - 0.4 * min(k * k, 1.0)) * above);
+     }
+     var hidden = 0.0;
+     if (g.sky_sun_color.w > 0.5) {
+@@ -508,8 +524,8 @@
+     if (g.sky_ground.w > 0.0) {
+         col += sky_stars(d, px) * (g.sky_ground.w * smoothstep(0.02, 0.25, d.y) * (1.0 - hidden));
+     }
+-    let clouds = sky_clouds(d, px);
+-    col = mix(col, clouds.rgb, clouds.a);
++    let cloud = sky_clouds(d, px);
++    col = mix(col, cloud.col, cloud.a) + sun * cloud.through;
+     var o: FsOut;
+     o.color = vec4<f32>(col, 1.0);
+     o.normal = vec4<f32>(0.0);

@@ -4,9 +4,19 @@
 Auto V*: a third-person open-world crime caper in **Paloma Bay**, a sun-bleached coastal district of
 the fictional city of San Paloma, built on the **Pavilion engine** (the Shardfall repository).
 
-> **Status: planning complete — implementation pending.** This repository currently holds the
-> implementation plan and its tooling. The engine is vendored and the game built by executing
-> [`PLAN.md`](PLAN.md); progress is tracked in [`PROGRESS.md`](PROGRESS.md).
+> **Status: in development.** Milestones M0–M2 are done: the engine is vendored and extended, and
+> Paloma Bay is generated, streamed, lit and dressed, with time of day and weather. M3–M5 are
+> partly done: on-foot play, cameras, vehicles in the engine, pedestrians, the radio and on-foot
+> combat. The game is built by executing [`PLAN.md`](PLAN.md). Progress is tracked in
+> [`PROGRESS.md`](PROGRESS.md), and the next steps are in [`HANDOFF.md`](HANDOFF.md).
+
+## Build and run
+- `cargo run --release -p gtf_app --bin grand_theft_freeway` starts the game (a WebGPU-capable GPU
+  through Vulkan, Metal or DX12).
+- `cargo run -p gtf_app --bin gtf -- repl` opens the headless agent tools: `load
+  scene=freeway/roam`, `capture`, `perf view=all`, `citymap`, `lanes`, `audio_capture`.
+- `scripts/build-gtf-web.sh` writes the single-file browser build to
+  `dist/GrandTheftFreeway-BX.html`.
 
 ## What the vertical slice will be
 - **One polished district** (~1 km²): downtown towers, the Sunset Row strip, hillside bungalows and
@@ -31,6 +41,7 @@ the fictional city of San Paloma, built on the **Pavilion engine** (the Shardfal
 |---|---|
 | [`PLAN.md`](PLAN.md) | The implementation plan: design, architecture, engine extensions, milestones M0–M10, Definition of Done |
 | [`PROGRESS.md`](PROGRESS.md) | Milestone checklist, Definition of Done evidence, decisions, open issues |
+| [`HANDOFF.md`](HANDOFF.md) | Where the work stands, what to do next, known issues, working notes |
 | [`CLAUDE.md`](CLAUDE.md) | Instructions for the implementing agent |
 | [`scripts/vendor-engine.sh`](scripts/vendor-engine.sh) | Vendors the engine at the pinned commit (milestone M0; tested in planning) |
 
