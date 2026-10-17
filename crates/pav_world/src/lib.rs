@@ -211,6 +211,23 @@ impl City {
     pub fn bin(&self, x: i32, z: i32) -> Option<&Bin> {
         self.bins.get(&(x, z))
     }
+
+    /// The dressing props within `r` metres of `p` (a game's scenario points: benches, bus
+    /// stops), nearest first.
+    pub fn props_near(&self, p: Vec3, r: f32) -> Vec<&StaticProp> {
+        let (x0, z0) = chunk_of(p - Vec3::splat(r));
+        let (x1, z1) = chunk_of(p + Vec3::splat(r));
+        let mut out = Vec::new();
+        for z in z0..=z1 {
+            for x in x0..=x1 {
+                if let Some(b) = self.bins.get(&(x, z)) {
+                    out.extend(b.props.iter().filter(|s| s.pos.distance(p) <= r));
+                }
+            }
+        }
+        out.sort_by(|a, b| a.pos.distance(p).total_cmp(&b.pos.distance(p)));
+        out
+    }
 }
 
 impl RegionProvider for City {
