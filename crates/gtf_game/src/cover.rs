@@ -1,6 +1,7 @@
 //! Taking cover (PLAN.md §5.6.1). R1 within 3 m of a wall, a low wall, a planter or a container
-//! (the district's cover points, §6.6.6) slides the player against it, facing the wall with the
-//! threat beyond it — crouched behind low cover, standing at tall cover. The stick moves along
+//! (the district's cover points, §6.6.6) or a stopped car slides the player against it, facing
+//! the wall with the threat beyond it — crouched behind low cover and cars, standing at tall
+//! cover; a car that drives off takes the cover with it. The stick moves along
 //! the wall (stopping at its end); L2 rises to peek and aim; R2 without L2 fires blind over or
 //! round it (three times the spread); R1 again, or pushing away from the wall, leaves. Shots
 //! hit far less often while in cover and not peeking.
@@ -27,6 +28,30 @@ pub struct Spot {
     pub pos: Vec3,
     pub normal: Vec2,
     pub high: bool,
+    /// The car it is behind (cars are cover too).
+    #[serde(default)]
+    pub car: Option<EntityId>,
+}
+
+/// The spot `gap` metres out from a stopped car on the side facing `from` (and that side's
+/// direction): where to crouch behind it against a threat on the far side.
+pub fn behind_car(sim: &Sim, car: EntityId, from: Vec3, gap: f32) -> Option<(Vec3, Vec2)> {
+    behind_car_moving(sim, car, from, gap, 1.0)
+}
+
+/// [`behind_car`] for a car going no faster than `speed` (m/s): in cover already, a bump does
+/// not end it; being driven off does.
+fn behind_car_moving(sim: &Sim, car: EntityId, from: Vec3, gap: f32, speed: f32) -> Option<(Vec3, Vec2)> {
+    let c = crate::drive::Car::read(sim, car)?;
+    if c.heli || c.vel.length() > speed {
+        return None;
+    }
+    let out = Vec2::new(from.x - c.center.x, from.z - c.center.z).normalize_or(Vec2::X);
+    let fwd = Vec2::new(c.forward().x, c.forward().z);
+    let left = Vec2::new(c.left().x, c.left().z);
+    let ext = out.dot(fwd).abs() * c.half.z + out.dot(left).abs() * c.half.x;
+    let feet = c.feet();
+    Some((Vec3::new(c.center.x + out.x * (ext + gap), feet.y, c.center.z + out.y * (ext + gap)), out))
 }
 
 /// The player's cover (part of the game's state).
@@ -47,14 +72,32 @@ impl Cover {
         self.at.is_some() && !self.peeking
     }
 
-    /// R1: the nearest cover point within reach whose wall stands between the player and where
-    /// the camera looks. False when there is none.
-    pub fn enter(&mut self, city: &City, feet: Vec3, look: Vec3) -> bool {
+    /// R1: the nearest cover within reach — a cover point, or a stopped car — that stands between
+    /// the player and where the camera looks. False when there is none.
+    pub fn enter(&mut self, city: &City, sim: &Sim, feet: Vec3, look: Vec3) -> bool {
         let flat = Vec3::new(look.x, 0.0, look.z).normalize_or(Vec3::NEG_Z);
         let threat = feet + flat * 25.0;
-        match city.cover.near(feet, threat, REACH).first() {
-            Some(p) => {
-                self.at = Some(Spot { pos: p.pos, normal: p.normal, high: p.high });
+        let point =
+            city.cover.near(feet, threat, REACH).first().map(|p| Spot { pos: p.pos, normal: p.normal, high: p.high, car: None });
+        // A stopped car close by, between the player and the look.
+        let car = sim
+            .state
+            .entities
+            .iter()
+            .filter(|e| e.vehicle.is_some() && e.pos.distance(feet) < REACH + 3.0)
+            .filter_map(|e| {
+                let (pos, normal) = behind_car(sim, e.id, feet, 0.55)?;
+                let toward = Vec2::new(flat.x, flat.z).dot(-normal) > 0.4;
+                (toward && pos.distance(feet) < REACH).then_some(Spot { pos, normal, high: false, car: Some(e.id) })
+            })
+            .min_by(|a, b| a.pos.distance(feet).total_cmp(&b.pos.distance(feet)));
+        let best = match (point, car) {
+            (Some(p), Some(c)) => Some(if c.pos.distance(feet) < p.pos.distance(feet) { c } else { p }),
+            (p, c) => p.or(c),
+        };
+        match best {
+            Some(spot) => {
+                self.at = Some(spot);
                 self.peeking = false;
                 self.fresh = true;
                 true
@@ -85,10 +128,24 @@ impl Cover {
             return None;
         }
         self.peeking = input.pad.l2 > 0.5 || input.pad.held & pad::L2 != 0;
+        // Behind a car: it keeps the spot beside it, or drives off with the cover.
+        if let Some(car) = spot.car {
+            let threat = spot.pos - Vec3::new(spot.normal.x, 0.0, spot.normal.y) * 6.0;
+            match behind_car_moving(sim, car, spot.pos + Vec3::new(spot.normal.x, 0.0, spot.normal.y) * 2.0, 0.55, 3.0) {
+                Some((pos, normal)) if (threat - pos).dot(Vec3::new(normal.x, 0.0, normal.y)) < 0.0 => {
+                    spot.pos = pos;
+                    spot.normal = normal;
+                }
+                _ => {
+                    self.leave(sim, pid);
+                    return None;
+                }
+            }
+        }
         // Along the wall, while the cover lasts.
         let tangent = Vec2::new(spot.normal.y, -spot.normal.x);
         let along = dir.dot(tangent);
-        if along.abs() > 0.25 && !self.peeking {
+        if along.abs() > 0.25 && !self.peeking && spot.car.is_none() {
             let step = tangent * along.signum() * ALONG * dt;
             let next = spot.pos + Vec3::new(step.x, 0.0, step.y);
             let ahead = next + Vec3::new(tangent.x, 0.0, tangent.y) * along.signum() * 0.4;
@@ -99,6 +156,7 @@ impl Cover {
                 let off = (Vec2::new(next.x, next.z) - line).dot(spot.normal);
                 spot.pos = Vec3::new(next.x - spot.normal.x * off, p.pos.y, next.z - spot.normal.y * off);
                 spot.high = p.high;
+                spot.car = None;
             }
         }
         self.at = Some(spot);

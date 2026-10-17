@@ -115,7 +115,7 @@ impl Freeway {
                 if self.cover.at.is_none()
                     && !moving.aiming
                     && crate::pad::pressed(input, pad::R1)
-                    && self.cover.enter(&city, feet, view)
+                    && self.cover.enter(&city, sim, feet, view)
                 {
                     sounds.push("cover.in");
                 }
@@ -374,6 +374,7 @@ impl Freeway {
             c.1 -= dt;
         }
         self.crime_clock.retain(|c| c.1 > 0.0);
+        let gunfire = crimes.iter().find(|c| c.0 == Crime::Shooting).map(|c| c.1);
         let crowd: Vec<EntityId> = self.peds.list.iter().map(|p| p.id).collect();
         for (crime, at) in crimes {
             if self.crime_clock.iter().any(|c| c.0 == crime) {
@@ -430,6 +431,37 @@ impl Freeway {
         for &(from, to, hit) in &rep.shots {
             self.combat.trace(from, to, hit);
             events.push(SimEvent::Sound { cue: "gun.pistol".into(), pos: Some(from), gain: 0.9, pitch: 1.05 });
+        }
+        // Armed opponents: cover, peeks, flanks, grenades.
+        if !self.enemies.list.is_empty() {
+            let em = crate::enemies::Moment {
+                city,
+                player: feet,
+                player_vel: vel,
+                cover: self.cover.at.map(|s| (s.pos, s.normal)),
+                covered: self.cover.covered(),
+                in_car: self.drive.vehicle().is_some(),
+                gunfire,
+                dt,
+            };
+            let mut moves = BTreeMap::new();
+            let er = self.enemies.tick(sim, &em, &self.combat.hp, &mut moves);
+            out.extend(moves);
+            if self.fate.alive() {
+                for dmg in &er.hits {
+                    self.combat.hurt_player(*dmg);
+                }
+            }
+            for &(from, to, hit) in &er.shots {
+                self.combat.trace(from, to, hit);
+                events.push(SimEvent::Sound { cue: "gun.pistol".into(), pos: Some(from), gain: 0.9, pitch: 0.95 });
+            }
+            for &(pos, vel) in &er.grenades {
+                self.combat.grenades.push(combat::Grenade { pos, vel, fuse: combat::FUSE });
+            }
+            if let Some(&(at, _, _)) = er.shots.first() {
+                self.peds.scare(sim, &city.walk, at, 35.0);
+            }
         }
         if !rep.shots.is_empty()
             && let Some(at) = rep.shots.first().map(|s| s.0)
@@ -518,6 +550,7 @@ impl Freeway {
         self.pay(-fee);
         self.heat.clear();
         self.police.clear(sim);
+        self.enemies.clear(sim);
         self.fate = Fate::Alive;
         self.front.fade_in(self.ui_time);
         self.cam.face(self.cam.yaw);

@@ -110,6 +110,19 @@ pub const MAX_ARMOR: f32 = 100.0;
 /// People's health: everyone, police, and the share of a hit armour takes.
 const PERSON_HP: f32 = 100.0;
 const POLICE_HP: f32 = 120.0;
+const GUARD_HP: f32 = 150.0;
+
+/// Someone's full health by who they are (the name's prefix): police 120, guards 150 (with
+/// armour), everyone else 100.
+pub fn max_hp(name: &str) -> f32 {
+    if name.starts_with("cop:") {
+        POLICE_HP
+    } else if name.starts_with("guard:") {
+        GUARD_HP
+    } else {
+        PERSON_HP
+    }
+}
 const ARMOR_SHARE: f32 = 0.7;
 /// Seconds a body stays before it is taken away.
 const BODY_TIME: f32 = 25.0;
@@ -519,8 +532,8 @@ impl Combat {
         events: &mut Vec<SimEvent>,
         out: &mut Outcome,
     ) {
-        let police = sim.state.entities.get(id).is_some_and(|e| e.name.starts_with("cop:"));
-        let hp = self.hp.entry(id.0).or_insert(if police { POLICE_HP } else { PERSON_HP });
+        let full = sim.state.entities.get(id).map_or(PERSON_HP, |e| max_hp(&e.name));
+        let hp = self.hp.entry(id.0).or_insert(full);
         *hp -= amount;
         let dead = *hp <= 0.0;
         self.hits += 1;

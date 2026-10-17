@@ -27,6 +27,7 @@ pub mod content;
 pub mod cover;
 pub mod daytime;
 pub mod drive;
+pub mod enemies;
 pub mod fate;
 pub mod frontend;
 pub mod gallery;
@@ -172,6 +173,9 @@ pub struct Freeway {
     /// The player bot (`autopilot escape`: the heat-evasion bot).
     #[serde(default)]
     pub bot: bot::Bot,
+    /// Armed opponents (missions; `enemies <n> <side>`).
+    #[serde(default)]
+    pub enemies: enemies::Enemies,
     /// Crimes typed as commands (`crime assault`: tests, bots), judged next tick.
     #[serde(default)]
     pub typed_crimes: Vec<heat::Crime>,
@@ -272,6 +276,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         cuffed: 0.0,
         typed_crimes: Vec::new(),
         bot: bot::Bot::default(),
+        enemies: enemies::Enemies::default(),
         ai_inputs: BTreeMap::new(),
         chase: camera::ChaseCam::default(),
         peds: peds::Peds::default(),
@@ -357,6 +362,31 @@ impl Freeway {
                     match c {
                         Some(c) => self.typed_crimes.push(c),
                         None => log::warn!("crime: '{kind}' (assault, theft, shooting, murder, holdup, cop)"),
+                    }
+                }
+                // `enemies <n> [side] [weapon]` around the player (18–26 m off, on walkable
+                // ground), `enemies alert`, `enemies clear`.
+                (Some("enemies"), Some(arg)) => {
+                    if arg == "clear" {
+                        self.enemies.clear(sim);
+                    } else if arg == "alert" {
+                        self.enemies.alert();
+                    } else if let (Ok(n), Some(city)) = (arg.parse::<u32>(), self.city.clone()) {
+                        let side = w.next().unwrap_or("gang");
+                        let weapon = w.next();
+                        let at = Self::feet(sim);
+                        for i in 0..n.min(12) {
+                            let a = i as f32 / n.max(1) as f32 * 1.6 - 0.8 + sim.state.rng.range(-0.2, 0.2);
+                            let r = sim.state.rng.range(18.0, 26.0);
+                            let want = Vec2::new(at.x + a.sin() * r, at.z + a.cos() * r);
+                            let Some(p) = city.walk.nearest_walkable(want, 6) else { continue };
+                            let feet = Vec3::new(p.x, city.ground_y(p).max(at.y - 2.0), p.y);
+                            let face = (at.x - feet.x).atan2(at.z - feet.z);
+                            if self.enemies.spawn(sim, side, feet, face, weapon).is_none() {
+                                log::warn!("enemies: no side '{side}' (content/freeway/enemies.toml)");
+                                break;
+                            }
+                        }
                     }
                 }
                 (Some("wanted"), Some(n)) => match n.parse::<u8>() {
@@ -936,6 +966,20 @@ impl Game for Freeway {
             }
             if let Some(m) = &mut hud.minimap {
                 m.blips.extend(self.police.blips(sim, self.ui_time));
+                // Those fighting the player: red.
+                for e in self.enemies.list.iter().filter(|e| e.aware) {
+                    if let Some(f) = sim.feet(e.id) {
+                        m.blips.push(Blip {
+                            pos: Vec2::new(f.x, f.z),
+                            icon: BlipIcon::Dot,
+                            color: pav_core::Color::hex("#e8423f"),
+                            label: None,
+                            clamp: false,
+                            height: 0,
+                            pulse: false,
+                        });
+                    }
+                }
                 if let Some((c, r)) = self.heat.zone() {
                     m.circles.push(CircleBlip {
                         pos: Vec2::new(c.x, c.z),
