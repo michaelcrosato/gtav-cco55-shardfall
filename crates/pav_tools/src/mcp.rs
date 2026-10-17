@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::bridge::Client;
 use crate::session::Session;
-use crate::tools::{self, Args, Output, TOOLS};
+use crate::tools::{self, Args, Output};
 
 const PROTOCOL: &str = "2025-06-18";
 
@@ -28,7 +28,7 @@ pub fn base64(data: &[u8]) -> String {
 
 /// The MCP `tools/list` result: every tool with its help and argument schema.
 pub fn tool_list() -> Value {
-    json!({ "tools": TOOLS.iter().map(|t| json!({
+    json!({ "tools": tools::all().into_iter().map(|t| json!({
         "name": t.name,
         "description": t.help,
         "inputSchema": tools::schema(t),

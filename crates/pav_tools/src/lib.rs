@@ -11,6 +11,7 @@ pub mod asset_preview_tools;
 pub mod asset_search;
 pub mod asset_tools;
 pub mod bridge;
+pub mod cli;
 pub mod creature_preview_tools;
 pub mod creature_tools;
 pub mod creature_worker;

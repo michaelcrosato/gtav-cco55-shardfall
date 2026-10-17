@@ -18,14 +18,17 @@ use anyhow::{Context, Result, anyhow};
 use serde_json::{Value, json};
 
 use crate::session::Session;
-use crate::tools::{self, Args, Output, TOOLS};
+use crate::tools::{self, Args, Output};
 
 pub const DEFAULT_ADDR: &str = "127.0.0.1:7878";
 
 /// Every tool with its help and argument schema.
 pub fn tool_list() -> Value {
     Value::Array(
-        TOOLS.iter().map(|t| json!({ "name": t.name, "description": t.help, "inputSchema": tools::schema(t) })).collect(),
+        tools::all()
+            .into_iter()
+            .map(|t| json!({ "name": t.name, "description": t.help, "inputSchema": tools::schema(t) }))
+            .collect(),
     )
 }
 

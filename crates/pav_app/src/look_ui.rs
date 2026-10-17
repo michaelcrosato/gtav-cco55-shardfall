@@ -27,17 +27,19 @@ struct LookFile {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn path() -> std::path::PathBuf {
-    crate::boot::exe_dir().join("shardfall_looks.json")
+    crate::boot::exe_dir().join(crate::config::get().file("_looks.json"))
 }
 
 #[cfg(target_arch = "wasm32")]
-const KEY: &str = "shardfall_looks";
+fn key() -> String {
+    crate::config::get().file("_looks")
+}
 
 fn read_file() -> LookFile {
     #[cfg(not(target_arch = "wasm32"))]
     let text = std::fs::read_to_string(path()).ok();
     #[cfg(target_arch = "wasm32")]
-    let text = web_sys::window().and_then(|w| w.local_storage().ok().flatten()).and_then(|s| s.get_item(KEY).ok().flatten());
+    let text = web_sys::window().and_then(|w| w.local_storage().ok().flatten()).and_then(|s| s.get_item(&key()).ok().flatten());
     text.and_then(|t| match serde_json::from_str(&t) {
         Ok(f) => Some(f),
         Err(e) => {
@@ -59,7 +61,7 @@ fn write_file(f: &LookFile) {
         }
     }
     #[cfg(target_arch = "wasm32")]
-    if web_sys::window().and_then(|w| w.local_storage().ok().flatten()).and_then(|s| s.set_item(KEY, &text).ok()).is_none() {
+    if web_sys::window().and_then(|w| w.local_storage().ok().flatten()).and_then(|s| s.set_item(&key(), &text).ok()).is_none() {
         log::warn!("could not save looks to local storage");
     }
 }

@@ -4,6 +4,8 @@
 # --single-file writes only target/web/<title>.html (shardfall.html): one page with the glue and gzipped wasm inside
 #   that runs from file:// or any host (scripts/pack_single_html.py; also --title, --description, --theme-color,
 #   --scene NAME for the start scene when the address names none, --out PATH).
+# --package NAME --bin NAME build another app binary (default: pav_app's shardfall), e.g. a game
+#   built on the engine (scripts/build-gtf-web.sh); the JS glue keeps the name shardfall.js inside.
 # Needs: rustup target add wasm32-unknown-unknown
 #        cargo install wasm-bindgen-cli --version <the wasm-bindgen version in Cargo.lock>
 set -euo pipefail
@@ -11,9 +13,16 @@ caller=$PWD
 cd "$(dirname "$0")/.."
 single=false
 pack=()
+package=pav_app
+bin=shardfall
 while (($#)); do
 	case $1 in
 	--single-file) single=true ;;
+	--package | --bin)
+		(($# > 1)) || { echo "build-web.sh: $1 needs a value" >&2; exit 2; }
+		if [[ $1 == --package ]]; then package=$2; else bin=$2; fi
+		shift
+		;;
 	--title | --description | --theme-color | --scene | --out)
 		(($# > 1)) || { echo "build-web.sh: $1 needs a value" >&2; exit 2; }
 		value=$2
@@ -29,8 +38,8 @@ if ((${#pack[@]})) && ! $single; then
 	echo "build-web.sh: ${pack[0]} needs --single-file" >&2
 	exit 2
 fi
-cargo build --locked --profile dist --target wasm32-unknown-unknown -p pav_app
-wasm=${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/dist/shardfall.wasm
+cargo build --locked --profile dist --target wasm32-unknown-unknown -p "$package" --bin "$bin"
+wasm=${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/dist/$bin.wasm
 out=target/web
 if $single; then
 	bindgen=$(mktemp -d)

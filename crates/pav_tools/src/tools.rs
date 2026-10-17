@@ -36,7 +36,7 @@ pub struct Tool {
     pub run: fn(&mut Session, &Args) -> Result<Output>,
 }
 
-pub(crate) const fn arg(name: &'static str, kind: &'static str, help: &'static str) -> Arg {
+pub const fn arg(name: &'static str, kind: &'static str, help: &'static str) -> Arg {
     Arg { name, kind, help }
 }
 
@@ -906,13 +906,34 @@ pub fn kinds(tool: &str) -> Vec<&'static str> {
     KIND_ROUTES.iter().filter(|(t, _, _)| *t == tool).map(|(_, kind, _)| *kind).collect()
 }
 
+/// Tools added by another crate (a game's own CLI registers its tools with [`register`]), after
+/// the engine's [`TOOLS`].
+static REGISTERED: std::sync::RwLock<Vec<&'static Tool>> = std::sync::RwLock::new(Vec::new());
+
+/// Adds tools defined in another crate to the CLI, the REPL and MCP of this process. Names already
+/// taken are skipped.
+pub fn register(tools: &'static [Tool]) {
+    let mut list = REGISTERED.write().unwrap_or_else(|e| e.into_inner());
+    for t in tools {
+        if TOOLS.iter().chain(list.iter().copied()).all(|o| o.name != t.name) {
+            list.push(t);
+        }
+    }
+}
+
+/// Every tool: the engine's, then the registered ones.
+pub fn all() -> Vec<&'static Tool> {
+    let list = REGISTERED.read().unwrap_or_else(|e| e.into_inner());
+    TOOLS.iter().chain(list.iter().copied()).collect()
+}
+
 pub fn find(name: &str) -> Option<&'static Tool> {
-    TOOLS.iter().find(|t| t.name == name)
+    all().into_iter().find(|t| t.name == name)
 }
 
 pub fn call(session: &mut Session, name: &str, args: &Args) -> Result<Output> {
     let original = find(name).ok_or_else(|| {
-        let fix = pav_core::issue::suggestion(name, TOOLS.iter().map(|t| t.name)).unwrap_or_else(|| "try `help`".into());
+        let fix = pav_core::issue::suggestion(name, all().into_iter().map(|t| t.name)).unwrap_or_else(|| "try `help`".into());
         anyhow!("unknown tool \"{name}\" — {fix}")
     })?;
     let generic = KIND_ROUTES.iter().any(|(tool, _, _)| *tool == name);
@@ -1102,7 +1123,7 @@ pub(crate) fn get_bool(a: &Args, k: &str, default: bool) -> Result<bool> {
 fn t_scenes(_: &mut Session, _: &Args) -> Result<Output> {
     Ok(Output::Json(json!({
         "scenes": pav_core::scenes::SCENES.iter().map(|(n, d)| json!({"name": n, "about": d})).collect::<Vec<_>>(),
-        "games": pav_core::games::GAMES.iter().map(|g| json!({"name": g.key, "about": g.about})).collect::<Vec<_>>(),
+        "games": pav_core::games::all().into_iter().map(|g| json!({"name": g.key, "about": g.about})).collect::<Vec<_>>(),
         "standalone_rooms": pav_core::scenes::names()
             .into_iter()
             .filter(|n| !pav_core::scenes::SCENES.iter().any(|s| s.0 == n) && pav_core::games::find(n).is_none())

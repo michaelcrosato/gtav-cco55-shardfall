@@ -24,15 +24,15 @@ pub const SCENES: &[(&str, &str)] = &[
     ("level", "Shardfall: a level of the descent. 'level/<n>' is depth n (1-12 designed, then the endless Depths)."),
 ];
 
-/// The scenes a menu offers: the built-in ones, then the games (`crate::games::GAMES`).
+/// The scenes a menu offers: the built-in ones, then the games (`crate::games::all`).
 pub fn menu() -> Vec<(&'static str, &'static str)> {
-    SCENES.iter().copied().chain(crate::games::GAMES.iter().map(|g| (g.key, g.about))).collect()
+    SCENES.iter().copied().chain(crate::games::all().into_iter().map(|g| (g.key, g.about))).collect()
 }
 
 /// All scene names, including standalone rooms (any room key builds just that room).
 pub fn names() -> Vec<String> {
     let mut v: Vec<String> = SCENES.iter().map(|s| s.0.to_string()).collect();
-    v.extend(crate::games::GAMES.iter().map(|g| g.key.to_string()));
+    v.extend(crate::games::all().into_iter().map(|g| g.key.to_string()));
     let (rooms, _) = room::parse_all(&room::load_sources(room::rooms_dir().as_deref()));
     v.extend(rooms.into_iter().map(|(k, _)| k));
     v
@@ -152,7 +152,7 @@ pub fn build(sim: &mut Sim, name: &str) -> Result<()> {
             let Some(src) = sources.iter().find(|s| s.key == key) else {
                 bail!(
                     "unknown scene or room '{key}' (scenes: world, test, empty; games: {}; rooms: {})",
-                    crate::games::GAMES.iter().map(|g| g.key).collect::<Vec<_>>().join(", "),
+                    crate::games::all().into_iter().map(|g| g.key).collect::<Vec<_>>().join(", "),
                     sources.iter().map(|s| s.key.as_str()).collect::<Vec<_>>().join(", ")
                 );
             };

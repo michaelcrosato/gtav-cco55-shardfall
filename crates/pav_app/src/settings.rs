@@ -55,7 +55,7 @@ impl Default for Settings {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-const HEADER: &str = "# Shardfall startup settings. Delete this file to restore defaults.\n# backend = \"vulkan\" or \"dx12\"\n";
+const HEADER: &str = "# Startup settings. Delete this file to restore defaults.\n# backend = \"vulkan\" or \"dx12\"\n";
 
 impl Settings {
     /// In the browser: defaults, plus `?room=NAME&seed=N` from the page address.
@@ -84,8 +84,8 @@ impl Settings {
             s.scene = "empty".into();
         }
         if s.scene.is_empty() {
-            // Shardfall's town; the engine's pavilion is the `world` scene (pause menu).
-            s.scene = "town".into();
+            // The app's default (Shardfall's town); the engine's pavilion is the `world` scene.
+            s.scene = crate::config::get().default_scene.into();
         }
         (s, "page address (?room=NAME&seed=N)".into())
     }
@@ -93,7 +93,7 @@ impl Settings {
     /// Loads settings (creating the file with defaults on first run), then applies CLI flags.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load(args: &[String]) -> (Self, String) {
-        let path = crate::boot::exe_dir().join("shardfall.toml");
+        let path = crate::boot::exe_dir().join(crate::config::get().file("toml"));
         let mut note = String::new();
         let mut s = match std::fs::read_to_string(&path) {
             Ok(text) => match toml_from_str(&text) {
@@ -170,8 +170,8 @@ impl Settings {
             }
         }
         if s.scene.is_empty() {
-            // Shardfall's town; the engine's pavilion is the `world` scene (pause menu).
-            s.scene = "town".into();
+            // The app's default (Shardfall's town); the engine's pavilion is the `world` scene.
+            s.scene = crate::config::get().default_scene.into();
         }
         (s, note)
     }

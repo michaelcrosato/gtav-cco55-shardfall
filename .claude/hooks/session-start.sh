@@ -24,4 +24,5 @@ if [ ${#missing[@]} -gt 0 ]; then
 fi
 
 echo 'export CARGO_BUILD_JOBS=4' >> "${CLAUDE_ENV_FILE:-/dev/null}"
-CARGO_BUILD_JOBS=4 cargo build --locked -q -p pav_tools --bin pav
+# The engine's CLI and Grand Theft Freeway-BX's (`gtf`: every engine tool plus the game).
+CARGO_BUILD_JOBS=4 cargo build --locked -q -p pav_tools --bin pav -p gtf_app --bin gtf

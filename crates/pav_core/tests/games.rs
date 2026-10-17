@@ -2,7 +2,7 @@
 //! starter can be lost, and a game's state survives snapshot files, rewind and replays like
 //! the rest of the simulation. Copy these tests for a new game.
 
-use pav_core::games::{GAMES, Outcome};
+use pav_core::games::{self, Outcome};
 use pav_core::{InputFrame, Sim, SimState};
 
 #[test]
@@ -62,7 +62,7 @@ fn snapshots_rewind_and_replays_are_exact() {
 #[test]
 fn game_keys_name_one_scene_each() {
     let names = pav_core::scenes::names();
-    for g in GAMES {
+    for g in games::all() {
         assert_eq!(names.iter().filter(|n| *n == g.key).count(), 1, "'{}' is also a scene or room key", g.key);
         assert!(!g.key.contains('/'), "'{}': `<key>/<rest>` passes the rest to the game", g.key);
         assert!(Sim::new(g.key, 1).unwrap().play().is_some_and(|p| p.key() == g.key));

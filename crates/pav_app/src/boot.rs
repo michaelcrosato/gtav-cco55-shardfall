@@ -51,9 +51,9 @@ pub fn exe_dir() -> PathBuf {
 pub fn init() -> &'static Diagnostics {
     #[cfg(not(target_arch = "wasm32"))]
     let (log_path, file) = {
-        let mut log_path = exe_dir().join("shardfall.log");
+        let mut log_path = exe_dir().join(crate::config::get().file("log"));
         let file = File::create(&log_path).ok().or_else(|| {
-            log_path = std::env::temp_dir().join("shardfall.log");
+            log_path = std::env::temp_dir().join(crate::config::get().file("log"));
             File::create(&log_path).ok()
         });
         (log_path, file)
@@ -180,7 +180,10 @@ pub fn install_panic_hook() {
         }
         // The browser stops the game on a panic: say so on the page.
         #[cfg(target_arch = "wasm32")]
-        crate::platform::error_box("Shardfall crashed", &format!("{msg}\n  at {loc}\n\nReload the page to start again."));
+        crate::platform::error_box(
+            &format!("{} crashed", crate::config::get().title),
+            &format!("{msg}\n  at {loc}\n\nReload the page to start again."),
+        );
     }));
 }
 

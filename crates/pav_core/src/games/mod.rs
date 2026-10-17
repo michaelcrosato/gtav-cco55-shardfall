@@ -115,9 +115,29 @@ pub fn level_text(key: &str, built_in: &'static str) -> std::borrow::Cow<'static
     built_in.into()
 }
 
-/// The game registered under `key`.
+/// Games defined in other crates (a game's own crate calls [`register`] from its binaries and
+/// tests), after the built-in [`GAMES`].
+static REGISTERED: std::sync::RwLock<Vec<&'static Entry>> = std::sync::RwLock::new(Vec::new());
+
+/// Adds a game defined in another crate, so `load scene=<key>` (and snapshot files naming it)
+/// work in this process. Binaries call it before building a scene or loading a snapshot; tests
+/// call it in their setup. Registering the same key again does nothing.
+pub fn register(entry: &'static Entry) {
+    let mut list = REGISTERED.write().unwrap_or_else(|e| e.into_inner());
+    if GAMES.iter().chain(list.iter().copied()).all(|g| g.key != entry.key) {
+        list.push(entry);
+    }
+}
+
+/// Every game: the built-in [`GAMES`], then the registered ones.
+pub fn all() -> Vec<&'static Entry> {
+    let list = REGISTERED.read().unwrap_or_else(|e| e.into_inner());
+    GAMES.iter().chain(list.iter().copied()).collect()
+}
+
+/// The game registered under `key` (built in or registered).
 pub fn find(key: &str) -> Option<&'static Entry> {
-    GAMES.iter().find(|g| g.key == key)
+    all().into_iter().find(|g| g.key == key)
 }
 
 /// A running game in `SimState::play`: clones (rewind, snapshots) and serializes (snapshot
@@ -182,7 +202,7 @@ impl<'de> Deserialize<'de> for GameBox {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let saved = Saved::deserialize(d)?;
         let Some(entry) = find(&saved.key) else {
-            let known: Vec<&str> = GAMES.iter().map(|g| g.key).collect();
+            let known: Vec<&str> = all().into_iter().map(|g| g.key).collect();
             return Err(D::Error::custom(format!("unknown game '{}' (known: {})", saved.key, known.join(", "))));
         };
         (entry.load)(saved.state).map_err(D::Error::custom)

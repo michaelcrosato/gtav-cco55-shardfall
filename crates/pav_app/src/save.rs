@@ -18,7 +18,7 @@ struct SaveFile {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn path() -> std::path::PathBuf {
-    crate::boot::exe_dir().join("shardfall_save.json")
+    crate::boot::exe_dir().join(crate::config::get().file("_save.json"))
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -27,13 +27,15 @@ fn storage() -> Option<web_sys::Storage> {
 }
 
 #[cfg(target_arch = "wasm32")]
-const KEY: &str = "shardfall_save";
+fn key() -> String {
+    crate::config::get().file("_save")
+}
 
 fn read_text() -> Option<String> {
     #[cfg(not(target_arch = "wasm32"))]
     return std::fs::read_to_string(path()).ok();
     #[cfg(target_arch = "wasm32")]
-    return storage()?.get_item(KEY).ok()?;
+    return storage()?.get_item(&key()).ok()?;
 }
 
 /// The saved hero and the others waiting in the hall, if there is a save (and it reads).
@@ -62,7 +64,7 @@ pub fn write(hero: &Hero, roster: &BTreeMap<String, Hero>) {
         }
     }
     #[cfg(target_arch = "wasm32")]
-    if storage().and_then(|s| s.set_item(KEY, &text).ok()).is_none() {
+    if storage().and_then(|s| s.set_item(&key(), &text).ok()).is_none() {
         log::warn!("could not save to local storage");
     }
 }
@@ -73,7 +75,7 @@ pub fn erase() {
     let _ = std::fs::remove_file(path());
     #[cfg(target_arch = "wasm32")]
     if let Some(s) = storage() {
-        let _ = s.remove_item(KEY);
+        let _ = s.remove_item(&key());
     }
 }
 
@@ -111,17 +113,19 @@ impl Default for Prefs {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn prefs_path() -> std::path::PathBuf {
-    crate::boot::exe_dir().join("shardfall_prefs.json")
+    crate::boot::exe_dir().join(crate::config::get().file("_prefs.json"))
 }
 
 #[cfg(target_arch = "wasm32")]
-const PREFS_KEY: &str = "shardfall_prefs";
+fn prefs_key() -> String {
+    crate::config::get().file("_prefs")
+}
 
 pub fn load_prefs() -> Prefs {
     #[cfg(not(target_arch = "wasm32"))]
     let text = std::fs::read_to_string(prefs_path()).ok();
     #[cfg(target_arch = "wasm32")]
-    let text = storage().and_then(|s| s.get_item(PREFS_KEY).ok().flatten());
+    let text = storage().and_then(|s| s.get_item(&prefs_key()).ok().flatten());
     text.and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
@@ -132,7 +136,7 @@ pub fn save_prefs(p: &Prefs) {
         log::warn!("could not write {}", prefs_path().display());
     }
     #[cfg(target_arch = "wasm32")]
-    if storage().and_then(|s| s.set_item(PREFS_KEY, &text).ok()).is_none() {
+    if storage().and_then(|s| s.set_item(&prefs_key(), &text).ok()).is_none() {
         log::warn!("could not save preferences");
     }
 }
