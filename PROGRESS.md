@@ -84,6 +84,7 @@ resumed or compacted session reads first.
 | D16 Developer demo level | ☐ | |
 
 ## Decisions
+- 2026-10-17 — Aim camera at 2.0 m behind and 0.65 m right of the shoulder, its target at head height (PLAN §5.6.2 said 1.6 m / 0.6 m): at 1.6 m the stand-in body filled half the frame (`out/m3/cam_aim.png` vs `cam_aim2.png`). The on-foot camera's walls are five rays from the pivot (a stand-in for a sphere cast; the engine has rays only).
 - 2026-10-17 — **Name:** *Grand Theft Freeway-BX* (title #25 of 50 drawn with `secrets.randbelow`,
   ID "BX" from `secrets.choice` over A–Z0–9; PLAN.md §3).
 - 2026-10-17 — **Engine in the repo as a vendored copy** of upstream `0098196` minus

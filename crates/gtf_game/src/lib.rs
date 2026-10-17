@@ -280,7 +280,7 @@ impl Freeway {
     }
 
     fn look(&self) -> Look {
-        Look { sensitivity: self.settings.sensitivity, invert_y: self.settings.invert_y }
+        Look { sensitivity: self.settings.sensitivity, invert_y: self.settings.invert_y, recentre: self.settings.recentre }
     }
 
     /// The menus show the city from a drone; play uses the orbit camera.
@@ -398,10 +398,18 @@ impl Game for Freeway {
                 sounds.push("ui.toast");
             }
             let look = self.look();
+            // Walls pull the camera in: the distance to the first surface along a ray.
+            let hit = |o: Vec3, d: Vec3, max: f32| sim.raycast(o, d, max, None).map(|h| h.point.distance(o));
             if self.wheel_open() {
-                self.cam.update(&InputFrame::default(), feet, look, real);
+                self.cam.update(&InputFrame::default(), feet, look, camera::Moving::default(), real, &hit);
             } else {
-                self.cam.update(input, feet, look, real);
+                let (stick, world) = crate::pad::stick_or_move(input);
+                let moving = camera::Moving {
+                    dir: if world { stick } else { self.cam.world_move(stick) }.clamp_length_max(1.0),
+                    sprinting: self.foot.sprinting,
+                    aiming: input.pad.l2 > 0.5 || input.pad.held & pav_core::input::pad::L2 != 0,
+                };
+                self.cam.update(input, feet, look, moving, real, &hit);
                 if let (Some(id), None, false) = (sim.state.player, &self.view, self.mode == "tour") {
                     let (frame, haste) = self.foot.input(input, &self.cam, 50.0, dt);
                     if let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut()) {

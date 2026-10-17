@@ -17,6 +17,8 @@ pub struct Settings {
     pub safe_area: f32,
     pub sensitivity: f32,
     pub invert_y: bool,
+    /// The camera swings back behind the player's movement after 2 s without look input.
+    pub recentre: bool,
     pub vibration: bool,
     pub glyphs: GlyphStyle,
     pub subtitles: bool,
@@ -37,6 +39,7 @@ impl Default for Settings {
             safe_area: 0.05,
             sensitivity: 1.0,
             invert_y: false,
+            recentre: true,
             vibration: true,
             glyphs: GlyphStyle::Auto,
             subtitles: true,
@@ -93,6 +96,7 @@ impl Settings {
             2 => vec![
                 slider("sensitivity", "Camera sensitivity", (self.sensitivity - 0.4) / 1.6, format!("{:.1}", self.sensitivity)),
                 toggle("invert_y", "Invert look", self.invert_y),
+                toggle("recentre", "Camera follows movement", self.recentre),
                 toggle("vibration", "Vibration", self.vibration),
                 MenuItem {
                     id: "glyphs".into(),
@@ -136,6 +140,7 @@ impl Settings {
             "sensitivity" => step(&mut self.sensitivity, 0.4, 2.0, 0.1),
             "fps" => self.fps = !self.fps,
             "invert_y" => self.invert_y = !self.invert_y,
+            "recentre" => self.recentre = !self.recentre,
             "vibration" => self.vibration = !self.vibration,
             "subtitles" => self.subtitles = !self.subtitles,
             "reduce_shake" => self.reduce_shake = !self.reduce_shake,
