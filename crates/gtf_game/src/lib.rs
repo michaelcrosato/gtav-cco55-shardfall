@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 pub mod about;
+pub mod ambience;
 pub mod camera;
 pub mod content;
 pub mod daytime;
@@ -572,16 +573,35 @@ impl Game for Freeway {
         if let Some(c) = &self.city {
             world::signal_lamps(c, self.camera().target, self.time, &mut draw.prims);
         }
+        let cam = self.camera();
+        let view = self.look_now();
+        // The beds: where the ears are, who is near, the weather and the hour.
+        let crowd = self.peds.list.iter().filter_map(|p| sim.feet(p.id)).filter(|f| f.distance(cam.eye) < 25.0).count();
+        let loops = match self.city.as_deref() {
+            Some(city) => ambience::beds(&ambience::Ears {
+                city,
+                at: cam.eye,
+                crowd,
+                rain: view.rain.min(1.0),
+                wind: view.wind.length(),
+                night: 0.5 + 0.5 * (self.sky.hour / 24.0 * std::f32::consts::TAU).cos(),
+            }),
+            None => Vec::new(),
+        };
+        let listener =
+            Some(pav_core::present::Listener { pos: cam.eye, forward: (cam.target - cam.eye).normalize_or(Vec3::NEG_Z) });
         Some(PlayFrame {
             ui,
             draw,
-            camera: Some(self.camera()),
-            view: Some(self.look_now()),
+            camera: Some(cam),
+            view: Some(view),
             audio: AudioScene {
                 master: self.settings.master,
                 effects: self.settings.sfx,
                 // The menus duck the city.
                 ducking: if menu { 0.6 } else { 0.0 },
+                listener,
+                loops,
                 music: radio::def().ok().and_then(|d| self.radio.music(&d, self.time as f64, self.settings.music)),
                 ..Default::default()
             },
