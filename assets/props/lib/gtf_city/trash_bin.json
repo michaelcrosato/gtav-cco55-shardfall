@@ -1,0 +1,14 @@
+{"format":2,"name":"trash_bin","unit":"cm",
+"description":"A public litter bin, 1 m, city green: slatted steel drum with two bands and a domed lid with a dark opening.",
+"tags":["bin","trash","litter","street","sidewalk","public"],
+"category":"container",
+"materials":{
+"dark":{"color":"#1b1c1e"},
+"green":{"base":"MAT/gtf/painted_metal","color":"#2b5236"},
+"slats":{"base":"MAT/gtf/painted_metal","color":"#2f5a3a","map":"axis","layers":[{"type":"stripes","size":9,"cover":0.3,"soft":0.2,"shade":0.55}]}},
+"parts":{
+"band":{"type":"tube","radius":30,"thickness":2,"height":6,"pos":[0,46,0],"mat":"green","array":{"count":2,"step":[0,68,0]}},
+"base":{"type":"cylinder","radius":26,"height":5,"pos":[0,2.5,0],"mat":"green"},
+"body":{"type":"cylinder","radius":29,"from":[0,5,0],"to":[0,88,0],"mat":"slats"},
+"lid":{"type":"cone","radius":31,"radius_end":18,"height":12,"pos":[0,94,0],"mat":"green"},
+"opening":{"type":"cylinder","radius":15,"height":2,"pos":[0,101,0],"mat":"dark"}}}

@@ -1,0 +1,12 @@
+{"format":2,"name":"mailbox","unit":"cm",
+"description":"A blue street mailbox on four short legs: rounded top and a pull-down chute on the front (+z); no markings.",
+"tags":["mailbox","mail","post","street","sidewalk","box"],
+"category":"container",
+"materials":{
+"blue":{"base":"MAT/gtf/painted_metal","color":"#2b4e8c"},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#2a2c30"}},
+"parts":{
+"body":{"type":"box","size":[52,72,50],"pos":[0,58,0],"mat":"blue"},
+"chute":{"type":"box","size":[36,9,4],"pos":[0,84,27],"mat":"steel"},
+"leg":{"type":"box","size":[6,22,6],"pos":[21,11,20],"mat":"steel","mirror":["x","z"]},
+"top":{"type":"cylinder","radius":25,"height":52,"arc":180,"facing":"y","pos":[0,94,0],"axis":"x","mat":"blue"}}}

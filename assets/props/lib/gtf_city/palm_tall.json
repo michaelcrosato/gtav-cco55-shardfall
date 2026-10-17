@@ -1,0 +1,15 @@
+{"format":2,"name":"palm_tall","unit":"cm",
+"description":"A Washingtonia fan palm, 21 m: slender ringed trunk, a trimmed brown skirt and a round head of green fan fronds.",
+"tags":["palm","tree","washingtonia","street","boulevard","vegetation"],
+"category":"vegetation",
+"materials":{
+"frond":{"color":"#3f7d3a"},
+"frond2":{"color":"#4c8f45"},
+"skirt":{"color":"#8a6a3e","roughness":1},
+"trunk":{"color":"#7a6550","roughness":0.95,"map":"axis","layers":[{"type":"stripes","size":12,"axis":"y","cover":0.3,"soft":0.5,"shade":0.75}]}},
+"parts":{
+"core":{"type":"ellipsoid","size":[190,170,190],"pos":[0,2020,0],"mat":"frond","sway":"leaves"},
+"frond":{"type":"ellipsoid","size":[130,10,120],"pos":[0,2005,0],"pitch":15,"mat":"frond2","sway":"leaves","radial":{"count":6,"radius":95}},
+"frond_up":{"type":"ellipsoid","size":[110,10,110],"pos":[0,2085,0],"pitch":-45,"mat":"frond","sway":"leaves","radial":{"count":3,"radius":55,"start":30}},
+"skirt":{"type":"ellipsoid","size":[84,170,84],"pos":[0,1890,0],"mat":"skirt"},
+"trunk":{"type":"cone","radius":28,"radius_end":15,"height":1930,"pos":[0,965,0],"mat":"trunk"}}}

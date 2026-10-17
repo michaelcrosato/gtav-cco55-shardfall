@@ -1,5 +1,6 @@
 //! Procedural materials as an asset kind (asset plan §6.6). `assets kind=material` lists the
-//! core and workshop materials; `asset_edit kind=material` creates, copies, inspects and
+//! core and workshop materials, and natively the packs on disk (`assets/materials/gtf/x.json`
+//! is `MAT/gtf/x`); `asset_edit kind=material` creates, copies, inspects and
 //! patches workshop materials (`MAT/workshop/x`, saved as `assets/materials/workshop/x.json`,
 //! revisions `mat1-…`) with the props' transaction: the editor lock, if_revision, a 32-step
 //! history, an atomic save, then the library is rebuilt and every view re-packs the rows that
@@ -36,28 +37,46 @@ pub fn initialize_authored() -> Result<()> {
     result
 }
 
-/// Read every workshop material file into the library. A file with errors stays out (its
-/// errors are returned); the others load.
+/// Read every workshop material file into the library, then the material packs on disk: the
+/// other folders under `root` (a game's `gtf/` holds `MAT/gtf/x`). A pack file the build embeds
+/// as it stands is loaded already; the rest load from disk, so native tools see a pack before a
+/// rebuild embeds it, and an edited file at once. A file with errors stays out (its errors are
+/// returned); the others load.
 pub fn reload_authored_at(root: &Path) -> Result<Vec<String>> {
-    let folder = root.join("workshop");
-    if !folder.is_dir() {
-        return Ok(Vec::new());
+    let mut folders = vec!["workshop".to_owned()];
+    if let Ok(entries) = std::fs::read_dir(root) {
+        let mut packs: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+            .filter(|folder| folder != "workshop" && check_leaf(folder).is_ok())
+            .collect();
+        packs.sort();
+        folders.extend(packs);
     }
     let mut names = Vec::new();
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(&folder)?.filter_map(|e| e.ok().map(|e| e.path())).collect();
-    paths.sort();
     let mut lib = Library::current();
-    for path in paths {
-        let Some(leaf) = path.file_stem().and_then(|s| s.to_str()).filter(|_| path.extension().is_some_and(|e| e == "json"))
-        else {
-            continue;
-        };
-        if leaf.starts_with('.') || check_leaf(leaf).is_err() {
-            continue;
+    for folder in folders {
+        let Ok(entries) = std::fs::read_dir(root.join(&folder)) else { continue };
+        let mut paths: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        paths.sort();
+        for path in paths {
+            let Some(leaf) = path.file_stem().and_then(|s| s.to_str()).filter(|_| path.extension().is_some_and(|e| e == "json"))
+            else {
+                continue;
+            };
+            if leaf.starts_with('.') || check_leaf(leaf).is_err() {
+                continue;
+            }
+            let short = format!("{folder}/{leaf}");
+            let text = std::fs::read_to_string(&path)?;
+            if pav_core::material::library::MATERIALS.iter().any(|(name, embedded)| *name == short && *embedded == text) {
+                continue;
+            }
+            // The library's workshop sources carry the disk packs' files too.
+            lib = Library::set_workshop(&short, Some(text));
+            names.push(format!("{PREFIX}{short}"));
         }
-        let text = std::fs::read_to_string(&path)?;
-        lib = Library::set_workshop(&format!("workshop/{leaf}"), Some(text));
-        names.push(format!("{PREFIX}workshop/{leaf}"));
     }
     let broken: Vec<String> = names
         .iter()
@@ -68,7 +87,7 @@ pub fn reload_authored_at(root: &Path) -> Result<Vec<String>> {
         })
         .collect();
     if !broken.is_empty() {
-        bail!("some workshop materials did not load: {}", broken.join(" | "));
+        bail!("some workshop or pack materials did not load: {}", broken.join(" | "));
     }
     Ok(names)
 }
@@ -130,10 +149,16 @@ fn document(root: &Path, name: &str, leaf: Option<&str>) -> Result<Option<Map<St
             }
             std::fs::read_to_string(&path)?
         }
-        None => match pav_core::material::library::MATERIALS.iter().find(|(n, _)| format!("{PREFIX}{n}") == name) {
-            Some((_, text)) => text.to_string(),
-            None => return Ok(None),
-        },
+        None => {
+            // A disk pack's file as loaded (it may be newer than its embedded copy), else the build's.
+            let short = name.strip_prefix(PREFIX).unwrap_or(name);
+            let embedded =
+                || pav_core::material::library::MATERIALS.iter().find(|(n, _)| *n == short).map(|(_, t)| t.to_string());
+            match Library::workshop_text(short).or_else(embedded) {
+                Some(text) => text,
+                None => return Ok(None),
+            }
+        }
     };
     match props::strict_value(&text).map_err(|issue| anyhow!("{name}: {issue}"))? {
         Value::Object(map) => Ok(Some(map)),
@@ -483,7 +508,8 @@ fn candidate(name: &str, text: Option<&str>) -> Library {
     let mut sources: Vec<(String, String)> =
         pav_core::material::library::MATERIALS.iter().map(|(n, t)| (n.to_string(), t.to_string())).collect();
     let current = Library::current();
-    for full in current.names().chain(current.broken()).filter(|n| n.starts_with(&format!("{PREFIX}workshop/"))) {
+    // The workshop's and the disk packs' files (core names have no workshop text).
+    for full in current.names().chain(current.broken()) {
         let short = &full[PREFIX.len()..];
         if short != name {
             if let Some(text) = Library::workshop_text(short) {

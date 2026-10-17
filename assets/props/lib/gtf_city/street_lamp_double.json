@@ -1,0 +1,14 @@
+{"format":2,"name":"street_lamp_double","unit":"cm",
+"description":"A 9 m median street light: tapered pole with two cobra-head arms toward +z and -z; emissive parts lamp, lamp~z.",
+"tags":["streetlight","lamp","median","street","road","light"],
+"category":"lighting",
+"materials":{
+"galv":{"base":"MAT/gtf/painted_metal","color":"#9ea4a8","metallic":0.5},
+"glow":{"color":"#ffcf8a","emissive":0.4}},
+"parts":{
+"arm":{"type":"cylinder","radius":4.5,"from":[0,872,0],"to":[0,905,235],"mat":"galv","mirror":"z"},
+"base":{"type":"cone","radius":19,"radius_end":13,"height":45,"pos":[0,22.5,0],"mat":"galv"},
+"cap":{"type":"ellipsoid","size":[18,10,18],"pos":[0,900,0],"mat":"galv"},
+"head":{"type":"ellipsoid","size":[38,20,82],"pos":[0,906,262],"mat":"galv","mirror":"z"},
+"lamp":{"type":"ellipsoid","size":[28,8,58],"pos":[0,898,266],"mat":"glow","mirror":"z"},
+"pole":{"type":"cone","radius":12,"radius_end":8,"from":[0,45,0],"to":[0,900,0],"mat":"galv"}}}

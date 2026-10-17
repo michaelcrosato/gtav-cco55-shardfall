@@ -1,0 +1,11 @@
+{"format":2,"name":"rooftop_sign_frame","unit":"cm",
+"description":"A rooftop sign frame, 8.2 m wide and 3 m tall: white steel posts and rails with back struts; letters go on +z.",
+"tags":["sign","frame","rooftop","steel","lattice","roof"],
+"category":"architecture",
+"materials":{
+"steel":{"base":"MAT/gtf/painted_metal","color":"#e6e4de"}},
+"parts":{
+"post":{"type":"box","size":[10,300,10],"pos":[0,150,0],"mat":"steel","array":{"count":5,"step":[200,0,0]}},
+"rail":{"type":"box","size":[820,10,10],"pos":[0,195,0],"mat":"steel","array":{"count":2,"step":[0,190,0]}},
+"sill":{"type":"box","size":[820,10,12],"pos":[0,5,-160],"mat":"steel"},
+"strut":{"type":"box","size":[8,8],"from":[0,2.5,-160],"to":[0,280,-5],"mat":"steel","array":{"count":3,"step":[400,0,0]}}}}

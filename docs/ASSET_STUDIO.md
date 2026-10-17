@@ -124,7 +124,7 @@ publish keep it, a patch cannot set it, and a copy of a format-1 template stays 
 ## Names and tiers
 
 BUILTIN/name (templates) and LIB/core/name are embedded in every build, the browser's too. A
-shipped pack (`props::store::SHIPPED`, today `kaykit_adventurers`) has its files in every build as
+shipped pack (`props::store::SHIPPED`: `kaykit_adventurers`, `gtf_city`) has its files in every build as
 well, while its rows keep their own tier: game data and rooms may name these and the embedded
 ones. Other packs (assets/props/lib/pack/) load on first use in native builds; assets/props/local/ (packs, and WORKSHOP_LOCAL/name copies of their assets) is
 git-ignored, for sources whose licences forbid sharing. Each pack folder has an index.tsv that
@@ -138,7 +138,8 @@ chars), a category, 2-6 tags, references to BUILTIN or LIB/core only, core or in
 (not MAT/workshop/), and at most 400 tokens
 (food, tool, signage), 600 (container, lighting, rock, vegetation), 800 (most) or 2,000 (town,
 dungeon). It writes lib/core/x.json, its index row and a review.tsv line at this revision (an
-edited core asset needs a new review); rebuild to embed it.
+edited core asset needs a new review); rebuild to embed it. `pack=gtf_city` publishes into that
+pack instead (lib/gtf_city/ with its PACK.json; its assets may also reference their own pack).
 
 ## Library assets in game code
 

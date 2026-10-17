@@ -1,0 +1,5 @@
+{"format":1,"name":"gtf/corrugated_metal","unit":"cm","description":"Galvanised corrugated sheet, ridges running up the part, a few rust patches: sheds, roofs, fences.","tags":["metal","corrugated","roof","wall","industrial"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#a3a8ab","roughness":0.45,"metallic":0.5,
+ "layers":[
+  {"type":"stripes","size":10,"cover":0.5,"soft":1,"shade":0.7},
+  {"type":"noise","size":40,"detail":2,"cover":0.12,"soft":0.7,"color":"#7a5236","strength":0.3}
+ ]}

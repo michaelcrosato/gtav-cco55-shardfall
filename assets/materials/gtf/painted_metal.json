@@ -1,0 +1,5 @@
+{"format":1,"name":"gtf/painted_metal","unit":"cm","description":"Painted steel, scuffed, rust specks on top faces; the part's colour sets the paint: poles, bins, boxes.","tags":["metal","paint","steel","street"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#5f7f6a","roughness":0.5,"metallic":0.3,
+ "layers":[
+  {"type":"noise","size":25,"detail":2,"cover":0.15,"soft":0.8,"shade":0.93},
+  {"type":"noise","size":15,"detail":2,"cover":0.1,"soft":0.3,"color":"#4a3526","strength":0.35,"facing":"up"}
+ ]}

@@ -22,7 +22,7 @@ sack	sack	container	height	20	150	-	-
 door	door	architecture	height	150	450	-	-
 column	column pillar	architecture	height	80	1500	-	-
 candle	candle	lighting	height	2	80	-	-
-lantern	lantern lamp	lighting	height	10	500	-	-
+lantern	lantern lamp	lighting	height	10	1200	-	-
 torch	torch	lighting	height	20	300	-	-
 sword	sword sabre saber longsword broadsword	weapon	length	40	220	-	grip
 dagger	dagger knife	weapon tool	length	10	60	-	grip

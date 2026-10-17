@@ -1,0 +1,19 @@
+{"format":2,"name":"forklift","unit":"cm",
+"description":"A static counterbalance forklift, 3.3 m with forks: yellow body and counterweight, overhead guard, mast and forks to +z.",
+"tags":["forklift","vehicle","warehouse","dock","industrial","lift"],
+"category":"town",
+"materials":{
+"black":{"base":"MAT/gtf/painted_metal","color":"#232427"},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#6a6e72"},
+"tyre":"MAT/gtf/rubber",
+"yellow":{"base":"MAT/gtf/car_paint","color":"#e8b51f","roughness":0.5,"metallic":0.2}},
+"parts":{
+"body":{"type":"box","size":[106,62,176],"pos":[0,46,-2],"mat":"yellow"},
+"carriage":{"type":"box","size":[96,45,6],"pos":[0,27.5,101],"mat":"steel"},
+"counterweight":{"type":"rounded_box","size":[110,80,40],"radius":8,"pos":[0,60,-100],"mat":"yellow"},
+"fork":{"type":"box","size":[12,5,115],"pos":[28,4.5,158],"mat":"steel","mirror":"x"},
+"mast":{"type":"box","size":[10,210,12],"pos":[34,120,92],"mat":"steel","mirror":"x"},
+"post":{"type":"box","size":[6,6],"from":[50,77,45],"to":[50,215,30],"mat":"black","mirror":"x"},
+"roof":{"type":"box","size":[110,5,130],"pos":[0,217.5,-30],"mat":"black"},
+"wheel":{"type":"cylinder","radius":24,"height":22,"pos":[46,24,50],"axis":"x","mat":"tyre","mirror":"x"},
+"wheel_rear":{"type":"cylinder","radius":21,"height":20,"pos":[47,21,-75],"axis":"x","mat":"tyre","mirror":"x"}}}

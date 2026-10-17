@@ -1,0 +1,6 @@
+{"format":1,"name":"gtf/concrete","unit":"cm","description":"Cast grey concrete with soft mottling, water stains and grime at the foot: barriers, walls, piers.","tags":["concrete","stone","wall","barrier"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#9a9a96","roughness":0.85,
+ "layers":[
+  {"type":"noise","size":40,"detail":3,"cover":0.4,"soft":0.85,"shade":0.93},
+  {"type":"noise","size":120,"detail":2,"cover":0.25,"soft":0.9,"color":"#7c7a72","strength":0.4},
+  {"type":"gradient","from":0,"to":40,"shade":0.75,"strength":0.5}
+ ]}

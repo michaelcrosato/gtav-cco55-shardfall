@@ -1,0 +1,6 @@
+{"format":1,"name":"gtf/sand","unit":"cm","description":"Pale beach sand with soft wind ripples, grains and damp patches: beaches, dunes, lots.","tags":["sand","beach","ground","dune"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#e2cc9c","roughness":1,
+ "layers":[
+  {"type":"wave","size":45,"distort":1.5,"cover":0.5,"soft":0.7,"shade":0.92},
+  {"type":"noise","size":8,"detail":2,"cover":0.4,"soft":0.3,"color":"#efe0bb","strength":0.5},
+  {"type":"noise","size":150,"detail":2,"cover":0.3,"soft":0.9,"shade":0.9}
+ ]}

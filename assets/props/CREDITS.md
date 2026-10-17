@@ -9,6 +9,12 @@ The licence and credit of each committed object pack (`assets/props/lib/`), writ
 - Credit: Shardfall contributors (own work)
 - Source: own
 
+## LIB/gtf_city: Grand Theft Freeway-BX city props
+
+- Licence: CC0-1.0
+- Credit: Grand Theft Freeway-BX contributors (own work)
+- Source: own
+
 ## LIB/kaykit_adventurers: KayKit Character Pack: Adventurers
 
 - Licence: CC0-1.0

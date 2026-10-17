@@ -1,0 +1,26 @@
+{"format":2,"name":"lifeguard_tower","unit":"cm",
+"description":"An LA-style lifeguard tower: pastel hut on stilts, deck with rails, window toward +z (sea), ramp to -z. Knob: color.",
+"tags":["lifeguard","tower","beach","hut","lookout","stilts"],
+"category":"town",
+"materials":{
+"glass":"MAT/gtf/tinted_glass",
+"hut":{"color":"#7fb7d8","roughness":0.8},
+"post":{"color":"#e9e6de"},
+"rails":{"color":"#f4f2ec","layers":[{"type":"stripes","size":24,"axis":"y","cover":0.55,"color":"#7f8f96"}]},
+"white":{"color":"#f4f2ec"}},
+"parts":{
+"deck":{"type":"box","size":[380,12,380],"pos":[0,196,0],"mat":"MAT/gtf/wood_boardwalk"},
+"hut":{"type":"box","size":[290,230,250],"pos":[0,317,-20],"mat":"hut","color":"#7fb7d8"},
+"rail":{"type":"box","size":[380,95,4],"pos":[0,249.5,188],"mat":"rails"},
+"rail_side":{"type":"box","size":[4,95,380],"pos":[188,249.5,0],"mat":"rails","mirror":"x"},
+"ramp":{"type":"box","size":[110,8],"from":[0,196,-190],"to":[0,4,-620],"mat":"MAT/gtf/wood_boardwalk"},
+"roof":{"type":"box","size":[340,14,310],"pos":[0,439,-20],"mat":"white"},
+"stilt":{"type":"box","size":[20,190,20],"pos":[165,95,165],"mat":"post","mirror":["x","z"]},
+"window":{"type":"box","size":[230,70,2],"pos":[0,370,106],"mat":"glass"}},
+"params":{
+"color":{"choices":["blue","yellow","pink","mint","coral"],"set":{"hut.color":["#7fb7d8","#f2d27a","#f2a7b8","#a8d5ba","#f08a6b"]}}},
+"presets":{
+"coral":{"color":"coral"},
+"mint":{"color":"mint"},
+"pink":{"color":"pink"},
+"yellow":{"color":"yellow"}}}

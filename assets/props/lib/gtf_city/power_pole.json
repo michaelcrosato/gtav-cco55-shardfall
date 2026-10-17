@@ -1,0 +1,16 @@
+{"format":2,"name":"power_pole","unit":"cm",
+"description":"An 11 m wooden utility pole: crossarm with braces, three glass insulators (wire points) and a transformer can toward +z.",
+"tags":["utility","power","pole","wood","street","electric"],
+"category":"architecture",
+"materials":{
+"arm":{"base":"MAT/oak_planks","color":"#6b5640"},
+"can":{"base":"MAT/gtf/painted_metal","color":"#8c9294"},
+"glass":{"color":"#9cc4bd","roughness":0.2,"metallic":0.3},
+"wood":{"color":"#5c4a37","roughness":0.9,"map":"axis","layers":[{"type":"wood","size":14,"axis":"y","cover":0.35,"shade":0.8}]}},
+"parts":{
+"brace":{"type":"box","size":[5,3],"from":[0,975,6],"to":[70,1025,6],"mat":"arm","mirror":"x"},
+"crossarm":{"type":"box","size":[240,10,9],"pos":[0,1030,0],"mat":"arm"},
+"insulator":{"type":"cylinder","radius":5,"height":13,"pos":[100,1041.5,0],"mat":"glass","mirror":"x"},
+"insulator_top":{"type":"cylinder","radius":5,"height":13,"pos":[0,1086.5,0],"mat":"glass"},
+"pole":{"type":"cone","radius":15,"radius_end":10,"height":1080,"pos":[0,540,0],"mat":"wood"},
+"transformer":{"type":"cylinder","radius":22,"height":62,"pos":[0,860,32],"mat":"can"}}}

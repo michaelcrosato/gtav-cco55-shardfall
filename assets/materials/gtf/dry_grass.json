@@ -1,0 +1,6 @@
+{"format":1,"name":"gtf/dry_grass","unit":"cm","description":"Sun-dried golden grass with olive patches and bleached tufts: hillsides, vacant lots, verges.","tags":["grass","dry","ground","hill","field"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#b9a46a","roughness":1,
+ "layers":[
+  {"type":"noise","size":12,"detail":2,"cover":0.5,"soft":0.3,"color":"#9a844f","strength":0.6},
+  {"type":"noise","size":80,"detail":2,"cover":0.35,"soft":0.9,"color":"#8c8a50","strength":0.3},
+  {"type":"noise","size":40,"detail":2,"cover":0.15,"soft":0.4,"color":"#d7c592","strength":0.4}
+ ]}

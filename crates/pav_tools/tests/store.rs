@@ -43,16 +43,17 @@ fn the_store_finds_shelves_credits_and_refuses() {
     assert!(names(&wooden["rows"]).contains(&"LIB/core/table".to_owned()), "{wooden}");
     let tables = call(&mut s, "assets", json!({"find": "tables"}));
     assert_eq!(names(&tables["rows"])[0], "LIB/core/table", "{tables}");
-    for word in ["tree", "character", "dragon statue"] {
+    for word in ["tree", "grass", "character", "dragon statue"] {
         let reply = call(&mut s, "assets", json!({"find": word}));
         let hit = reply["rows"].as_array().is_some_and(|rows| !rows.is_empty());
         let none = reply["none"].is_string() && reply["route"].as_str().is_some_and(|route| !route.is_empty());
         assert!(hit || none, "{word}: {reply}");
         assert!(reply.get("matched") != Some(&json!(0)), "never a bare 0: {reply}");
     }
-    let tree = call(&mut s, "assets", json!({"find": "tree"}));
-    assert!(tree["route"].as_str().unwrap().starts_with("make it:"), "{tree}");
-    assert!(tree["nearest"].as_array().unwrap().iter().all(|row| row[1] == "vegetation"), "the vegetation hint: {tree}");
+    // No prop is grass (trees came with LIB/gtf_city): a miss with the vegetation hint.
+    let grass = call(&mut s, "assets", json!({"find": "grass"}));
+    assert!(grass["route"].as_str().unwrap().starts_with("make it:"), "{grass}");
+    assert!(grass["nearest"].as_array().unwrap().iter().all(|row| row[1] == "vegetation"), "the vegetation hint: {grass}");
     // S3b's imported figures answer `character`; a person no row names gets the route.
     let character = call(&mut s, "assets", json!({"find": "character"}));
     assert!(names(&character["rows"]).iter().any(|name| name.starts_with("LIB/kaykit_adventurers/")), "{character}");
@@ -72,7 +73,7 @@ fn the_store_finds_shelves_credits_and_refuses() {
     let zebra = call(&mut s, "assets", json!({"kind": "material", "find": "zebra"}));
     assert!(zebra["none"].is_string() && zebra["route"].as_str().unwrap().starts_with("make it:"), "{zebra}");
     let misses = std::fs::read_to_string(scratch.join("misses.tsv")).unwrap();
-    assert!(misses.contains("\tprop\ttree\t") && misses.contains("\tprop\tvillager\t"), "{misses}");
+    assert!(misses.contains("\tprop\tgrass\t") && misses.contains("\tprop\tvillager\t"), "{misses}");
     assert!(misses.contains("\tmaterial\tzebra\t"), "{misses}");
     // Rows carry their store tier and mesh share; the local tier is not searched by default.
     let barrel = call(&mut s, "assets", json!({"find": "barrel"}));

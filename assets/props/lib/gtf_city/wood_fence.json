@@ -1,0 +1,12 @@
+{"format":2,"name":"wood_fence","unit":"cm",
+"description":"A 3 m wooden privacy fence segment, 1.8 m: boards facing +z, two rails and posts behind, a top cap; ends at x=+-150.",
+"tags":["fence","wood","yard","privacy","garden","boards"],
+"category":"architecture",
+"materials":{
+"boards":{"color":"#9a7650","roughness":0.85,"turn":true,"layers":[{"type":"planks","size":[200,15],"gap":1.5,"vary":0.25,"cavity":0.3}]},
+"post":{"base":"MAT/oak_planks","color":"#7a5c3e","turn":true}},
+"parts":{
+"boards":{"type":"box","size":[300,175,2],"pos":[0,92.5,1],"mat":"boards"},
+"cap":{"type":"box","size":[306,3,14],"pos":[0,181.5,-4],"mat":"post"},
+"post":{"type":"box","size":[9,183,9],"pos":[145.5,91.5,-8.5],"mat":"post","mirror":"x"},
+"rail":{"type":"box","size":[300,9,4],"pos":[0,95,-2],"mat":"post","array":{"count":2,"step":[0,120,0]}}}}

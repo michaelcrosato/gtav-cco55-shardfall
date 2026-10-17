@@ -1,0 +1,14 @@
+{"format":2,"name":"palm_short","unit":"cm",
+"description":"A date palm, 7 m: thick trunk with diamond leaf scars, a knob of leaf bases and a wide crown of arching fronds.",
+"tags":["palm","tree","date","street","park","vegetation"],
+"category":"vegetation",
+"materials":{
+"frond":{"color":"#3f7d3a"},
+"frond2":{"color":"#567f36"},
+"knob":{"color":"#7b6a3e","roughness":1},
+"trunk":{"color":"#8a6a48","roughness":0.95,"map":"axis","layers":[{"type":"shingles","size":[22,16],"gap":1.5,"vary":0.15,"cavity":0.4,"shape":"point"}]}},
+"parts":{
+"frond":{"type":"ellipsoid","size":[90,8,330],"pos":[0,500,0],"pitch":30,"mat":"frond","sway":"leaves","radial":{"count":7,"radius":150}},
+"frond_up":{"type":"ellipsoid","size":[80,8,280],"pos":[0,560,0],"pitch":-30,"mat":"frond2","sway":"leaves","radial":{"count":3,"radius":90,"start":25}},
+"knob":{"type":"ellipsoid","size":[100,90,100],"pos":[0,460,0],"mat":"knob"},
+"trunk":{"type":"cone","radius":42,"radius_end":36,"height":430,"pos":[0,215,0],"mat":"trunk"}}}

@@ -1134,7 +1134,10 @@ impl<'a> Compiler<'a> {
         let parts = &self.out.parts;
         let mut warnings = Vec::new();
         let extent = self.out.bounds.size().max_element();
-        if !parts.is_empty() && !(0.05..=30.0).contains(&extent) {
+        // Set pieces (town, architecture) may be as big as a dock crane; other objects stay under 30 m.
+        let set_piece = matches!(self.doc.category, Some(super::doc::Category::Town | super::doc::Category::Architecture));
+        let ceiling = if set_piece { 100.0 } else { 30.0 };
+        if !parts.is_empty() && !(0.05..=ceiling).contains(&extent) {
             let cm = extent * 100.0;
             warnings.push(Finding {
                 code: "unit_suspect",

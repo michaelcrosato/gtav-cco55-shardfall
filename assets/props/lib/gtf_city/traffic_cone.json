@@ -1,0 +1,13 @@
+{"format":2,"name":"traffic_cone","unit":"cm",
+"description":"A 70 cm traffic cone: orange with two white reflective bands on a square black base.",
+"tags":["cone","traffic","road","construction","safety","street"],
+"category":"town",
+"materials":{
+"black":{"color":"#1d1e20"},
+"orange":{"color":"#ff6a13","roughness":0.6},
+"white":{"color":"#f2f2ee","roughness":0.3}},
+"parts":{
+"band_high":{"type":"cone","radius":8.45,"radius_end":6.65,"height":10,"pos":[0,46,0],"mat":"white"},
+"band_low":{"type":"cone","radius":11.67,"radius_end":9.88,"height":10,"pos":[0,28,0],"mat":"white"},
+"base":{"type":"box","size":[36,3,36],"pos":[0,1.5,0],"mat":"black"},
+"cone":{"type":"cone","radius":15,"radius_end":3,"height":67,"pos":[0,36.5,0],"mat":"orange"}}}

@@ -1,0 +1,13 @@
+{"format":2,"name":"dumpster","unit":"cm",
+"description":"A front-load dumpster, 1.8 m wide: slanted green steel bin, two black lids, fork pockets and skids; front +z.",
+"tags":["dumpster","trash","bin","alley","waste","industrial"],
+"category":"container",
+"materials":{
+"body":{"base":"MAT/gtf/painted_metal","color":"#2f5d3e"},
+"lid":{"base":"MAT/gtf/rubber","color":"#1e1f22"},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#3a3d40"}},
+"parts":{
+"body":{"type":"extrude","points":[[60,15],[-48,15],[-62,108],[60,125]],"depth":180,"yaw":90,"mat":"body"},
+"lid":{"type":"box","size":[88,3,124],"pos":[45,118,1],"pitch":7.93,"mat":"lid","mirror":"x"},
+"pocket":{"type":"box","size":[10,16,96],"pos":[95,72,-6],"mat":"steel","mirror":"x"},
+"skid":{"type":"box","size":[12,15,108],"pos":[70,7.5,-6],"mat":"steel","mirror":"x"}}}

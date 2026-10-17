@@ -150,7 +150,8 @@ asset_import: library zip/GLB/OBJ ─▶ Scene ─▶ segment ─▶ fit primiti
 
 ### 5.2 Units, sizes, placement
 - **Units (D1).** Format 2 requires `unit`. A v2 file without it is an error. Every reply echoes
-  `size_cm:"WxHxD"`. A `unit_suspect` warning fires when the asset extent is < 5 cm or > 30 m.
+  `size_cm:"WxHxD"`. A `unit_suspect` warning fires when the asset extent is < 5 cm or > 30 m
+  (> 100 m for set pieces, category `town` or `architecture`: a dock crane is real-world scale).
   `op:"unit"` converts a document; `set unit` is refused with that fix. Inline materials use their
   asset's unit. Only `light.radius` and `fx.area` convert; `fx.size/speed/life` are multipliers.
 - **Full sizes.** v2 canonical: `size:[x,y,z]` (box, rounded_box, ellipsoid, wedge) and `height`

@@ -1,0 +1,15 @@
+{"format":2,"name":"antenna_mast","unit":"cm",
+"description":"A rooftop antenna mast, 9.6 m: steel pole on a concrete block, TV crossbars, a dish toward +z, whip and red beacon.",
+"tags":["antenna","mast","rooftop","dish","radio","roof"],
+"category":"architecture",
+"materials":{
+"beacon":{"color":"#ff2a1a","emissive":0.5},
+"dish":{"color":"#e3e3df"},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#a3a8ab","metallic":0.5}},
+"parts":{
+"base":{"type":"box","size":[60,20,60],"pos":[0,10,0],"mat":"MAT/gtf/concrete"},
+"beacon":{"type":"ellipsoid","size":[10,8,10],"pos":[0,954,0],"mat":"beacon"},
+"crossbar":{"type":"box","size":[140,5,5],"pos":[0,680,0],"mat":"steel","array":{"count":3,"step":[0,50,0]}},
+"dish":{"type":"lathe","profile":[[0,0],[22,3],[40,10],[46,14],[44,15.5],[38,12],[20,5],[0,2]],"segments":16,"pos":[0,450,4],"pitch":70,"mat":"dish"},
+"mast":{"type":"cylinder","radius":5,"from":[0,20,0],"to":[0,800,0],"mat":"steel"},
+"whip":{"type":"cylinder","radius":1.5,"from":[0,800,0],"to":[0,950,0],"mat":"steel"}}}

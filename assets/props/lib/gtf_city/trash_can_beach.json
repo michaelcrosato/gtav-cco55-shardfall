@@ -1,0 +1,13 @@
+{"format":2,"name":"trash_can_beach","unit":"cm",
+"description":"A beach trash can, 98 cm: blue-painted steel drum with a white band (blank for text) and a black lid with a handle.",
+"tags":["trash","can","beach","bin","litter","drum"],
+"category":"container",
+"materials":{
+"band":{"color":"#f2f0ea"},
+"drum":{"base":"MAT/gtf/painted_metal","color":"#2f6fa8"},
+"lid":{"base":"MAT/gtf/painted_metal","color":"#2b2d30"}},
+"parts":{
+"band":{"type":"tube","radius":29.6,"thickness":1,"height":22,"pos":[0,55,0],"mat":"band"},
+"body":{"type":"cylinder","radius":29,"height":90,"pos":[0,45,0],"mat":"drum"},
+"handle":{"type":"box","size":[20,4,4],"pos":[0,96,0],"mat":"lid"},
+"lid":{"type":"cylinder","radius":31,"height":4,"pos":[0,92,0],"mat":"lid"}}}

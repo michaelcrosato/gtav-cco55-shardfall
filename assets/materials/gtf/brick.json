@@ -1,0 +1,5 @@
+{"format":1,"name":"gtf/brick","unit":"cm","description":"Red-brown brick in running bond with pale mortar and soft soot: shops, warehouses, garden walls.","tags":["brick","wall","building","stone"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#a4553a","roughness":0.85,
+ "layers":[
+  {"type":"brick","size":[24,8],"gap":1.5,"vary":0.2,"cavity":0.2,"color":"#c9bfae"},
+  {"type":"noise","size":60,"detail":2,"cover":0.3,"soft":0.8,"shade":0.85}
+ ]}
