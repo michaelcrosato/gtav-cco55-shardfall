@@ -30,6 +30,7 @@ pub mod player;
 pub mod protagonists;
 pub mod settings;
 pub mod tour;
+pub mod vehicles;
 pub mod views;
 pub mod world;
 
