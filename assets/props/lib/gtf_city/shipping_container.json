@@ -1,0 +1,21 @@
+{"format":2,"name":"shipping_container","unit":"cm",
+"description":"A 40 ft shipping container, 12.2x2.59x2.44 m: ribbed steel walls, end frames, door bars at +x. Knob: color.",
+"tags":["container","shipping","cargo","dock","industrial","steel"],
+"category":"container",
+"materials":{
+"bar":{"base":"MAT/gtf/painted_metal","color":"#5a5e62"},
+"frame":{"base":"MAT/gtf/painted_metal"},
+"ribs":{"base":"MAT/gtf/corrugated_metal","roughness":0.6,"metallic":0.15,"layers":[{"type":"stripes","size":27,"cover":0.5,"soft":1,"shade":0.7},{"type":"noise","size":25,"detail":2,"cover":0.08,"soft":0.5,"color":"#6e4a32","strength":0.3}]}},
+"parts":{
+"bar":{"type":"box","size":[4,235,4],"pos":[612,129.5,0],"mat":"bar","array":{"count":4,"step":[0,0,52]}},
+"body":{"type":"box","size":[1200,245,236],"pos":[0,129.5,0],"mat":"ribs","color":"#a8321e"},
+"end":{"type":"box","size":[10,259,244],"pos":[605,129.5,0],"mat":"frame","color":"#a8321e","mirror":"x"},
+"rail_bottom":{"type":"box","size":[1200,7,244],"pos":[0,3.5,0],"mat":"frame","color":"#a8321e"},
+"rail_top":{"type":"box","size":[1200,7,244],"pos":[0,255.5,0],"mat":"frame","color":"#a8321e"}},
+"params":{
+"color":{"choices":["red","blue","green","orange","grey"],"set":{"body.color":["#a8321e","#1f4e8c","#2e6b3c","#d8661a","#8a8f94"],"end.color":["#a8321e","#1f4e8c","#2e6b3c","#d8661a","#8a8f94"],"rail_bottom.color":["#a8321e","#1f4e8c","#2e6b3c","#d8661a","#8a8f94"],"rail_top.color":["#a8321e","#1f4e8c","#2e6b3c","#d8661a","#8a8f94"]}}},
+"presets":{
+"blue":{"color":"blue"},
+"green":{"color":"green"},
+"grey":{"color":"grey"},
+"orange":{"color":"orange"}}}

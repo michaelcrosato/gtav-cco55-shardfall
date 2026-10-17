@@ -1,0 +1,18 @@
+{"format":2,"name":"ped_signal","unit":"cm",
+"description":"A pedestrian signal on a 3.3 m post: box head facing +z with dont_walk (hand, top) and walk (person) lenses, button.",
+"tags":["pedestrian","signal","crosswalk","walk","intersection","pole"],
+"category":"town",
+"materials":{
+"black":{"base":"MAT/gtf/painted_metal","color":"#26282b","metallic":0.2},
+"hand":{"color":"#ff7a1a","emissive":0.15},
+"person":{"color":"#cfcabd","emissive":0.1},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#8e9498","metallic":0.4}},
+"parts":{
+"base":{"type":"cylinder","radius":11,"height":6,"pos":[0,3,0],"mat":"steel"},
+"button":{"type":"box","size":[12,16,7],"pos":[0,105,9],"mat":"black","color":"#d9b41f"},
+"cap":{"type":"ellipsoid","size":[13,6,13],"pos":[0,330,0],"mat":"steel"},
+"dont_walk":{"type":"box","size":[34,28,1.5],"pos":[0,302,28.25],"mat":"hand"},
+"head":{"type":"box","size":[44,70,22],"pos":[0,285,16.5],"mat":"black"},
+"pole":{"type":"cylinder","radius":5.5,"from":[0,6,0],"to":[0,330,0],"mat":"steel"},
+"visor":{"type":"box","size":[46,2,24],"pos":[0,321,32],"mat":"black"},
+"walk":{"type":"box","size":[34,28,1.5],"pos":[0,268,28.25],"mat":"person"}}}

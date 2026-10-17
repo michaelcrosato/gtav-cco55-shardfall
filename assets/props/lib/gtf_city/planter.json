@@ -1,0 +1,13 @@
+{"format":2,"name":"planter","unit":"cm",
+"description":"A square concrete street planter, 1 m wide and 55 cm tall, with soil and a rounded green shrub.",
+"tags":["planter","shrub","plant","street","plaza","concrete"],
+"category":"vegetation",
+"materials":{
+"leaf":{"color":"#3f7d3a"},
+"leaf2":{"color":"#4f8f45"},
+"soil":{"color":"#4a3a2a","roughness":1}},
+"parts":{
+"body":{"type":"box","size":[100,55,100],"pos":[0,27.5,0],"mat":"MAT/gtf/concrete"},
+"shrub":{"type":"ellipsoid","size":[82,56,82],"pos":[0,80,0],"mat":"leaf","sway":"leaves"},
+"shrub_top":{"type":"ellipsoid","size":[52,40,52],"pos":[6,104,-4],"mat":"leaf2","sway":"leaves"},
+"soil":{"type":"box","size":[88,2,88],"pos":[0,56,0],"mat":"soil"}}}

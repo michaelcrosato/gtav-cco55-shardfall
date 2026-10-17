@@ -1,0 +1,1 @@
+{"format":1,"name":"gtf/car_paint","unit":"cm","description":"Glossy metallic car paint; the part's colour sets the paint: car bodies, scooters, signs.","tags":["paint","car","metal","vehicle"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#b3261e","roughness":0.25,"metallic":0.7}

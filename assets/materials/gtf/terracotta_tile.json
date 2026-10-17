@@ -1,0 +1,6 @@
+{"format":1,"name":"gtf/terracotta_tile","unit":"cm","description":"Mission-style terracotta barrel tiles in rows and courses, dark gaps, sun-bleached patches: roofs, wall caps.","tags":["roof","tile","terracotta","clay"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#c8643c","roughness":0.8,
+ "layers":[
+  {"type":"tiles","size":[24,40],"gap":1.5,"vary":0.2,"cavity":0.4,"shade":0.55},
+  {"type":"stripes","size":24,"cover":0.5,"soft":1,"shade":0.75},
+  {"type":"noise","size":90,"detail":2,"cover":0.3,"soft":0.85,"color":"#d98a62","strength":0.4}
+ ]}

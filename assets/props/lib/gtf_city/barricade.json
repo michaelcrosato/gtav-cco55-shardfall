@@ -1,0 +1,15 @@
+{"format":2,"name":"barricade","unit":"cm",
+"description":"A Type III road barricade, 2.4 m: two striped rails, a blank sign panel (panel) on posts and an amber lamp.",
+"tags":["barricade","road","closed","construction","traffic","barrier"],
+"category":"town",
+"materials":{
+"glow":{"color":"#ffb21a","emissive":0.4},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#d8d8d4"},
+"stripes":{"color":"#f3f1ea","roughness":0.5,"layers":[{"type":"stripes","size":30,"axis":[1,1,0],"cover":0.5,"color":"#ff6a13"}]},
+"white":{"color":"#f3f1ea"}},
+"parts":{
+"foot":{"type":"box","size":[8,6,70],"pos":[105,3,0],"mat":"steel","mirror":"x"},
+"lamp":{"type":"cylinder","radius":8,"height":8,"pos":[105,174,0],"mat":"glow"},
+"panel":{"type":"box","size":[150,40,3],"pos":[0,122,5.5],"mat":"white"},
+"post":{"type":"box","size":[8,170,8],"pos":[105,85,0],"mat":"steel","mirror":"x"},
+"rail":{"type":"box","size":[240,22,3],"pos":[0,72,5.5],"mat":"stripes","array":{"count":2,"step":[0,38,0]}}}}

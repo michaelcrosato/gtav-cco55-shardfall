@@ -1,0 +1,11 @@
+{"format":2,"name":"pallet_stack","unit":"cm",
+"description":"A stack of five wooden shipping pallets, 1.2x1.0 m and 70 cm tall, slightly out of line: docks and loading bays.",
+"tags":["pallet","wood","stack","dock","warehouse","cargo"],
+"category":"container",
+"materials":{
+"core":{"color":"#4a3a28","roughness":1},
+"deck":{"base":"MAT/oak_planks","color":"#b8955f"}},
+"parts":{
+"pallet":{"pos":[0,28,0],"array":{"count":5,"step":[0,14,0]},"jitter":{"rot":[4,0,0]},"parts":{
+  "core":{"type":"box","size":[114,11,92],"pos":[0,5.5,0],"mat":"core"},
+  "deck":{"type":"box","size":[122,3,102],"pos":[0,12.5,0],"mat":"deck"}}}}}

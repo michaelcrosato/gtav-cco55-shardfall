@@ -1,0 +1,16 @@
+{"format":2,"name":"low_wall","unit":"cm",
+"description":"A 3 m garden wall, 1 m tall: stucco in cream, peach, mint or coral with a terracotta cap; ends at x=+-150. Knob: color.",
+"tags":["wall","stucco","garden","yard","low","masonry"],
+"category":"architecture",
+"materials":{
+"cap":"MAT/gtf/terracotta_tile",
+"stucco":"MAT/gtf/stucco"},
+"parts":{
+"cap":{"type":"box","size":[300,7,33],"pos":[0,103.5,0],"mat":"cap"},
+"wall":{"type":"box","size":[300,100,25],"pos":[0,50,0],"mat":"stucco","color":"#f3e7cf"}},
+"params":{
+"color":{"choices":["cream","peach","mint","coral"],"set":{"wall.color":["#f3e7cf","#f2c6a0","#a8d5ba","#f08a6b"]}}},
+"presets":{
+"coral":{"color":"coral"},
+"mint":{"color":"mint"},
+"peach":{"color":"peach"}}}

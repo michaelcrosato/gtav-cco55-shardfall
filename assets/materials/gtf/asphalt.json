@@ -1,0 +1,5 @@
+{"format":1,"name":"gtf/asphalt","unit":"cm","description":"Dark road asphalt with pale aggregate speckle and soft tar patches: streets, lots, freeway decks.","tags":["road","asphalt","street","ground"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#2c2e33","roughness":0.95,
+ "layers":[
+  {"type":"noise","size":6,"detail":2,"cover":0.3,"soft":0.15,"color":"#55575d","strength":0.55},
+  {"type":"noise","size":120,"detail":2,"cover":0.4,"soft":0.8,"shade":0.85}
+ ]}

@@ -1,0 +1,6 @@
+{"format":1,"name":"gtf/lawn","unit":"cm","description":"Irrigated green lawn with clumps, sunlit patches and faint mowing stripes: yards, parks, medians.","tags":["grass","lawn","ground","park"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#5d9440","roughness":1,
+ "layers":[
+  {"type":"noise","size":10,"detail":2,"cover":0.5,"soft":0.3,"color":"#4a7c33","strength":0.6},
+  {"type":"noise","size":90,"detail":2,"cover":0.35,"soft":0.9,"color":"#78a94f","strength":0.4},
+  {"type":"stripes","size":150,"cover":0.5,"soft":0.8,"shade":0.94}
+ ]}

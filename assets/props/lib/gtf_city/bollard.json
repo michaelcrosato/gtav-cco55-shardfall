@@ -1,0 +1,11 @@
+{"format":2,"name":"bollard","unit":"cm",
+"description":"A steel street bollard, 95 cm: dark grey post with a domed top and a yellow reflective band.",
+"tags":["bollard","post","street","sidewalk","barrier","steel"],
+"category":"town",
+"materials":{
+"band":{"color":"#e8c21e","roughness":0.3},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#3a3d42"}},
+"parts":{
+"band":{"type":"tube","radius":11.5,"thickness":1,"height":7,"pos":[0,76,0],"mat":"band"},
+"cap":{"type":"ellipsoid","size":[22,10,22],"pos":[0,90,0],"mat":"steel"},
+"post":{"type":"cylinder","radius":11,"height":90,"pos":[0,45,0],"mat":"steel"}}}

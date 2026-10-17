@@ -1,0 +1,6 @@
+{"format":1,"name":"gtf/sidewalk","unit":"cm","description":"Light broom-finished concrete in 1.5 m panels with dark joints and faint stains: sidewalks, plazas.","tags":["concrete","sidewalk","pavement","ground","floor"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#c7c3b9","roughness":0.9,
+ "layers":[
+  {"type":"tiles","size":150,"gap":1.5,"vary":0.05,"cavity":0.4,"shade":0.55},
+  {"type":"noise","size":30,"detail":2,"cover":0.4,"soft":0.5,"shade":0.93},
+  {"type":"noise","size":100,"detail":2,"cover":0.2,"soft":0.9,"color":"#a9a59b","strength":0.35}
+ ]}

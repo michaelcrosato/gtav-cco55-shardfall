@@ -1,0 +1,14 @@
+{"format":2,"name":"street_lamp","unit":"cm",
+"description":"A 9 m galvanised cobra-head street light: tapered pole, arm rising toward +z, emissive lamp part under the head.",
+"tags":["streetlight","lamp","street","road","pole","light"],
+"category":"lighting",
+"materials":{
+"galv":{"base":"MAT/gtf/painted_metal","color":"#9ea4a8","metallic":0.5},
+"glow":{"color":"#ffcf8a","emissive":0.4}},
+"parts":{
+"arm":{"type":"cylinder","radius":4.5,"from":[0,872,0],"to":[0,905,235],"mat":"galv"},
+"base":{"type":"cone","radius":17,"radius_end":12,"height":45,"pos":[0,22.5,0],"mat":"galv"},
+"cap":{"type":"ellipsoid","size":[16,10,16],"pos":[0,900,0],"mat":"galv"},
+"head":{"type":"ellipsoid","size":[38,20,82],"pos":[0,906,262],"mat":"galv"},
+"lamp":{"type":"ellipsoid","size":[28,8,58],"pos":[0,898,266],"mat":"glow"},
+"pole":{"type":"cone","radius":11,"radius_end":7,"from":[0,45,0],"to":[0,900,0],"mat":"galv"}}}

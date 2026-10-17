@@ -1,0 +1,11 @@
+{"format":2,"name":"beach_umbrella","unit":"cm",
+"description":"A beach umbrella, 2.2 m across and 2.4 m tall: cream canopy with coral stripes on a white pole.",
+"tags":["umbrella","beach","parasol","shade","sand","summer"],
+"category":"town",
+"materials":{
+"canopy":{"color":"#f3e7cf","map":"axis","layers":[{"type":"stripes","size":40,"cover":0.5,"color":"#f08a6b"}]},
+"pole":{"color":"#e9e6de"}},
+"parts":{
+"canopy":{"type":"cone","radius":110,"radius_end":4,"height":36,"pos":[0,212,0],"mat":"canopy"},
+"finial":{"type":"ellipsoid","size":[8,8,8],"pos":[0,236,0],"mat":"pole"},
+"pole":{"type":"cylinder","radius":2.5,"from":[0,0,0],"to":[0,235,0],"mat":"pole"}}}

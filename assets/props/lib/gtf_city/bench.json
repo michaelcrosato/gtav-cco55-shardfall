@@ -1,0 +1,14 @@
+{"format":2,"name":"bench","unit":"cm",
+"description":"A bus or park bench, 1.9 m: wooden seat and leaning backrest on concrete end blocks and steel posts; seats three.",
+"tags":["bench","seat","bus","park","street","wood"],
+"category":"furniture",
+"materials":{
+"steel":{"base":"MAT/gtf/painted_metal","color":"#3a3d40"},
+"wood":{"base":"MAT/oak_planks","color":"#8a5e3a"}},
+"parts":{
+"back":{"type":"box","size":[190,40,5],"pos":[0,78,-25],"pitch":-8,"mat":"wood"},
+"leg":{"type":"box","size":[14,42,52],"pos":[80,21,0],"mat":"MAT/gtf/concrete","mirror":"x"},
+"post":{"type":"box","size":[8,48,6],"pos":[80,72,-21],"pitch":-8,"mat":"steel","mirror":"x"},
+"seat":{"type":"box","size":[190,6,48],"pos":[0,45,2],"mat":"wood"}},
+"sockets":{
+"sit":{"pos":[0,48,6]}}}

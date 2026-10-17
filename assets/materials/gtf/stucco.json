@@ -1,0 +1,6 @@
+{"format":1,"name":"gtf/stucco","unit":"cm","description":"Fine trowelled stucco, patchy weathering, dirt at the foot; its colour comes from the part (peach, mint, cream, coral).","tags":["stucco","plaster","wall","building"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#f3e7cf","roughness":0.9,
+ "layers":[
+  {"type":"noise","size":6,"detail":2,"cover":0.5,"soft":0.3,"shade":0.93},
+  {"type":"noise","size":70,"detail":2,"cover":0.35,"soft":0.9,"shade":0.95},
+  {"type":"gradient","from":0,"to":50,"shade":0.82,"strength":0.6}
+ ]}

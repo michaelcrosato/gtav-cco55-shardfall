@@ -1,0 +1,14 @@
+{"format":2,"name":"speed_sign","unit":"cm",
+"description":"A speed limit sign: blank white 60x75 cm face (text from the game), black border, 2.25 m up on a galvanised post; +z.",
+"tags":["speed","sign","road","traffic","limit","street"],
+"category":"signage",
+"materials":{
+"back":{"color":"#a7abaf","roughness":0.5,"metallic":0.4},
+"black":{"color":"#1d1e20"},
+"galv":{"base":"MAT/gtf/painted_metal","color":"#9ea4a8","metallic":0.5},
+"white":{"color":"#f4f4f0"}},
+"parts":{
+"border":{"type":"box","size":[62,77,0.4],"pos":[0,225,3.3],"mat":"black"},
+"face":{"type":"box","size":[56,71,0.4],"pos":[0,225,3.7],"mat":"white"},
+"plate":{"type":"box","size":[62,77,0.6],"pos":[0,225,2.8],"mat":"back"},
+"post":{"type":"box","size":[5,260,5],"pos":[0,130,0],"mat":"galv"}}}
