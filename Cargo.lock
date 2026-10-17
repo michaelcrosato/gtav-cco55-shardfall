@@ -1047,6 +1047,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "gtf_app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gtf_game",
+ "pav_app",
+ "pav_core",
+ "pav_tools",
+ "serde_json",
+]
+
+[[package]]
+name = "gtf_game"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ciborium",
+ "glam 0.33.11",
+ "log",
+ "pav_core",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "guillotiere"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

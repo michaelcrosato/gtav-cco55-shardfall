@@ -28,3 +28,6 @@
 .claude/worktrees/
 /assets/props/workshop/
 /assets/materials/workshop/
+
+# Grand Theft Freeway-BX: the single-file web build is committed once, at M10 (git add -f).
+/dist/
