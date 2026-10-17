@@ -236,6 +236,11 @@ fn uniform(sim: &mut Sim) -> pav_core::puppet::PuppetDef {
     p.pants = "#141a2b".into();
     p.shoes = "#0d0d0f".into();
     p.idle_clip = "MESH2MOTION/Idle_A".into();
+    // The service pistol.
+    p.weapon.asset = crate::combat::asset_of("p9");
+    if !p.weapon.asset.is_empty() {
+        p.weapon.kind = pav_core::puppet::WeaponKind::Dagger;
+    }
     p
 }
 
@@ -812,6 +817,7 @@ impl Police {
                     if let Some(c) = sim.state.entities.get_mut(o.id).and_then(|e| e.character.as_mut()) {
                         c.face = (o.duty == Duty::Shoot).then(|| to.x.atan2(to.z));
                     }
+                    crate::combat::aim_pose(sim, o.id, o.duty == Duty::Shoot && !arrest);
                 }
                 Duty::Seated => {}
             }

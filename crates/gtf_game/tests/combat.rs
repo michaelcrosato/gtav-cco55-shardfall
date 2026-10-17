@@ -281,3 +281,45 @@ fn a_drive_by_from_the_window_hits_someone_ahead() {
     assert!(g.combat.hits >= 1 || dead, "and hit them");
     assert!(g.drive.vehicle().is_some(), "still at the wheel");
 }
+
+#[test]
+fn the_gun_in_hand_shows() {
+    gtf_game::register();
+    let mut sim = Sim::new("freeway/roam", 5).unwrap();
+    for _ in 0..30 {
+        sim.step(&InputFrame::default());
+    }
+    cmd(&mut sim, "weapon pistol");
+    for _ in 0..5 {
+        sim.step(&InputFrame::default());
+    }
+    let pid = sim.state.player.unwrap();
+    let look = sim.state.entities.get(pid).and_then(|e| e.character.as_ref()).and_then(|c| c.puppet.clone()).unwrap();
+    assert_eq!(look.weapon.asset, "LIB/gtf_weapons/p9_pistol");
+    assert!(pav_core::props::resolve_parts(&look.weapon.asset, 0).is_ok(), "the prop resolves");
+    cmd(&mut sim, "weapon fists");
+    for _ in 0..5 {
+        sim.step(&InputFrame::default());
+    }
+    let look = sim.state.entities.get(pid).and_then(|e| e.character.as_ref()).and_then(|c| c.puppet.clone()).unwrap();
+    assert!(look.weapon.asset.is_empty(), "an empty hand");
+}
+
+#[test]
+fn aiming_shows_the_crosshair() {
+    gtf_game::register();
+    let mut sim = Sim::new("freeway/roam", 5).unwrap();
+    for _ in 0..30 {
+        sim.step(&InputFrame::default());
+    }
+    cmd(&mut sim, "weapon pistol");
+    let mut aim = InputFrame::default();
+    aim.pad.l2 = 1.0;
+    for _ in 0..20 {
+        sim.step(&aim);
+    }
+    assert!(game(&sim).combat.aiming, "aiming");
+    let frame = sim.present().expect("a frame");
+    let hud = frame.ui.hud.expect("the HUD");
+    assert!(hud.crosshair.is_some(), "the crosshair shows");
+}

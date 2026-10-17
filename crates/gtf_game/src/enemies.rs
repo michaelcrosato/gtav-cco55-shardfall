@@ -222,7 +222,12 @@ impl Enemies {
         let d = def().ok()?;
         let s = d.side.get(side)?;
         let weapon = weapon.map(str::to_string).unwrap_or_else(|| pick(&s.weapons, sim).to_string());
-        let puppet = look(s, sim);
+        let mut puppet = look(s, sim);
+        // The gun in their hand.
+        puppet.weapon.asset = crate::combat::asset_of(&weapon);
+        if !puppet.weapon.asset.is_empty() {
+            puppet.weapon.kind = pav_core::puppet::WeaponKind::Dagger;
+        }
         let id = sim.spawn_npc(&format!("{}:{}", s.prefix, side), feet, facing, puppet, None, None);
         self.list.push(Enemy {
             id,

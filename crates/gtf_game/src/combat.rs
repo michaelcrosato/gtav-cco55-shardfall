@@ -72,6 +72,50 @@ pub struct WeaponDef {
     /// Fired from a vehicle's window (L1 aim, R1 fire): pistols and SMGs.
     #[serde(default)]
     pub driveby: bool,
+    /// The prop in the hand (`LIB/gtf_weapons/p9_pistol`; empty: nothing shown).
+    #[serde(default)]
+    pub asset: String,
+}
+
+/// Puts library prop `asset` in character `id`'s hand (empty: an empty hand); nothing changes
+/// when it already holds it.
+pub fn hold(sim: &mut Sim, id: EntityId, asset: &str) {
+    let base = &sim.config.puppet;
+    let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut()) else { return };
+    // (The player wears the scene's look until given one of their own.)
+    let look = c.puppet.as_deref().unwrap_or(base);
+    if look.weapon.asset == asset {
+        return;
+    }
+    let mut look = look.clone();
+    look.weapon.asset = asset.to_string();
+    look.weapon.kind = if asset.is_empty() { pav_core::puppet::WeaponKind::None } else { pav_core::puppet::WeaponKind::Dagger };
+    c.puppet = Some(Arc::new(look));
+}
+
+/// The upper body's poses with a gun: up on the sights, and reloading.
+pub const AIM_POSE: &str = "QUATERNIUS/Pistol_Aim_Neutral";
+pub const RELOAD_POSE: &str = "QUATERNIUS/Pistol_Reload";
+
+/// Character `id` raises its gun to aim (`on`), or lowers it; a shot or a reload playing over
+/// the pose is left to finish.
+pub fn aim_pose(sim: &mut Sim, id: EntityId, on: bool) {
+    let pose = pav_core::clips::find_cached(AIM_POSE);
+    let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut()) else { return };
+    if pose == 0 {
+        return;
+    }
+    let other = c.anim.clip != 0 && c.anim.clip != pose && c.anim.clip_flags & pav_core::clips::STOP == 0;
+    if on && !other {
+        c.anim.play_clip(pose, pav_core::clips::UPPER, 1.0);
+    } else if !on && c.anim.clip == pose {
+        c.anim.stop_clip();
+    }
+}
+
+/// The prop for weapon `id` (weapons.toml), or "" (fists, the phone, unknown).
+pub fn asset_of(id: &str) -> String {
+    def().ok().and_then(|d| d.weapon.iter().find(|w| w.id == id).map(|w| w.asset.clone())).unwrap_or_default()
 }
 
 fn one() -> u32 {
@@ -334,6 +378,7 @@ impl Combat {
             }
         }
         self.aiming = aim;
+        aim_pose(sim, s.id, aim && w.kind == Kind::Gun && s.exclude.is_none());
         match w.kind {
             Kind::Gun => {
                 if self.reloading > 0.0 {
@@ -344,19 +389,19 @@ impl Combat {
                         self.reserve[weapon] -= take;
                     }
                 } else if circle && self.mag[weapon] < w.magazine && self.reserve[weapon] > 0 {
-                    self.start_reload(w, s, events);
+                    self.start_reload(sim, w, s, events);
                 } else if (if w.auto { fire_held } else { fire_pressed }) && self.cooldown <= 0.0 {
                     if self.mag[weapon] == 0 {
                         events.push(sound("gun.empty", s.feet, 1.0));
                         self.cooldown = 0.25;
                         if self.reserve[weapon] > 0 {
-                            self.start_reload(w, s, events);
+                            self.start_reload(sim, w, s, events);
                         }
                     } else {
                         self.mag[weapon] -= 1;
                         self.fire(sim, w, s, aim, cam, events, &mut out);
                         if self.mag[weapon] == 0 && self.reserve[weapon] > 0 {
-                            self.start_reload(w, s, events);
+                            self.start_reload(sim, w, s, events);
                         }
                     }
                 }
@@ -403,9 +448,15 @@ impl Combat {
         out
     }
 
-    fn start_reload(&mut self, w: &WeaponDef, s: &Shooter, events: &mut Vec<SimEvent>) {
+    fn start_reload(&mut self, sim: &mut Sim, w: &WeaponDef, s: &Shooter, events: &mut Vec<SimEvent>) {
         self.reloading = w.reload;
         events.push(sound("gun.reload", s.feet, 1.0));
+        let clip = pav_core::clips::find_cached(RELOAD_POSE);
+        if let Some(c) = sim.state.entities.get_mut(s.id).and_then(|e| e.character.as_mut())
+            && clip != 0
+        {
+            c.anim.replay_clip(clip, pav_core::clips::UPPER | pav_core::clips::ONCE, 1.0);
+        }
     }
 
     /// One trigger pull: a pellet or ten along the aim ray, stopped by the first thing in the way

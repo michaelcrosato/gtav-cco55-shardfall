@@ -92,6 +92,13 @@ impl Freeway {
             }
             self.drive.steer(sim, id, input, dt, &mut deeds, events);
         }
+        // The weapon in hand shows (a gun or a grenade; in a vehicle only while aiming a drive-by).
+        if let Some(id) = pid {
+            let shown = combat::def().ok().and_then(|d| d.weapon.get(self.weapon).map(|w| w.asset.clone())).unwrap_or_default();
+            let driveby = input.pad.held & pad::L1 != 0;
+            let hand = if self.drive.vehicle().is_none() && !self.drive.busy() || driveby { shown } else { String::new() };
+            combat::hold(sim, id, &hand);
+        }
         let riding = self.drive.vehicle().and_then(|car| Some((car, crate::ride(sim, car)?)));
         if (riding.is_some() || !alive || self.drive.busy()) && self.cover.at.is_some() {
             if let Some(id) = sim.state.player {
