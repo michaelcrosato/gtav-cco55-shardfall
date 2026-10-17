@@ -28,7 +28,7 @@ fn every_reference_view_loads_with_its_camera() {
         let scene = format!("freeway/view/{}", v.name);
         let mut s = sim(&scene, 1);
         s.run(10, &InputFrame::default());
-        let cam = s.frame().present.as_ref().and_then(|p| p.camera.clone()).unwrap_or_else(|| panic!("{scene}: no camera"));
+        let cam = s.frame().present.as_ref().and_then(|p| p.camera).unwrap_or_else(|| panic!("{scene}: no camera"));
         assert!((cam.eye - v.eye).length() < 1e-3, "{scene}: the camera sits at the view's eye");
     }
     assert!(Sim::new("freeway/view/nowhere", 1).is_err(), "an unknown view is an error");
