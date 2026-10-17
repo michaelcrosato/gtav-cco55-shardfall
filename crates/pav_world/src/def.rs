@@ -35,6 +35,11 @@ pub struct DistrictDef {
     pub jump: Vec<Jump>,
     #[serde(default)]
     pub sign: Vec<Sign>,
+    /// Facade materials by building style (`MAT/...`; `podium` for towers' podiums): the
+    /// block's colour stays its base colour, and windows light up at night. A style without
+    /// one draws its plain colour.
+    #[serde(default)]
+    pub facades: BTreeMap<String, String>,
     /// Rows of characters, north first.
     pub map: String,
     /// Ground heights, one character per map cell (`0`-`9`, then `a`-`z`), in steps of

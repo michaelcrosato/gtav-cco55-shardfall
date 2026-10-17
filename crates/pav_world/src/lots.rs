@@ -4,6 +4,8 @@
 //! per mass): podium and tower for downtown, stucco shops with awnings, bungalows with stepped
 //! roofs, sheds and warehouses. Landmarks build their own placeholder masses with a sign.
 
+use std::collections::BTreeMap;
+
 use glam::{IVec2, Quat, Vec2, Vec3};
 use pav_core::Color;
 use pav_core::rng::Rng;
@@ -93,7 +95,7 @@ pub fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut Out) {
                 let front = facing(grid, lmin, lmax);
                 let lot = Lot { min: lmin, max: lmax, front };
                 let style = rules.styles[r.below(rules.styles.len() as u32) as usize].clone();
-                building(&style, lot, rules, zone, terrain, &mut r, out);
+                building(&style, lot, rules, &def.facades, zone, terrain, &mut r, out);
             }
         }
     }
@@ -126,7 +128,22 @@ fn foundation(min: Vec2, max: Vec2, terrain: &Terrain, out: &mut Out) -> f32 {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, terrain: &Terrain, r: &mut Rng, out: &mut Out) {
+#[allow(clippy::too_many_arguments)]
+fn building(
+    style: &str,
+    lot: Lot,
+    rules: &ZoneRules,
+    facades: &BTreeMap<String, String>,
+    zone: u16,
+    terrain: &Terrain,
+    r: &mut Rng,
+    out: &mut Out,
+) {
+    // A wall block in the district's facade for `key` (plain colour without one).
+    let faced = |mut b: Block, key: &str| {
+        b.material = facades.get(key).cloned();
+        b
+    };
     let gap = 0.6;
     let mut min = lot.min + Vec2::splat(gap);
     let mut max = lot.max - Vec2::splat(gap);
@@ -150,20 +167,20 @@ fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, terrain: &Terra
             let glass = style == "tower_glass";
             let podium_h = r.range(7.0, 12.0).min(h * 0.3);
             let base = color(r, &["#cfc7b8", "#bdb4a4", "#d8d0c2", "#a9a092"]);
-            out.blocks.push(block(min, max, y0, y0 + podium_h, base));
+            out.blocks.push(faced(block(min, max, y0, y0 + podium_h, base), "podium"));
             let (tmin, tmax) = inset(r.range(0.12, 0.22));
             let body = if glass {
                 color(r, &["#5f7d96", "#6d8ba1", "#4f6b80", "#7a96a8", "#58738a"])
             } else {
                 color(r, &["#b8b0a2", "#a59c8d", "#c4bcae", "#9a9286"])
             };
-            out.blocks.push(block(tmin, tmax, y0 + podium_h, y0 + h, body));
+            out.blocks.push(faced(block(tmin, tmax, y0 + podium_h, y0 + h, body), style));
             // A setback crown and a roof box.
             let (cmin, cmax) = inset(r.range(0.28, 0.36));
             let crown_h = r.range(3.0, 7.0);
             out.blocks.push(block(cmin, cmax, y0 + h, y0 + h + crown_h, base));
-            // Floor bands on concrete towers.
-            if !glass {
+            // Floor bands on concrete towers (a facade brings its own storeys).
+            if !glass && !facades.contains_key(style) {
                 let band = Color::hex("#5d6670");
                 let mut y = y0 + podium_h + 3.5;
                 while y < y0 + h - 1.0 {
@@ -180,7 +197,7 @@ fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, terrain: &Terra
         "stucco_shop" | "apartment" => {
             let apt = style == "apartment";
             let wall = color(r, &["#ead9be", "#f1caa1", "#dab48d", "#cad4c1", "#e7b9a3", "#f3e3c5", "#e0c7a6", "#d7c9b3"]);
-            out.blocks.push(block(min, max, y0, y0 + h, wall));
+            out.blocks.push(faced(block(min, max, y0, y0 + h, wall), style));
             // Parapet trim.
             let tc = color(r, &["#8c6f56", "#6f7a80", "#a0826a", "#5f6d5b"]);
             out.decor.push(trim(
@@ -218,7 +235,7 @@ fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, terrain: &Terra
             let w = color(r, &["#f2e3c9", "#e8cdb0", "#d9e2d0", "#efd3c7", "#e6dcc3", "#c9d6df"]);
             let (bmin, bmax) = inset(0.12);
             let hh = h.min(4.2);
-            out.blocks.push(block(bmin, bmax, y0, y0 + hh, w));
+            out.blocks.push(faced(block(bmin, bmax, y0, y0 + hh, w), style));
             // A stepped hip roof in terracotta or grey shingle.
             let roof = color(r, &["#b5563a", "#a4492f", "#6e6a66", "#8a5a44"]);
             let mut lo = bmin - Vec2::splat(0.5);
@@ -237,7 +254,7 @@ fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, terrain: &Terra
         }
         "shed" | "warehouse" => {
             let w = color(r, &["#9aa3a8", "#b9a07a", "#8f9a9e", "#a7a199", "#7f8c8d", "#b0a48a"]);
-            out.blocks.push(block(min, max, y0, y0 + h, w));
+            out.blocks.push(faced(block(min, max, y0, y0 + h, w), style));
             // Sawtooth roof ridges along the long side.
             let ridge = Color::hex("#6c7a80");
             let long_x = size.x >= size.y;

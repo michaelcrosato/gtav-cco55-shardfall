@@ -180,6 +180,16 @@ terrain = '''
 "C" = { road = "channel" }
 "b" = { road = "path" }
 
+# Facade materials by building style (windows that light up at night; `podium` for towers' podiums).
+[facades]
+tower_glass = "MAT/gtf/glass_curtain"
+tower_concrete = "MAT/gtf/office_concrete"
+podium = "MAT/gtf/office_concrete"
+stucco_shop = "MAT/gtf/stucco_windows"
+apartment = "MAT/gtf/stucco_windows"
+bungalow = "MAT/gtf/stucco_windows"
+warehouse = "MAT/gtf/brick_windows"
+
 [zones.residential]   # Los Mirados: bungalows on lawns, palms and street trees
 ground = "grass"
 styles = ["bungalow"]
