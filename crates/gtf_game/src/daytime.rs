@@ -11,7 +11,7 @@ use anyhow::{Result, anyhow};
 use glam::{Vec2, Vec3};
 use pav_core::Color;
 use pav_core::frame::SimEvent;
-use pav_core::present::{FogIntent, SkyIntent, ViewIntent};
+use pav_core::present::{FogIntent, SkyIntent, SurfaceStyle, ToneCurve, ViewIntent};
 use pav_core::rng::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +24,20 @@ pub struct WorldDef {
     pub latitude: f32,
     pub preset: Vec<Preset>,
     pub weather: BTreeMap<String, WeatherDef>,
+    #[serde(default)]
+    pub look: LookDef,
+}
+
+/// The picture's look for the whole game, over the session's view settings (unset keeps them).
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LookDef {
+    pub style: Option<SurfaceStyle>,
+    pub outlines: Option<bool>,
+    pub tonemap: Option<ToneCurve>,
+    pub bloom_threshold: Option<f32>,
+    pub haze_height: Option<f32>,
+    pub gi: Option<f32>,
 }
 
 fn lat() -> f32 {
@@ -383,6 +397,12 @@ impl Sky {
             street_lights: f(a.street_lights, b.street_lights).max(((gloom - 0.45) * 2.5).clamp(0.0, 1.0)),
             windows: f(a.windows, b.windows).max(((gloom - 0.5) * 1.5).clamp(0.0, 0.6)),
             shadow_radius: 70.0,
+            style: def.look.style,
+            outlines: def.look.outlines,
+            tonemap: def.look.tonemap,
+            bloom_threshold: def.look.bloom_threshold,
+            haze_height: def.look.haze_height,
+            gi: def.look.gi,
             ..Default::default()
         }
     }

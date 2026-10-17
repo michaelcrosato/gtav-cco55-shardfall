@@ -7,6 +7,14 @@ day_length = 2880.0     # 48 real minutes per game day
 start = "17:40"         # a new game starts in the golden hour
 latitude = 34.0         # how high the sun climbs (degrees north)
 
+# The picture: every surface lit, no outlines, a filmic curve and a little bounce light — the
+# sun-bleached, hazy realism of the source rather than a cartoon.
+[look]
+style = "lit"
+outlines = false
+tonemap = "aces"
+gi = 0.6
+
 [[preset]]
 name = "late_night"
 hour = 2.5
@@ -52,17 +60,17 @@ saturation = 1.08
 [[preset]]
 name = "noon"
 hour = 13.0
-sun = { color = "#fff7e8", intensity = 1.3 }
+sun = { color = "#fff7e8", intensity = 1.5 }
 sky = { zenith = "#3f78c8", horizon = "#d5dfe6", ground = "#76685a", glow = "#ffffff", clouds = 0.2, cloud = "#ffffff" }
-ambient = { sky = "#a3b8d6", ground = "#857560", level = 0.9 }
+ambient = { sky = "#a3b8d6", ground = "#857560", level = 0.72 }
 # Bleached, a little smog on the horizon.
-fog = { color = "#d8dcd6", start = 200.0, end = 1100.0 }
+fog = { color = "#d8dcd6", start = 320.0, end = 1700.0 }
 exposure = 1.0
 bloom = 0.35
 haze = 0.06
 temperature = 0.1
-saturation = 1.0
-contrast = 1.04
+saturation = 1.12
+contrast = 1.1
 
 [[preset]]
 name = "golden_hour"
