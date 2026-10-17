@@ -1,5 +1,9 @@
 # CLAUDE.md — Grand Theft Freeway-BX
 
+<!-- The engine's principles load with this file (Claude Code expands the import); the engine's
+own rulebook is AGENTS.md (its "Key rules" apply here, its merge-to-main workflow does not). -->
+@docs/DOCTRINE.md
+
 This repository builds **Grand Theft Freeway-BX**, an original spiritual successor to *Grand Theft
 Auto V*, on the Pavilion engine (vendored from https://github.com/michaelcrosato/shardfall at the
 commit pinned in `scripts/vendor-engine.sh`).
@@ -10,9 +14,10 @@ commit pinned in `scripts/vendor-engine.sh`).
 2. `PLAN.md` — the source of truth: scope, design, architecture, engine extensions, milestones and
    the Definition of Done (§2). Read §0–§4 and §10 once; afterwards read the sections the current
    milestone names, not the whole file.
-3. Until milestone M0 runs, the repository holds only these docs and `scripts/vendor-engine.sh`.
-   After M0: also follow `docs/DOCTRINE.md` (engine principles — add `@docs/DOCTRINE.md` to this
-   file in M0), the "Key rules" of `AGENTS.md`, and `docs/MAKE_A_GAME.md` (the game hook).
+3. The engine is vendored (M0; pin in `docs/ENGINE_UPSTREAM.md`). Follow `docs/DOCTRINE.md`
+   (imported above), the "Key rules" of `AGENTS.md`, and `docs/MAKE_A_GAME.md` (the game hook).
+   The game is `crates/gtf_game` (rules) and `crates/gtf_app` (binaries `grand_theft_freeway` and
+   `gtf`); its data is `content/freeway/`.
 
 ## Rules (PLAN.md §10 is the full version)
 - **Git:** work on the session's designated branch; push often (cloud containers are temporary);

@@ -5,8 +5,14 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase:** planning complete (2026-10-17). **Next:** M0 — run `scripts/vendor-engine.sh`, then
-  E1 (PLAN.md §9 M0, §6.5 E1).
+- **Phase:** M0 in progress (2026-10-17). Done: engine vendored (`689142b`); E1 code written —
+  `pav_core::games::{register, all, find}`, `pav_tools::tools::{register, all}` + `pav_tools::cli`
+  (`Cli`, `run`), `pav_app` split into a library (`main_with(AppConfig)`, `config.rs`) with a thin
+  `shardfall` binary, crates `gtf_game` (placeholder lot `content/freeway/m0_lot.toml`, tests in
+  `tests/bootstrap.rs`) and `gtf_app` (bins `grand_theft_freeway`, `gtf`), `scripts/build-web.sh
+  --package/--bin`, `scripts/build-gtf-web.sh`, Windows build, session hook, `CLAUDE.md` import.
+  **Next:** build (Cargo.lock gains the two new crates — first build without `--locked`), fix
+  compile errors, run the engine baseline + new tests, native smoke, web boot check, commit.
 - **Branch / PR:** the session's designated branch; the draft PR opened with the plan.
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)
