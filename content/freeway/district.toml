@@ -295,6 +295,13 @@ height = 7.0
 blip = "gun"
 
 [[landmark]]
+key = "customs"
+name = "Paloma Customs"
+cells = [[16, 26], [18, 27]]
+height = 8.0
+blip = "garage"
+
+[[landmark]]
 key = "gas"
 name = "Gas-N-Grab"
 cells = [[28, 26], [30, 27]]

@@ -18,6 +18,7 @@ knockback = 2.5
 [[weapon]]
 id = "p9"
 name = "P9 Pistol"
+driveby = true
 icon = "pistol"
 kind = "gun"
 damage = 26.0
@@ -36,6 +37,7 @@ cue = "gun.pistol"
 [[weapon]]
 id = "buzz"
 name = "Buzz SMG"
+driveby = true
 icon = "smg"
 kind = "gun"
 damage = 18.0

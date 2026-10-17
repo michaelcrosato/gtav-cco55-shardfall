@@ -119,6 +119,8 @@ pub enum Doing {
     Film,
     /// Going for the player with fists (tough people who were hit).
     Fight,
+    /// On the phone to the police about a crime (stopped where they fled to).
+    Phone,
     /// Knocked down (struck by a car, a heavy blow): back up, then away.
     Down,
 }
@@ -188,6 +190,8 @@ pub struct Deeds {
 /// Clips for the reactions.
 const SIT_IDLE: &str = "MESH2MOTION/Sitting_Idle";
 const PHONE_IDLE: &str = "MESH2MOTION/Idle_TalkingPhone";
+const COWER_IDLE: &str = "WORKSHOP/Cower";
+const REPORT_IDLE: &str = "WORKSHOP/Phone_Report";
 const PUNCHES: [&str; 2] = ["MESH2MOTION/Punch_Jab", "MESH2MOTION/Punch_Cross"];
 const KNOCKED: &str = "MESH2MOTION/Hit_Knockback";
 /// Archetypes that film incidents, and those that fight back when hit.
@@ -324,6 +328,14 @@ impl Peds {
                 }
                 Some(InputFrame::default())
             }
+            // The game ends the call (`phoning`); a fallback in case it does not.
+            Doing::Phone => {
+                p.timer -= m.dt;
+                if p.timer <= 0.0 {
+                    Self::release(sim, p, def);
+                }
+                Some(InputFrame::default())
+            }
             Doing::Down => {
                 p.timer -= m.dt;
                 if p.timer <= 0.0 {
@@ -442,6 +454,25 @@ impl Peds {
         self.list.iter().filter(|p| p.doing == Doing::Film)
     }
 
+    /// Those in `callers` stop and talk to the police on the phone; anyone on the phone who is
+    /// not among them any more hangs up and carries on.
+    pub fn phoning(&mut self, sim: &mut Sim, callers: &[EntityId]) {
+        let Ok(def) = def() else { return };
+        for p in &mut self.list {
+            let calling = callers.contains(&p.id);
+            match (p.doing, calling) {
+                (Doing::Phone, false) => Self::release(sim, p, &def),
+                (Doing::Walk | Doing::Wait | Doing::Linger | Doing::Flee, true) => {
+                    p.doing = Doing::Phone;
+                    p.timer = 6.0;
+                    p.path.clear();
+                    Self::set_idle(sim, p, Some(REPORT_IDLE));
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// A bench within 30 m nobody else sits on: (where to sit, facing).
     fn bench(&self, city: &City, at: Vec3) -> Option<(Vec3, f32)> {
         let taken: Vec<Vec3> = self.list.iter().filter_map(|p| p.seat.map(|s| s.0)).collect();
@@ -480,8 +511,11 @@ impl Peds {
                 p.doing = Doing::Linger;
                 p.timer = 1.0;
                 p.run = def.archetype[p.arch as usize].run;
+                Self::set_idle(sim, p, None);
             }
-            return InputFrame { held: buttons::CROUCH, ..Default::default() };
+            // The cower clip is a crouch of its own; without it, a plain crouch.
+            let held = if pav_core::clips::find_cached(COWER_IDLE) != 0 { 0 } else { buttons::CROUCH };
+            return InputFrame { held, ..Default::default() };
         }
         if p.doing == Doing::Linger {
             p.timer -= m.dt;
@@ -710,7 +744,9 @@ impl Peds {
                     }
                 }
             }
-            if route.len() >= 2 {
+            // Right next to it, some freeze where they are.
+            let freeze = pos.distance(threat) < 9.0 && rng.f32() < 0.4;
+            if route.len() >= 2 && !freeze {
                 p.path = route;
                 p.next = 1;
                 p.doing = Doing::Flee;
@@ -718,6 +754,7 @@ impl Peds {
             } else {
                 p.doing = Doing::Cower;
                 p.timer = rng.range(6.0, 12.0);
+                Self::set_idle(sim, p, Some(COWER_IDLE));
             }
             p.check = pos;
             p.check_t = 0.0;

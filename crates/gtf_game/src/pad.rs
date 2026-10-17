@@ -169,6 +169,8 @@ pub static DRIVE_KEYS: LazyLock<Arc<KeyMap>> = LazyLock::new(|| {
             ("KeyI", StickL(Vec2::Y)),
             ("KeyK", StickL(Vec2::NEG_Y)),
             ("Space", Button(pad::R1)),
+            ("MouseRight", Button(pad::L1)),
+            ("MouseLeft", Button(pad::R1)),
             ("KeyF", Button(pad::NORTH)),
             ("KeyH", Button(pad::L3)),
             ("KeyV", Button(pad::R3)),

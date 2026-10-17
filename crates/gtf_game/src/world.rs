@@ -77,6 +77,7 @@ fn icon(name: &str) -> Option<(BlipIcon, &'static str)> {
         "vehicle" => (BlipIcon::Vehicle, "#c9d6df"),
         "heist" => (BlipIcon::Heist, "#ffc145"),
         "activity" => (BlipIcon::Activity, "#ff3e8a"),
+        "garage" => (BlipIcon::Garage, "#8fd3ff"),
         _ => return None,
     })
 }

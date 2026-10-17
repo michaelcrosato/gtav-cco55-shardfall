@@ -236,3 +236,48 @@ fn a_grenade_flies_bounces_and_blows_up() {
         || game(&sim).combat.hp.get(&who.0).is_some_and(|hp| *hp < 100.0);
     assert!(hurt, "the stranger 7 m away was caught in the blast");
 }
+
+#[test]
+fn a_drive_by_from_the_window_hits_someone_ahead() {
+    gtf_game::register();
+    let mut sim = Sim::new("freeway/roam", 5).unwrap();
+    cmd(&mut sim, "time 12:30");
+    for _ in 0..60 {
+        sim.step(&InputFrame::default());
+    }
+    cmd(&mut sim, "drive okami_kaze");
+    for _ in 0..60 {
+        sim.step(&InputFrame::default());
+    }
+    assert!(game(&sim).drive.vehicle().is_some(), "at the wheel");
+    // Someone standing 9 m ahead of the car, a little to its side.
+    let cam = game(&sim).camera(&sim);
+    let car = game(&sim).drive.vehicle().unwrap();
+    let car_at = sim.feet(sim.state.player.unwrap()).unwrap();
+    let f = cam.target - cam.eye;
+    let flat = Vec3::new(f.x, 0.0, f.z).normalize();
+    let side = Vec3::new(flat.z, 0.0, -flat.x);
+    let p = car_at + flat * 9.0 + side * 1.0;
+    let _ = car;
+    let who = sim.spawn_npc("target", Vec3::new(p.x, car_at.y, p.z), 0.0, pav_core::puppet::PuppetDef::default(), None, None);
+    for _ in 0..10 {
+        sim.step(&InputFrame::default());
+    }
+    // L1 held, R1 tapped: a pistol from the window.
+    for t in 0..180 {
+        let mut f = InputFrame::default();
+        f.pad.held = pad::L1;
+        if t % 15 == 0 {
+            f.pad.held |= pad::R1;
+            f.pad.pressed = pad::R1;
+        }
+        sim.step(&f);
+    }
+    let g = game(&sim);
+    let hp = g.combat.hp.get(&who.0).copied();
+    let dead = sim.state.entities.get(who).is_none_or(|e| e.name.starts_with("dead:"));
+    eprintln!("shots {}, hits {}, target hp {hp:?}, dead {dead}", g.combat.shots, g.combat.hits);
+    assert!(g.combat.shots >= 5, "fired from the car");
+    assert!(g.combat.hits >= 1 || dead, "and hit them");
+    assert!(g.drive.vehicle().is_some(), "still at the wheel");
+}

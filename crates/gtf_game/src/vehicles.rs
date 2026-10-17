@@ -215,3 +215,15 @@ pub fn feel_row(a: &Archetype, f: &Feel) -> String {
         if j.upright { "upright" } else { "NOT UPRIGHT" },
     )
 }
+
+/// A new coat of paint: the next of its archetype's colours (Paloma Customs).
+pub fn repaint(sim: &mut Sim, id: EntityId) {
+    let Some(e) = sim.state.entities.get_mut(id) else { return };
+    let Some(a) = all().ok().and_then(|list| list.iter().find(|a| a.key == e.name).cloned()) else { return };
+    let Some(v) = e.vehicle.as_deref_mut() else { return };
+    if a.colors.len() < 2 {
+        return;
+    }
+    let now = a.colors.iter().position(|c| *c == v.def.color).unwrap_or(0);
+    v.def.color = a.colors[(now + 1) % a.colors.len()].clone();
+}

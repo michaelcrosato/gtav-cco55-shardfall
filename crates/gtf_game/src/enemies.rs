@@ -479,11 +479,28 @@ impl Enemies {
                     }
                 }
             }
+            // Down behind cover: the cover pose (facing the wall); otherwise the body's own.
+            let pose = match e.act {
+                Act::Hide { at, .. } if at.normal != Vec2::ZERO && frame.move_dir == Vec2::ZERO => {
+                    face = Some(at.pos - up(at.normal));
+                    pav_core::clips::find_cached(if at.high { crate::cover::POSE_HIGH } else { crate::cover::POSE_LOW })
+                }
+                _ => 0,
+            };
             if let Some(c) = sim.state.entities.get_mut(e.id).and_then(|x| x.character.as_mut()) {
                 c.face = face.map(|p| {
                     let to = p - feet;
                     to.x.atan2(to.z)
                 });
+                if pose != 0 {
+                    c.anim.play_clip(pose, 0, 1.0);
+                } else if c.anim.clip != 0
+                    && [crate::cover::POSE_LOW, crate::cover::POSE_HIGH]
+                        .iter()
+                        .any(|n| pav_core::clips::find_cached(n) == c.anim.clip)
+                {
+                    c.anim.stop_clip();
+                }
             }
             moves.insert(e.id, frame);
             self.list[i] = e;

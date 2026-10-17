@@ -17,6 +17,8 @@ pub const LENGTH: f32 = 5.0;
 /// The world's speed while it holds.
 pub const SLOW: f32 = 0.3;
 pub const WASTED_FEE: i64 = 250;
+/// A respray at Paloma Customs (it clears the heat while unseen).
+pub const RESPRAY_FEE: i64 = 200;
 /// Seconds of arm's-length contact that make an arrest.
 pub const CUFF_TIME: f32 = 2.0;
 

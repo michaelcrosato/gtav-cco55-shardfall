@@ -19,6 +19,9 @@ use crate::camera::OrbitCam;
 /// How near a cover point must be to take it (m), and the speed along a wall (m/s).
 pub const REACH: f32 = 3.0;
 const ALONG: f32 = 1.8;
+/// The poses held behind low and tall cover (facing the wall).
+pub const POSE_LOW: &str = "WORKSHOP/Cover_Low";
+pub const POSE_HIGH: &str = "WORKSHOP/Cover_High";
 
 /// Where the player is in cover.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -172,6 +175,19 @@ impl Cover {
             let step = to.clamp_length_max(5.0 * dt);
             sim.set_position(pid, Vec3::new(feet.x + step.x, feet.y.max(spot.pos.y), feet.z + step.y));
         }
+        // The pose, held still behind it (crouched at low cover, flat to tall cover); moving
+        // along the wall or peeking, the body's own animation.
+        let pose = pav_core::clips::find_cached(if spot.high { POSE_HIGH } else { POSE_LOW });
+        let still = along.abs() <= 0.25 && to.length() < 0.3 && !self.peeking;
+        if let Some(c) = sim.state.entities.get_mut(pid).and_then(|e| e.character.as_mut())
+            && pose != 0
+        {
+            if still {
+                c.anim.play_clip(pose, 0, 1.0);
+            } else if c.anim.clip == pose {
+                c.anim.stop_clip();
+            }
+        }
         let mut held = buttons::FOCUS;
         if !spot.high && !self.peeking {
             held |= buttons::CROUCH;
@@ -183,8 +199,12 @@ impl Cover {
     pub fn leave(&mut self, sim: &mut Sim, pid: EntityId) {
         self.at = None;
         self.peeking = false;
+        let poses = [pav_core::clips::find_cached(POSE_LOW), pav_core::clips::find_cached(POSE_HIGH)];
         if let Some(c) = sim.state.entities.get_mut(pid).and_then(|e| e.character.as_mut()) {
             c.face = None;
+            if c.anim.clip != 0 && poses.contains(&c.anim.clip) {
+                c.anim.stop_clip();
+            }
         }
     }
 }

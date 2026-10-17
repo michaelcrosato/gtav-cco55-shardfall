@@ -69,6 +69,9 @@ pub struct WeaponDef {
     pub cue: String,
     #[serde(default)]
     pub combo: Vec<String>,
+    /// Fired from a vehicle's window (L1 aim, R1 fire): pistols and SMGs.
+    #[serde(default)]
+    pub driveby: bool,
 }
 
 fn one() -> u32 {
@@ -262,6 +265,8 @@ pub struct Shooter<'a> {
     pub moving: bool,
     /// Firing blind from cover (three times the spread).
     pub blind: bool,
+    /// The vehicle the shooter sits in (a drive-by): shots pass through its own body.
+    pub exclude: Option<EntityId>,
 }
 
 /// What combat did this tick, for the people and the heat.
@@ -427,12 +432,12 @@ impl Combat {
         let reach = w.range + eye.distance(muzzle);
         for _ in 0..w.pellets.max(1) {
             let dir = scatter(forward, spread, &mut sim.state.rng);
-            let first = sim.raycast(eye, dir, reach, None);
+            let first = sim.raycast(eye, dir, reach, s.exclude);
             let target = first.as_ref().map_or(eye + dir * reach, |h| h.point);
             // From the muzzle: a wall between the gun and the aim point takes the shot.
             let to = target - muzzle;
             let len = to.length();
-            let hit = if len > 0.05 { sim.raycast(muzzle, to / len, (len - 0.02).max(0.0), None).or(first) } else { first };
+            let hit = if len > 0.05 { sim.raycast(muzzle, to / len, (len - 0.02).max(0.0), s.exclude).or(first) } else { first };
             let (point, normal, entity) = match &hit {
                 Some(h) => (h.point, h.normal, h.entity),
                 None => (target, Vec3::Y, None),

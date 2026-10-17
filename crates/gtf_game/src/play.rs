@@ -9,11 +9,40 @@ use pav_core::InputFrame;
 use pav_core::entity::EntityId;
 use pav_core::frame::SimEvent;
 use pav_core::input::pad;
+use pav_core::present::CameraIntent;
 use pav_core::sim::Sim;
 
 use crate::fate::Fate;
 use crate::heat::{Crime, Heat};
 use crate::{Freeway, camera, combat, drive, fate, peds, police, traffic};
+
+/// The weapon to fire from a vehicle: the one in hand if it can be, else the first that can
+/// with rounds left (None: nothing to fire).
+fn driveby_weapon(def: &combat::WeaponsDef, current: usize, c: &combat::Combat) -> Option<usize> {
+    let ok = |i: usize| {
+        def.weapon.get(i).is_some_and(|w| w.driveby)
+            && c.mag.get(i).copied().unwrap_or(0) + c.reserve.get(i).copied().unwrap_or(0) > 0
+    };
+    if ok(current) { Some(current) } else { (0..def.weapon.len()).find(|&i| ok(i)) }
+}
+
+/// How near Paloma Customs' door a stopped car must be for the respray (m).
+const RESPRAY_REACH: f32 = 11.0;
+
+/// Seconds into BUSTED (real time) the hands go behind the head on the knees.
+const KNEEL: f32 = 1.4;
+/// A witness's call shows (on the phone, a marker over them) for its last seconds.
+pub(crate) const CALL_SHOWS: f32 = 3.0;
+
+/// Plays clip `name` on character `id` (`flags`: `pav_core::clips`), if the clip exists.
+pub(crate) fn play_clip(sim: &mut Sim, id: EntityId, name: &str, flags: u8) {
+    let clip = pav_core::clips::find_cached(name);
+    if let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut())
+        && clip != 0
+    {
+        c.anim.replay_clip(clip, flags, 1.0);
+    }
+}
 
 /// How often the same kind of crime is counted again (s): a burst of fire is one shooting.
 const CRIME_REPEAT: f32 = 3.0;
@@ -73,7 +102,16 @@ impl Freeway {
             // The camera circles the player; nothing answers the pad.
             self.fate = match self.fate {
                 Fate::Wasted { t } => Fate::Wasted { t: t + real },
-                Fate::Busted { t } => Fate::Busted { t: t + real },
+                Fate::Busted { t } => {
+                    // Hands up, then down on the knees for the cuffs.
+                    if t < KNEEL
+                        && t + real >= KNEEL
+                        && let Some(pid) = sim.state.player
+                    {
+                        play_clip(sim, pid, "WORKSHOP/Arrested", pav_core::clips::CLAMP);
+                    }
+                    Fate::Busted { t: t + real }
+                }
                 Fate::Alive => Fate::Alive,
             };
         } else if let Some((car, r)) = riding {
@@ -82,6 +120,62 @@ impl Freeway {
             let hit = |o: Vec3, d: Vec3, max: f32| sim.raycast_static(o, d, max).map(|h| h.point.distance(o));
             self.chase.update(input, &r, look, real, &hit);
             self.radio_controls(input, real, sounds);
+            // Drive-by: L1 held aims down the camera's line, R1 fires a pistol or an SMG.
+            if let Some(id) = pid
+                && input.pad.held & pad::L1 != 0
+                && let Ok(wdef) = combat::def()
+                && let Some(w) = driveby_weapon(&wdef, self.weapon, &self.combat)
+            {
+                if w != self.weapon {
+                    self.last_weapon = self.weapon;
+                    self.weapon = w;
+                }
+                // Level, from the driver's head along the camera's heading — onto the nearest
+                // person within 12° of that line and in range (a soft lock: drive-bys on a pad).
+                let view = self.camera(sim);
+                let flat = Vec3::new(view.target.x - view.eye.x, 0.0, view.target.z - view.eye.z).normalize_or(Vec3::Z);
+                let seat = sim.feet(id).unwrap_or(feet);
+                let head = seat + Vec3::Y * 1.25;
+                let range = wdef.weapon.get(self.weapon).map_or(30.0, |w| w.range);
+                let lock = sim
+                    .state
+                    .entities
+                    .iter()
+                    .filter(|e| {
+                        e.id != id && e.character.as_ref().is_some_and(|c| c.riding.is_none()) && !e.name.starts_with("dead:")
+                    })
+                    .filter_map(|e| {
+                        let chest = e.pos + Vec3::Y * 0.4;
+                        let to = chest - head;
+                        let d = to.length();
+                        let off = Vec3::new(to.x, 0.0, to.z).normalize_or(Vec3::Z).angle_between(flat);
+                        (d < range && off < 12f32.to_radians()).then_some((chest, off))
+                    })
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                    .map(|x| x.0);
+                let cam = CameraIntent { eye: head - flat * 0.3, target: lock.unwrap_or(head + flat * 25.0), ..view };
+                let look = cam.target - cam.eye;
+                let shooter = combat::Shooter {
+                    id,
+                    feet: seat,
+                    facing: look.x.atan2(look.z),
+                    camera: &cam,
+                    moving: true,
+                    blind: false,
+                    exclude: Some(car),
+                };
+                let mut f = InputFrame::default();
+                f.pad.l2 = 1.0;
+                if input.pad.held & pad::R1 != 0 {
+                    f.pad.r2 = 1.0;
+                }
+                if input.pad.pressed & pad::R1 != 0 {
+                    f.pad.pressed |= pad::R2;
+                }
+                res = self.combat.tick(sim, &wdef, self.weapon, &f, &shooter, &mut self.cam, dt, events);
+            } else {
+                self.combat.aiming = false;
+            }
             // Headlights after dark and in bad weather.
             let dark = !(6.3..19.5).contains(&self.sky.hour) || matches!(self.sky.weather.as_str(), "rain" | "storm" | "fog");
             sim.set_vehicle_lights(car, dark);
@@ -145,7 +239,15 @@ impl Freeway {
                 if let Some(wdef) = wdef {
                     let facing = sim.state.entities.get(id).and_then(|e| e.character.as_ref()).map_or(0.0, |c| c.facing);
                     let blind = self.cover.at.is_some() && !moving.aiming;
-                    let shooter = combat::Shooter { id, feet, facing, camera: &cam, moving: moving.dir.length() > 0.3, blind };
+                    let shooter = combat::Shooter {
+                        id,
+                        feet,
+                        facing,
+                        camera: &cam,
+                        moving: moving.dir.length() > 0.3,
+                        blind,
+                        exclude: None,
+                    };
                     res = self.combat.tick(sim, &wdef, self.weapon, input, &shooter, &mut self.cam, dt, events);
                     melee = wdef.weapon.get(self.weapon).is_some_and(|w| w.kind == combat::Kind::Melee);
                 }
@@ -468,11 +570,43 @@ impl Freeway {
         {
             self.peds.scare(sim, &city.walk, at, 35.0);
         }
+        // The car they saw the player in (on foot: none — any car is one they have not seen).
+        if rep.sees {
+            self.heat.seen_car = self.drive.vehicle();
+        }
         let before = self.heat.stars;
         let cleared = self.heat.tick(sim, feet, rep.sees, hidden, None, dt);
+        // Callers in the last seconds of their call stop and talk on the phone.
+        let callers: Vec<EntityId> = self.heat.reports.iter().filter(|r| r.left < CALL_SHOWS).map(|r| r.reporter).collect();
+        self.peds.phoning(sim, &callers);
         if cleared {
             self.police.stand_down();
             self.note("police", "Lost them", "The police have given up the search.");
+        }
+        // Paloma Customs: a car brought to the door while the police are not looking comes out
+        // resprayed and repaired, and the heat is over.
+        if let Some(car) = self.drive.vehicle()
+            && self.heat.stars > 0
+            && !rep.sees
+            && vel.length() < 1.0
+            && let Some(door) = self.customs_door(city)
+            && sim.state.entities.get(car).is_some_and(|e| e.pos.distance(door) < RESPRAY_REACH)
+        {
+            if self.money >= fate::RESPRAY_FEE {
+                self.money -= fate::RESPRAY_FEE;
+                sim.repair_vehicle(car);
+                crate::vehicles::repaint(sim, car);
+                self.heat.clear();
+                self.police.stand_down();
+                self.resprays += 1;
+                events.push(SimEvent::Sound { cue: "ui.cash".into(), pos: None, gain: 1.0, pitch: 1.0 });
+                self.note("garage", "Paloma Customs", &format!("New paint, no questions. -${}", fate::RESPRAY_FEE));
+            } else if !self.told_price {
+                self.note("garage", "Paloma Customs", &format!("A respray is ${}.", fate::RESPRAY_FEE));
+                self.told_price = true;
+            }
+        } else if self.told_price && self.drive.vehicle().is_none() {
+            self.told_price = false;
         }
         if self.heat.stars > before {
             self.scanner = 0.5;
@@ -515,12 +649,7 @@ impl Freeway {
             && let Fate::Busted { .. } = fate
         {
             // Hands up.
-            let clip = pav_core::clips::find_cached("MESH2MOTION/Idle_HandsUp");
-            if let Some(c) = sim.state.entities.get_mut(pid).and_then(|e| e.character.as_mut())
-                && clip != 0
-            {
-                c.anim.replay_clip(clip, pav_core::clips::CLAMP, 1.0);
-            }
+            play_clip(sim, pid, "WORKSHOP/Hands_Up", 0);
         }
     }
 
@@ -539,6 +668,10 @@ impl Freeway {
         let at = crate::world::door(city, place).unwrap_or(crate::world::SPAWN);
         if let Some(pid) = sim.state.player {
             sim.set_position(pid, at + Vec3::Y * 0.1);
+            // Up off the knees (or the ground).
+            if let Some(c) = sim.state.entities.get_mut(pid).and_then(|e| e.character.as_mut()) {
+                c.anim.stop_clip();
+            }
             if let Some(c) = sim.state.entities.get_mut(pid).and_then(|e| e.character.as_mut()) {
                 c.vel = Vec3::ZERO;
                 c.impulse = Vec3::ZERO;

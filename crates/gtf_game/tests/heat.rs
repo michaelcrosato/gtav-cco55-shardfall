@@ -181,3 +181,48 @@ fn evasion_rate() {
         eprintln!("{}: {got_away}/8 escaped", if rolling { "rolling" } else { "standing" });
     }
 }
+
+/// Paloma Customs: a car stopped at its door while the police are not looking comes out
+/// resprayed and repaired, $200 lighter, with no heat; with no car in sight of them, a car they
+/// have not seen drops a star.
+#[test]
+fn a_respray_clears_the_heat_and_a_fresh_car_drops_a_star() {
+    let mut sim = roam(3);
+    let city = gtf_game::world::city().unwrap();
+    let door = gtf_game::world::door(&city, "customs").expect("Paloma Customs");
+    sim.set_position(sim.state.player.unwrap(), door + glam::Vec3::Y * 0.1);
+    steps(&mut sim, 20);
+    cmd(&mut sim, "drive okami_kaze");
+    let car = game(&sim).drive.vehicle().expect("in a car");
+    let paint = sim.state.entities.get(car).and_then(|e| e.vehicle.as_ref()).map(|v| v.def.color.clone());
+    game_mut(&mut sim).money = 1000;
+    cmd(&mut sim, "wanted 2");
+    let mut t = 0;
+    while game(&sim).heat.stars > 0 && t < 300 {
+        sim.step(&InputFrame::default());
+        t += 1;
+    }
+    let g = game(&sim);
+    eprintln!("respray after {t} ticks: stars {}, money {}, resprays {}", g.heat.stars, g.money, g.resprays);
+    assert_eq!(g.heat.stars, 0, "the heat ended");
+    assert_eq!(g.money, 800, "for $200");
+    assert_eq!(g.resprays, 1);
+    let now = sim.state.entities.get(car).and_then(|e| e.vehicle.as_ref()).map(|v| v.def.color.clone());
+    assert_ne!(paint, now, "a new colour");
+
+    // The car swap (away from the garage): wanted, searched for in one car, into another unseen.
+    let mut sim = roam(3);
+    cmd(&mut sim, "drive okami_kaze");
+    let car = game(&sim).drive.vehicle().expect("in a car");
+    cmd(&mut sim, "wanted 3");
+    {
+        let g = game_mut(&mut sim);
+        g.heat.searching = true;
+        g.heat.unseen = 5.0;
+        g.heat.seen_car = Some(car);
+    }
+    cmd(&mut sim, "drive zephyr_wagon");
+    let g = game(&sim);
+    assert_ne!(g.drive.vehicle(), Some(car), "in another car");
+    assert_eq!(g.heat.stars, 2, "a star off for the car they are not looking for");
+}

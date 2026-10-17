@@ -96,6 +96,8 @@ pub struct Heat {
     pub wanted_for: f32,
     pub peak: u8,
     pub cleared: u32,
+    /// The car the police last saw the player in (another, taken while unseen, drops a star).
+    pub seen_car: Option<EntityId>,
 }
 
 impl Default for Heat {
@@ -114,6 +116,7 @@ impl Default for Heat {
             wanted_for: 0.0,
             peak: 0,
             cleared: 0,
+            seen_car: None,
         }
     }
 }
@@ -251,6 +254,19 @@ impl Heat {
         self.unseen = 0.0;
         self.evade = 0.0;
         self.reports.clear();
+        self.seen_car = None;
+    }
+
+    /// Into `car` while unseen: if the police are looking for another, the level drops a star
+    /// (true when it did).
+    pub fn swapped_car(&mut self, car: EntityId) -> bool {
+        if self.stars == 0 || !self.searching || self.seen_car.is_none_or(|c| c == car) {
+            return false;
+        }
+        self.stars = self.stars.saturating_sub(1).max(self.floor);
+        self.seen_car = None;
+        self.news = Some("Suspect vehicle not found".into());
+        true
     }
 
     /// The search zone (centre, radius) while searching.

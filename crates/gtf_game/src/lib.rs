@@ -176,6 +176,14 @@ pub struct Freeway {
     /// Armed opponents (missions; `enemies <n> <side>`).
     #[serde(default)]
     pub enemies: enemies::Enemies,
+    /// Resprays bought (stats), and Paloma Customs' door (found once).
+    #[serde(default)]
+    pub resprays: u32,
+    #[serde(skip)]
+    pub customs: Option<Option<Vec3>>,
+    /// Told the price at the door without the money (once until out of the car).
+    #[serde(default)]
+    pub told_price: bool,
     /// Crimes typed as commands (`crime assault`: tests, bots), judged next tick.
     #[serde(default)]
     pub typed_crimes: Vec<heat::Crime>,
@@ -277,6 +285,9 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         typed_crimes: Vec::new(),
         bot: bot::Bot::default(),
         enemies: enemies::Enemies::default(),
+        resprays: 0,
+        customs: None,
+        told_price: false,
         ai_inputs: BTreeMap::new(),
         chase: camera::ChaseCam::default(),
         peds: peds::Peds::default(),
@@ -509,6 +520,10 @@ impl Freeway {
             match *d {
                 Deed::Entered { car } => {
                     self.traffic.unpark(car);
+                    // A car the police have not seen, while they search: a star off.
+                    if self.heat.swapped_car(car) && self.heat.stars == 0 {
+                        self.police.stand_down();
+                    }
                     // The bot on the run drives off at once.
                     if self.bot.escape
                         && let Some(city) = self.city.clone()
@@ -549,6 +564,11 @@ impl Freeway {
                 }
             }
         }
+    }
+
+    /// Paloma Customs' door (the sidewalk in front of it), looked up once.
+    pub(crate) fn customs_door(&mut self, city: &pav_world::City) -> Option<Vec3> {
+        *self.customs.get_or_insert_with(|| world::door(city, "customs"))
     }
 
     /// Someone struck by a vehicle: the player is hurt; a person dies above 12 m/s or is knocked
@@ -665,7 +685,7 @@ impl Freeway {
     }
 
     /// The camera for this page.
-    fn camera(&self, sim: &Sim) -> CameraIntent {
+    pub fn camera(&self, sim: &Sim) -> CameraIntent {
         if let Some(v) = &self.view {
             return v.camera();
         }
@@ -959,10 +979,23 @@ impl Game for Freeway {
             });
             let mut hud = hud;
             let mut prompts = prompts;
+            let mut markers = Vec::new();
             // The law on the HUD: stars (flashing while searching), police blips, and the search
             // zone with the officers' vision cones.
             if self.heat.stars > 0 {
                 hud.wanted = Some(Wanted { stars: self.heat.stars, max: 5, flashing: self.heat.searching });
+            }
+            // Witnesses on the phone to the police: a marker over each.
+            for r in self.heat.reports.iter().filter(|r| r.left < play::CALL_SHOWS) {
+                if let Some(f) = sim.feet(r.reporter) {
+                    markers.push(ScreenMarker {
+                        pos: f + Vec3::Y * 2.2,
+                        icon: BlipIcon::Police,
+                        color: pav_core::Color::hex("#ffb020"),
+                        label: Some("Calling the police".into()),
+                        distance: false,
+                    });
+                }
             }
             if let Some(m) = &mut hud.minimap {
                 m.blips.extend(self.police.blips(sim, self.ui_time));
@@ -971,7 +1004,7 @@ impl Game for Freeway {
                     if let Some(f) = sim.feet(e.id) {
                         m.blips.push(Blip {
                             pos: Vec2::new(f.x, f.z),
-                            icon: BlipIcon::Dot,
+                            icon: BlipIcon::Enemy,
                             color: pav_core::Color::hex("#e8423f"),
                             label: None,
                             clamp: false,
@@ -1028,6 +1061,7 @@ impl Game for Freeway {
             ui.hud = Some(hud);
             ui.help = help;
             ui.prompts = prompts;
+            ui.markers.extend(markers);
             if self.wheel_open() {
                 ui.wheel = Some(self.wheel.as_ref().unwrap().ui(self.weapon));
                 ui.overlay.vignette = 0.45;

@@ -490,7 +490,8 @@ impl Drive {
                 brake: self.smooth.brake,
                 steer: self.smooth.steer,
                 pitch: p.stick_l.y.clamp(-1.0, 1.0),
-                handbrake: p.held & pad::R1 != 0 && !c.heli,
+                // (Aiming a drive-by, R1 fires instead.)
+                handbrake: p.held & pad::R1 != 0 && p.held & pad::L1 == 0 && !c.heli,
                 horn,
                 siren: self.siren && c.siren,
             },
