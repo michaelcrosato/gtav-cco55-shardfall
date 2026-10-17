@@ -383,6 +383,7 @@ impl Sky {
             street_lights: f(a.street_lights, b.street_lights).max(((gloom - 0.45) * 2.5).clamp(0.0, 1.0)),
             windows: f(a.windows, b.windows).max(((gloom - 0.5) * 1.5).clamp(0.0, 0.6)),
             shadow_radius: 70.0,
+            ..Default::default()
         }
     }
 }

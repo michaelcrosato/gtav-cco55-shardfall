@@ -67,6 +67,7 @@ pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut
             collider: None,
             sway: Default::default(),
             material: None,
+            glow: Default::default(),
         });
         out.labels.push(Label {
             text: s.text.clone(),

@@ -131,6 +131,7 @@ pub fn signal_lamps(city: &City, at: Vec3, t: f32, out: &mut Vec<pav_core::prese
             emissive: 3.5,
             look: pav_core::shape::Look::Unlit,
             shadow: false,
+            glow: Default::default(),
         });
     }
 }

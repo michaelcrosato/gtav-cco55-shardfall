@@ -39,6 +39,18 @@ struct Globals {
     cut3: [f32; 4],
     wind: [f32; 4],
     push: [f32; 4],
+    // The sky (`Scene::sky`); see `Globals` in scene.wgsl for each field.
+    sky_zenith: [f32; 4],
+    sky_horizon: [f32; 4],
+    sky_ground: [f32; 4],
+    sky_glow: [f32; 4],
+    sky_sun: [f32; 4],
+    sky_sun_color: [f32; 4],
+    sky_moon: [f32; 4],
+    sky_cloud: [f32; 4],
+    sky_drift: [f32; 4],
+    /// x wetness, y street lights, z windows.
+    levels: [f32; 4],
 }
 
 #[repr(C)]
@@ -174,6 +186,12 @@ pub struct RenderStats {
     pub lights: usize,
     /// Procedural material rows in the scene's table (besides row 0, none).
     pub materials: usize,
+    /// Static regions in the scene, those the camera drew, and those the sun's shadow pass drew.
+    pub regions: usize,
+    pub regions_drawn: usize,
+    pub regions_shadow: usize,
+    /// Mesh instances the sun's shadow pass drew.
+    pub shadow_instances: usize,
 }
 
 pub struct Renderer {
@@ -192,6 +210,8 @@ pub struct Renderer {
     sdf_pipeline: wgpu::RenderPipeline,
     mesh_shadow_pipeline: wgpu::RenderPipeline,
     sdf_shadow_pipeline: wgpu::RenderPipeline,
+    /// The sky dome: a full-screen triangle at the far plane, after the opaque geometry.
+    sky_pipeline: wgpu::RenderPipeline,
     post_layout: wgpu::BindGroupLayout,
     post_pipeline_layout: wgpu::PipelineLayout,
     post_shader: wgpu::ShaderModule,
@@ -604,6 +624,38 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        // The sky only fills what geometry left at the far plane (depth test, no depth write)
+        // and leaves the normal buffer's background marking alone.
+        let sky_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("sky"),
+            layout: Some(&main_layout),
+            vertex: wgpu::VertexState {
+                module: &scene_shader,
+                entry_point: Some("vs_sky"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: Default::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: ms,
+            fragment: Some(wgpu::FragmentState {
+                module: &scene_shader,
+                entry_point: Some("fs_sky"),
+                compilation_options: Default::default(),
+                targets: &[
+                    Some(wgpu::ColorTargetState { format: HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL }),
+                    Some(wgpu::ColorTargetState { format: NORMAL_FORMAT, blend: None, write_mask: wgpu::ColorWrites::empty() }),
+                ],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
 
         let post_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("post"),
@@ -816,6 +868,7 @@ impl Renderer {
             sdf_pipeline,
             mesh_shadow_pipeline,
             sdf_shadow_pipeline,
+            sky_pipeline,
             post_layout,
             post_pipeline_layout,
             post_shader,
@@ -1036,15 +1089,6 @@ impl Renderer {
         let frame = self.frame;
         self.meshes.retain(|k, m| !matches!(k, MeshKey::Custom(_)) || frame - m.last_used < 300);
 
-        // Make sure every referenced mesh exists.
-        for inst in &scene.meshes {
-            if !self.meshes.contains_key(&inst.mesh) {
-                if let Some(data) = inst.mesh.generate() {
-                    self.upsert_mesh(inst.mesh, &data);
-                }
-            }
-        }
-
         // Globals.
         let cam = &scene.camera;
         let view_proj = cam.proj * cam.view;
@@ -1088,7 +1132,33 @@ impl Renderer {
                 [d.x, d.y, w.strength, w.gusts]
             },
             push: scene.wind.pusher.extend(scene.wind.push_radius).to_array(),
+            sky_zenith: [0.0; 4],
+            sky_horizon: [0.0; 4],
+            sky_ground: [0.0; 4],
+            sky_glow: [0.0; 4],
+            sky_sun: [0.0; 4],
+            sky_sun_color: [0.0; 4],
+            sky_moon: [0.0; 4],
+            sky_cloud: [0.0; 4],
+            sky_drift: [0.0; 4],
+            levels: [scene.wetness.clamp(0.0, 1.0), scene.street_lights.max(0.0), scene.windows.clamp(0.0, 1.0), 0.0],
         };
+        if let Some(sky) = &scene.sky {
+            let to_sun = sky.to_sun.normalize_or(Vec3::Y);
+            // The moon's own disc stands in for the sun's when the "sun" light is the moon.
+            let moon = sky.to_moon.map(|m| m.normalize_or(Vec3::Y));
+            let disc = sky.sun_size > 0.0 && moon.is_none_or(|m| m.dot(to_sun) < 0.999);
+            globals.sky_zenith = sky.zenith.extend(1.0).to_array();
+            globals.sky_horizon = sky.horizon.extend(if disc { sky.sun_size * 0.5 } else { 0.0 }).to_array();
+            globals.sky_ground = sky.ground.extend(sky.stars.clamp(0.0, 1.0)).to_array();
+            globals.sky_glow = sky.glow.extend(sky.clouds.clamp(0.0, 1.0)).to_array();
+            globals.sky_sun = to_sun.extend(sky.lightning.clamp(0.0, 1.0)).to_array();
+            globals.sky_sun_color = sky.sun_color.extend(if moon.is_some() { 1.0 } else { 0.0 }).to_array();
+            globals.sky_moon = moon.unwrap_or(Vec3::Y).extend(0.0).to_array();
+            globals.sky_cloud = sky.cloud_color.extend(0.0).to_array();
+            let drift = sky.wind * scene.time;
+            globals.sky_drift = [drift.x, drift.y, 0.0, 0.0];
+        }
         self.queue.write_buffer(&self.globals_buf, 0, bytemuck::bytes_of(&globals));
         self.materials.upload(&self.device, &self.queue, scene);
         let globals_sun_dir = globals.sun_dir;
@@ -1151,25 +1221,99 @@ impl Renderer {
             );
         }
 
-        // Instances, grouped by mesh.
-        let mut order: Vec<usize> =
-            (0..scene.meshes.len()).filter(|&i| self.meshes.contains_key(&scene.meshes[i].mesh)).collect();
-        order.sort_by_key(|&i| scene.meshes[i].mesh);
-        let mut gpu_meshes = Vec::with_capacity(order.len());
-        let mut batches: Vec<(MeshKey, u32, u32, u32, u32)> = Vec::new(); // key, start, end, shadow_start, shadow_end
-        // Shadow casters are the same instances; NO_SHADOW ones are skipped by a second ordering.
-        for &i in &order {
-            let m = &scene.meshes[i];
-            let idx = gpu_meshes.len() as u32;
-            gpu_meshes.push(GpuMeshInstance {
-                model: mat(m.transform),
-                color: m.color.extend(m.emissive).to_array(),
-                params: [m.style as u32, m.flags, m.group, self.materials.param(m.material)],
-                ext: m.ext.extend(0.0).to_array(),
+        // Static regions: the ones the camera sees join the main pass, the ones the sun's shadow
+        // box holds join the shadow pass; small props and detail go beyond their distances.
+        let no_shadow = crate::scene::flags::NO_SHADOW;
+        let cam_planes = crate::cull::planes(view_proj);
+        let sun_planes = crate::cull::planes(light_vp);
+        let far = if scene.cull.far > 0.0 {
+            scene.cull.far
+        } else if scene.fog.enabled {
+            scene.fog.end.max(scene.fog.start)
+        } else {
+            f32::INFINITY
+        };
+        let far_center = if scene.fog.enabled { scene.fog.center } else { cam.eye };
+        let class = crate::scene::flags::SMALL | crate::scene::flags::DETAIL;
+        // Orthographic views (small top-down rooms) keep every class: their eye is arbitrary.
+        let (small2, detail2) = if cam.ortho {
+            (f32::INFINITY, f32::INFINITY)
+        } else {
+            (scene.cull.small * scene.cull.small, scene.cull.detail * scene.cull.detail)
+        };
+        let near_enough = |flags: u32, at: Vec3| {
+            flags & class == 0 || {
+                let limit = if flags & crate::scene::flags::SMALL != 0 { small2 } else { detail2 };
+                at.distance_squared(cam.eye) <= limit
+            }
+        };
+        let mut main: Vec<&crate::scene::MeshInstance> = scene.meshes.iter().collect();
+        let mut shadow: Vec<&crate::scene::MeshInstance> = scene.meshes.iter().filter(|m| m.flags & no_shadow == 0).collect();
+        let mut main_sdfs: Vec<&crate::scene::SdfInstance> = scene.sdfs.iter().collect();
+        let mut shadow_sdfs: Vec<&crate::scene::SdfInstance> = scene.sdfs.iter().filter(|s| s.flags & no_shadow == 0).collect();
+        // The shadow passes (the sun's, and the shadow-casting lamps' faces) share one list: a
+        // region joins it inside the sun's shadow box or within such a lamp's reach.
+        let lamp_reaches = |min: Vec3, max: Vec3| {
+            casters.iter().any(|&i| {
+                let l = &scene.point_lights[i];
+                l.position.clamp(min, max).distance(l.position) <= l.radius
+            })
+        };
+        let (mut regions_drawn, mut regions_shadow) = (0, 0);
+        for r in &scene.regions {
+            let seen = crate::cull::horizontal_distance(far_center, r.min, r.max) <= far
+                && !crate::cull::box_outside(&cam_planes, r.min, r.max);
+            let shadowed =
+                (scene.sun.shadows && !crate::cull::box_outside(&sun_planes, r.min, r.max)) || lamp_reaches(r.min, r.max);
+            if seen {
+                regions_drawn += 1;
+                main.extend(r.meshes.iter().filter(|m| near_enough(m.flags, m.transform.w_axis.truncate())));
+                main_sdfs.extend(r.sdfs.iter().filter(|s| near_enough(s.flags, s.a)));
+            }
+            if shadowed {
+                regions_shadow += 1;
+                shadow.extend(
+                    r.meshes.iter().filter(|m| m.flags & no_shadow == 0 && near_enough(m.flags, m.transform.w_axis.truncate())),
+                );
+                shadow_sdfs.extend(r.sdfs.iter().filter(|s| s.flags & no_shadow == 0 && near_enough(s.flags, s.a)));
+            }
+        }
+        // Grouped by mesh (stable: equal meshes keep their order).
+        main.sort_by_key(|m| m.mesh);
+        shadow.sort_by_key(|m| m.mesh);
+        // Built-in meshes are made on first use; instances of a custom mesh nobody uploaded are
+        // skipped. The lists are sorted, so each mesh is looked up once per list.
+        for list in [&mut main, &mut shadow] {
+            let mut last: Option<(MeshKey, bool)> = None;
+            list.retain(|m| match last {
+                Some((key, ok)) if key == m.mesh => ok,
+                _ => {
+                    if !self.meshes.contains_key(&m.mesh) {
+                        if let Some(data) = m.mesh.generate() {
+                            self.upsert_mesh(m.mesh, &data);
+                        }
+                    }
+                    let ok = self.meshes.contains_key(&m.mesh);
+                    last = Some((m.mesh, ok));
+                    ok
+                }
             });
+        }
+        let mut gpu_meshes = Vec::with_capacity(main.len() + shadow.len());
+        let gpu = |m: &crate::scene::MeshInstance, materials: &MaterialBuffer| GpuMeshInstance {
+            model: mat(m.transform),
+            color: m.color.extend(m.emissive).to_array(),
+            params: [m.style as u32, m.flags, m.group, materials.param(m.material)],
+            ext: m.ext.extend(0.0).to_array(),
+        };
+        // One instanced draw per mesh kind and pass: (key, first instance, end).
+        let mut batches: Vec<(MeshKey, u32, u32)> = Vec::new();
+        for &m in &main {
+            let idx = gpu_meshes.len() as u32;
+            gpu_meshes.push(gpu(m, &self.materials));
             match batches.last_mut() {
                 Some(b) if b.0 == m.mesh => b.2 = idx + 1,
-                _ => batches.push((m.mesh, idx, idx + 1, 0, 0)),
+                _ => batches.push((m.mesh, idx, idx + 1)),
             }
         }
         // Dynamic meshes: one instance each (identity transform), after the regular ones.
@@ -1207,22 +1351,19 @@ impl Renderer {
         let main_triangles =
             batches.iter().map(|b| (b.2 - b.1) as usize * self.meshes[&b.0].index_count as usize / 3).sum::<usize>()
                 + dyn_draws.iter().map(|d| d.1 as usize / 3).sum::<usize>();
-        // Shadow-casting copies appended after the main list.
-        for b in batches.iter_mut() {
-            let start = gpu_meshes.len() as u32;
-            for k in b.1..b.2 {
-                let src = gpu_meshes[k as usize];
-                if src.params[1] & crate::scene::flags::NO_SHADOW == 0 {
-                    gpu_meshes.push(src);
-                }
+        // The shadow casters after the main list, batched the same way.
+        let mut shadow_batches: Vec<(MeshKey, u32, u32)> = Vec::new();
+        for &m in &shadow {
+            let idx = gpu_meshes.len() as u32;
+            gpu_meshes.push(gpu(m, &self.materials));
+            match shadow_batches.last_mut() {
+                Some(b) if b.0 == m.mesh => b.2 = idx + 1,
+                _ => shadow_batches.push((m.mesh, idx, idx + 1)),
             }
-            b.3 = start;
-            b.4 = gpu_meshes.len() as u32;
         }
         self.mesh_instances.write(&self.device, &self.queue, bytemuck::cast_slice(&gpu_meshes));
 
-        let mut gpu_sdfs: Vec<GpuSdfInstance> = scene
-            .sdfs
+        let mut gpu_sdfs: Vec<GpuSdfInstance> = main_sdfs
             .iter()
             .map(|s| GpuSdfInstance {
                 a: [s.a.x, s.a.y, s.a.z, s.ra],
@@ -1232,7 +1373,7 @@ impl Renderer {
             })
             .collect();
         let sdf_count = gpu_sdfs.len() as u32;
-        gpu_sdfs.extend(scene.sdfs.iter().filter(|s| s.flags & crate::scene::flags::NO_SHADOW == 0).map(|s| GpuSdfInstance {
+        gpu_sdfs.extend(shadow_sdfs.iter().map(|s| GpuSdfInstance {
             a: [s.a.x, s.a.y, s.a.z, s.ra],
             b: [s.b.x, s.b.y, s.b.z, s.rb],
             color: [0.0; 4],
@@ -1311,12 +1452,12 @@ impl Renderer {
             pass.set_bind_group(0, bg, &[]);
             pass.set_pipeline(&self.mesh_shadow_pipeline);
             pass.set_vertex_buffer(1, self.mesh_instances.buf.slice(..));
-            for b in &batches {
+            for b in &shadow_batches {
                 let mesh = &self.meshes[&b.0];
-                if b.4 > b.3 && mesh.index_count > 0 {
+                if mesh.index_count > 0 {
                     pass.set_vertex_buffer(0, mesh.vbuf.slice(..));
                     pass.set_index_buffer(mesh.ibuf.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..mesh.index_count, 0, b.3..b.4);
+                    pass.draw_indexed(0..mesh.index_count, 0, b.1..b.2);
                     draw_calls += 1;
                 }
             }
@@ -1401,6 +1542,12 @@ impl Renderer {
                 pass.draw(0..36, 0..sdf_count);
                 draw_calls += 1;
             }
+            // The sky fills what the opaque geometry left; text and particles blend over it.
+            if scene.sky.is_some() {
+                pass.set_pipeline(&self.sky_pipeline);
+                pass.draw(0..3, 0..1);
+                draw_calls += 1;
+            }
             if glyph_count > 0 {
                 pass.set_pipeline(&self.text_pipeline);
                 pass.set_bind_group(1, &self.text_bg, &[]);
@@ -1472,7 +1619,8 @@ impl Renderer {
             sun_color: scene.sun.color.extend(n_lights as f32).to_array(),
             sky: scene.ambient.sky.extend(0.0).to_array(),
             air: [p.haze, p.haze_height.max(0.1), p.haze_base, p.shafts],
-            air2: [p.shafts_forward.clamp(0.0, 0.95), p.halos, 0.0, 0.0],
+            // z: the scene has a sky, so its pixels take the haze too (it matches the geometry's).
+            air2: [p.shafts_forward.clamp(0.0, 0.95), p.halos, if scene.sky.is_some() { 1.0 } else { 0.0 }, 0.0],
         };
         self.queue.write_buffer(&self.post_buf, 0, bytemuck::bytes_of(&post));
         self.post_pipeline(target_format);
@@ -1504,7 +1652,11 @@ impl Renderer {
         }
 
         self.stats = RenderStats {
-            mesh_instances: order.len(),
+            mesh_instances: main.len(),
+            regions: scene.regions.len(),
+            regions_drawn,
+            regions_shadow,
+            shadow_instances: shadow.len(),
             sdf_instances: sdf_count as usize,
             glyphs: glyph_count as usize,
             draw_calls,

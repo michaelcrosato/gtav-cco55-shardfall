@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "name": "gtf/office_concrete",
+  "unit": "cm",
+  "description": "Office block: pale precast concrete (the part's colour) with punched two-pane windows, bays 300 cm wide and storeys 360 cm high fitted to each face, lightly weathered. At night about half the offices are lit.",
+  "tags": ["facade", "concrete", "office", "windows", "tower", "downtown"],
+  "source": {"library": "own", "license": "CC0-1.0", "author": "Grand Theft Freeway-BX contributors"},
+  "color": "#b8b0a2",
+  "look": "lit",
+  "map": "object",
+  "layers": [
+    {"type": "windows", "size": [300, 360], "pane": [0.6, 0.46], "gap": 7, "detail": 2, "color": "#2b343d", "frame": "#6f7376", "reflect": 0.6, "cover": 0.5, "glow": 1.15},
+    {"type": "noise", "size": 250, "detail": 3, "cover": 0.5, "shade": 0.86, "strength": 0.7, "masked_by": "not_prev"}
+  ]
+}

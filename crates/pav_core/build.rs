@@ -72,7 +72,7 @@ fn main() {
     // "pb/gold"), which is `MAT/<name>`. The other tiers (workshop, fit, local) stay on disk.
     let materials = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/materials");
     let mut files = Vec::new();
-    for sub in ["", "pb"] {
+    for sub in ["", "pb", "gtf"] {
         let dir = materials.join(sub);
         println!("cargo:rerun-if-changed={}", dir.display());
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };

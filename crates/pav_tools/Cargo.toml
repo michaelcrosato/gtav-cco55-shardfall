@@ -21,5 +21,9 @@ png.workspace = true
 tobj.workspace = true
 toml.workspace = true
 
+[dev-dependencies]
+# tests/e7_city.rs draws Paloma Bay (the game's district) under every sky preset.
+pav_world.workspace = true
+
 [lints]
 workspace = true

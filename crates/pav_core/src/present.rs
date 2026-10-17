@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::color::Color;
 use crate::shape::{Look, Shape};
+pub use crate::statics::Glow;
 
 /// Everything a game hands the host for one tick besides the world.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -753,6 +754,9 @@ pub struct PrimDraw {
     pub look: Look,
     #[serde(default)]
     pub shadow: bool,
+    /// When its emissive shows: always, or only after dark (`ViewIntent::street_lights`).
+    #[serde(default, skip_serializing_if = "Glow::is_always")]
+    pub glow: Glow,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -903,11 +907,57 @@ pub struct ViewIntent {
     pub rain: f32,
     /// Wind (x, z) for foliage, rain and smoke.
     pub wind: Vec2,
-    /// 0..1: how lit street lamps, signs and windows are (they come on at dusk).
+    /// 0..1: how lit street lamps, signs and neon are (`Glow::Night` decor and prims), and how
+    /// many facade windows are lit (`windows` material layers). They come on at dusk.
     pub street_lights: f32,
     pub windows: f32,
-    /// Shadowed area around the camera (m).
+    /// The sun's shadows cover a square this far (m) around a point ahead of the camera.
     pub shadow_radius: f32,
+    /// The picture's look over the session's view settings (None keeps the session's own):
+    /// one surface style for everything, or `per_object` with `style_objects` and
+    /// `style_environment` for the characters-and-objects and the environment parts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<SurfaceStyle>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style_objects: Option<SurfaceStyle>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style_environment: Option<SurfaceStyle>,
+    /// Screen-space outlines on or off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outlines: Option<bool>,
+    /// How HDR light maps onto the screen.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tonemap: Option<ToneCurve>,
+    /// The HDR brightness where bloom starts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bloom_threshold: Option<f32>,
+    /// The height (m) over which the haze thins out above the ground.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub haze_height: Option<f32>,
+    /// Screen-space bounce light and ambient occlusion (0 = off).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gi: Option<f32>,
+}
+
+/// A surface style for `ViewIntent::style`: every surface flat, cel-shaded or lit, or each as
+/// its look says (`per_object`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SurfaceStyle {
+    PerObject,
+    Flat,
+    Cel,
+    Lit,
+}
+
+/// How HDR light maps onto the screen (`ViewIntent::tonemap`): clipped, a soft knee that keeps
+/// authored colours, or the filmic ACES curve.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToneCurve {
+    Clamp,
+    SoftKnee,
+    Aces,
 }
 
 impl Default for ViewIntent {
@@ -936,19 +986,32 @@ impl Default for ViewIntent {
             street_lights: 0.0,
             windows: 0.0,
             shadow_radius: 60.0,
+            style: None,
+            style_objects: None,
+            style_environment: None,
+            outlines: None,
+            tonemap: None,
+            bloom_threshold: None,
+            haze_height: None,
+            gi: None,
         }
     }
 }
 
-/// A sky dome: gradient, sun and moon, stars, clouds and lightning.
+/// A sky dome: gradient, sun and moon, stars, clouds and lightning. With a sky, fog fades into
+/// the sky's colour in each direction (keep `FogIntent::color` the horizon's).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SkyIntent {
+    /// Straight up, at the horizon, and well below it.
     pub zenith: Color,
     pub horizon: Color,
     pub ground: Color,
-    /// The glow around the sun (sunsets) and the sun disc's angular size (radians).
+    /// The glow around the sun (sunsets) and the sun disc's angular diameter (radians; 0 =
+    /// none). The sun sits opposite `ViewIntent::sun_dir`.
     pub glow: Color,
     pub sun_size: f32,
+    /// Direction toward the moon (from the viewer up into the sky). When it is also where the
+    /// light comes from (`sun_dir` = -`moon_dir`, moonlight), no sun disc is drawn.
     #[serde(default)]
     pub moon_dir: Option<Vec3>,
     /// 0..1.

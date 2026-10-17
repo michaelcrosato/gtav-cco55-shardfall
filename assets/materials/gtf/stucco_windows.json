@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "name": "gtf/stucco_windows",
+  "unit": "cm",
+  "description": "Two-storey stucco shops and apartments: troweled stucco in the part's own pastel with white-framed two-pane windows, bays 320 cm wide and storeys 340 cm high fitted to each face. Lit windows at night.",
+  "tags": ["facade", "stucco", "shop", "apartment", "windows", "pastel"],
+  "source": {"library": "own", "license": "CC0-1.0", "author": "Grand Theft Freeway-BX contributors"},
+  "color": "#ead9be",
+  "look": "lit",
+  "map": "object",
+  "layers": [
+    {"type": "windows", "size": [320, 340], "pane": [0.44, 0.48], "gap": 9, "detail": 2, "color": "#2c3943", "frame": "#f2ede3", "reflect": 0.4, "cover": 0.55, "glow": 1.15},
+    {"type": "noise", "size": 90, "detail": 3, "cover": 0.5, "shade": 0.9, "strength": 0.6, "masked_by": "not_prev"}
+  ]
+}

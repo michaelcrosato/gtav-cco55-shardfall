@@ -273,6 +273,7 @@ fn decor(shape: Shape, pos: Vec3, rot: Quat, color: &str, solid: bool) -> Decor 
         collider: None,
         sway: Default::default(),
         material: None,
+        glow: Default::default(),
     }
 }
 

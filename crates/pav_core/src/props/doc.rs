@@ -181,6 +181,8 @@ names! {
         Dots => "dots",
         Shingles => "shingles",
         Wood => "wood",
+        /// Facade windows: a grid of panes on vertical faces that light up at night.
+        Windows => "windows",
     }
 }
 

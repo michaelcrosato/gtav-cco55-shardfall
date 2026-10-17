@@ -89,6 +89,7 @@ fn decor(shape: Shape, pos: Vec3, color: &str) -> Decor {
         collider: None,
         sway: Default::default(),
         material: None,
+        glow: Default::default(),
     }
 }
 

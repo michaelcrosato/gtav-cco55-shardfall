@@ -17,7 +17,7 @@ fn scene(sim: &mut Sim, target: PixelTarget, entity: i32, size: f32) -> Scene {
 
 /// Groups of the flagged and unflagged instances.
 fn split(s: &Scene) -> (Vec<u32>, Vec<u32>) {
-    let all = s.meshes.iter().map(|m| (m.group, m.flags)).chain(s.sdfs.iter().map(|d| (d.group, d.flags)));
+    let all = s.all_meshes().map(|m| (m.group, m.flags)).chain(s.all_sdfs().map(|d| (d.group, d.flags)));
     let (on, off): (Vec<_>, Vec<_>) = all.partition(|(_, f)| f & flags::PIXEL != 0);
     (on.into_iter().map(|x| x.0).collect(), off.into_iter().map(|x| x.0).collect())
 }

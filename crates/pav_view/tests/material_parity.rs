@@ -166,6 +166,7 @@ fn render(renderer: &mut Renderer, table: &mut MaterialTable, lib: &Library, nam
                 half_extents: SLAB * 0.5,
                 seed: param >> 12,
                 footprint: footprint(pixel, None, scene.camera.forward, world, Vec3::Y),
+                windows: 0.0,
             };
             let shaded = eval_packed(&gpu_row.gpu, gpu_row.base, &sample);
             // Unlit: albedo × max(1, 1 + emissive).
@@ -220,6 +221,151 @@ fn gpu_materials_match_the_cpu_reference() {
             assert!(distinct.len() > 1, "{kernel} {label}: only {} colours", distinct.len());
             if share < 99.9 {
                 failures.push(format!("{kernel} {label}: {share:.3}% (worst {worst})"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "below 99.9% within 1/255: {failures:?}");
+}
+
+/// Facade windows (kernel 11) paint only vertical faces, so they are compared on a wall: the
+/// camera looks down -z at a slab whose front face is the plane z = 0, pixel (i, j) being world
+/// (x, y) = (-2 + (i + ½)·px, 2 - (j + ½)·px). By day and with every window level up, with a
+/// layer above masked by the windows.
+const WINDOWS: &[(&str, &str)] = &[
+    (
+        "framed",
+        r##"[{"type":"windows","size":[150,170],"pane":[0.7,0.6],"gap":6,"detail":2,"color":"#30404c","frame":"#e0d8c8","reflect":0.6,"cover":0.6,"glow":1.2},
+        {"type":"noise","size":60,"cover":0.5,"shade":0.7,"masked_by":"not_prev"}]"##,
+    ),
+    ("plain", r##"[{"type":"windows","size":[120,150],"pane":[0.5,0.55],"cover":0.8,"glow":0.8,"vary":0.4}]"##),
+];
+
+/// The wall: 6 m by 6.8 m, so whole bays and storeys fit its face.
+const WALL: Vec3 = Vec3::new(6.0, 6.8, 0.2);
+
+fn render_wall(
+    renderer: &mut Renderer,
+    table: &mut MaterialTable,
+    lib: &Library,
+    name: &str,
+    case: &Case,
+    level: f32,
+) -> (Vec<u8>, Vec<u8>) {
+    let slot = table.resolve(lib, name, Some(case.map), &[]).expect("material");
+    let eye = Vec3::new(0.0, 0.0, 10.0);
+    let camera = CameraData {
+        view: glam::camera::rh::view::look_to_mat4(eye, Vec3::NEG_Z, Vec3::Y),
+        proj: glam::camera::rh::proj::directx::orthographic(-HALF, HALF, -HALF, HALF, 0.05, 50.0),
+        eye,
+        forward: Vec3::NEG_Z,
+        ortho: true,
+    };
+    let mut scene = Scene { camera, windows: level, ..Default::default() };
+    scene.post.outlines = false;
+    scene.post.tonemap = Tonemap::Clamp;
+    scene.post.bloom = 0.0;
+    scene.sun.shadows = false;
+    let center = Vec3::new(0.0, 0.0, -WALL.z * 0.5);
+    let mut lights = Vec::new();
+    let param = slot.param(case.seed);
+    let shape = Shape::Box { half: WALL * 0.5 };
+    emit_shape(
+        &mut scene.meshes,
+        &mut scene.sdfs,
+        &mut lights,
+        &shape,
+        center,
+        case.rot,
+        slot.base,
+        0.0,
+        Style::Unlit,
+        1,
+        0,
+        param,
+    );
+    table.attach(&mut scene);
+    let gpu = capture::render_to_rgba(renderer, &scene, SIZE, SIZE).expect("capture");
+
+    let row = lib.get(name).unwrap().pack(case.map, &[]);
+    let px = 2.0 * HALF / SIZE as f32;
+    let pixel = 2.0 / (scene.camera.proj.y_axis.y.abs() * SIZE as f32);
+    let inv = case.rot.inverse();
+    let mut cpu = vec![0u8; gpu.len()];
+    for j in 0..SIZE {
+        for i in 0..SIZE {
+            let world = Vec3::new(-HALF + (i as f32 + 0.5) * px, HALF - (j as f32 + 0.5) * px, 0.0);
+            let sample = Sample {
+                local: inv * (world - center),
+                local_normal: inv * Vec3::Z,
+                world,
+                world_normal: Vec3::Z,
+                half_extents: WALL * 0.5,
+                seed: param >> 12,
+                footprint: footprint(pixel, None, scene.camera.forward, world, Vec3::Z),
+                windows: level,
+            };
+            let shaded = eval_packed(&row.gpu, row.base, &sample);
+            let rgb = shaded.rgb * (1.0 + shaded.glow).max(1.0);
+            let k = ((j * SIZE + i) * 4) as usize;
+            for (ch, v) in rgb.to_array().into_iter().enumerate() {
+                cpu[k + ch] = linear_to_srgb8(v) as u8;
+            }
+            cpu[k + 3] = 255;
+        }
+    }
+    (gpu, cpu)
+}
+
+#[test]
+fn gpu_windows_match_the_cpu_reference() {
+    let hd = match gpu::Headless::new() {
+        Ok(hd) => hd,
+        Err(e) => {
+            eprintln!("windows parity skipped: no GPU adapter ({e:#})");
+            return;
+        }
+    };
+    let mut renderer = Renderer::new(&hd.device, &hd.queue);
+    let docs: Vec<(String, String)> = WINDOWS
+        .iter()
+        .map(|(name, layers)| {
+            let text = format!(r##"{{"format":1,"name":"{name}","unit":"cm","color":"#c8b8a0","layers":{layers}}}"##);
+            (name.to_string(), text)
+        })
+        .collect();
+    let sources: Vec<(&str, &str)> = docs.iter().map(|(n, t)| (n.as_str(), t.as_str())).collect();
+    let lib = Library::from_sources(&sources);
+    assert!(lib.broken().next().is_none(), "test materials don't load: {:?}", lib.issues());
+    let mut table = MaterialTable::default();
+    let out = std::env::var_os("MATERIAL_PARITY_OUT").map(std::path::PathBuf::from);
+    // The object-mapped wall turns in its own plane, so its bays run askew on screen.
+    let cases = [
+        ("world", Case { map: MapMode::World, rot: Quat::IDENTITY, seed: 0 }),
+        ("object", Case { map: MapMode::Object, rot: Quat::from_rotation_z(0.3), seed: seed(17, 2) }),
+    ];
+    let mut failures = Vec::new();
+    for (name, _) in WINDOWS {
+        for (label, case) in &cases {
+            for level in [0.0, 1.0] {
+                let (gpu, cpu) = render_wall(&mut renderer, &mut table, &lib, &format!("MAT/{name}"), case, level);
+                let total = (SIZE * SIZE) as usize;
+                let (mut ok, mut worst) = (0usize, 0i32);
+                for p in 0..total {
+                    let d = (0..3).map(|ch| (gpu[p * 4 + ch] as i32 - cpu[p * 4 + ch] as i32).abs()).max().unwrap();
+                    worst = worst.max(d);
+                    ok += (d <= 1) as usize;
+                }
+                let share = 100.0 * ok as f64 / total as f64;
+                println!("parity windows {name:<6} {label:<6} level {level}: {share:7.3}% within 1/255, worst {worst}/255");
+                if let Some(dir) = &out {
+                    capture::save_png(&dir.join(format!("windows_{name}_{label}_{level}_gpu.png")), SIZE, SIZE, &gpu).unwrap();
+                    capture::save_png(&dir.join(format!("windows_{name}_{label}_{level}_cpu.png")), SIZE, SIZE, &cpu).unwrap();
+                }
+                let distinct: std::collections::HashSet<&[u8]> = gpu.chunks(4).collect();
+                assert!(distinct.len() > 8, "windows {name} {label}: only {} colours", distinct.len());
+                if share < 99.9 {
+                    failures.push(format!("windows {name} {label} level {level}: {share:.3}% (worst {worst})"));
+                }
             }
         }
     }

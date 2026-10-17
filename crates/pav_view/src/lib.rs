@@ -2,6 +2,7 @@
 
 pub mod arpg;
 pub mod assets;
+pub mod atmosphere;
 pub mod build;
 pub mod camera;
 pub mod creatures;

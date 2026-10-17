@@ -183,7 +183,8 @@ crate calls `games::register(&ENTRY)` from its binaries and tests (`crates/gtf_g
 - `present` is how a bigger game shows itself (PLAN-style `PlayFrame`): its camera
   (`CameraIntent`), a 10-foot UI (`UiModel`: HUD, menus, wheels, phone, banners, prompts; drawn by
   `crates/pav_ui`, readable with `pav ui` and `capture hud=true`), things drawn from game state
-  (`DrawList`), the atmosphere (`ViewIntent`), loops and volumes (`AudioScene`), key maps and
+  (`DrawList`), the atmosphere and look (`ViewIntent`: sun, sky dome, fog, rain, wet streets,
+  night lights, render style; `docs/REFERENCE.md`), loops and volumes (`AudioScene`), key maps and
   saves (`AppRequests`). Without it, the HUD is `hud()`'s text lines and the camera follows the
   player with the level's `[camera]` settings (keep levels about 20 m across).
 - Sounds: `SimEvent::Sound { cue, .. }` plays a cue from the sound bank (engine cues in

@@ -72,6 +72,7 @@ fn trim(min: Vec3, max: Vec3, c: Color) -> Decor {
         collider: None,
         sway: Default::default(),
         material: None,
+        glow: Default::default(),
     }
 }
 
@@ -336,6 +337,7 @@ fn landmark(def: &DistrictDef, grid: &Grid, terrain: &Terrain, i: usize, l: &cra
                 collider: None,
                 sway: Default::default(),
                 material: None,
+                glow: Default::default(),
             });
             (h, Color::hex("#eae7df"))
         }
@@ -425,6 +427,7 @@ fn lookout(grid: &Grid, min: Vec2, max: Vec2, terrain: &Terrain, l: &crate::def:
             collider: None,
             sway: Default::default(),
             material: None,
+            glow: Default::default(),
         });
         out.decor.push(trim(
             Vec3::new(x - 0.25, top + 1.05, z - 0.18),

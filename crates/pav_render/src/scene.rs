@@ -54,6 +54,99 @@ pub mod flags {
     pub const SWAY: u32 = 128;
     /// Bends like grass: far in gusts, and away from the wind's pusher (the player).
     pub const GRASS: u32 = 256;
+    /// Glows only after dark: its emissive (and its material's glow) is scaled by
+    /// `Scene::street_lights` (street lamps, signs, neon). Cached static regions keep the flag,
+    /// so dusk lights them without a rebuild.
+    pub const NIGHT: u32 = 512;
+    /// A small prop (bins, hydrants, signs): in a static region it is culled beyond
+    /// `Cull::small` from the camera.
+    pub const SMALL: u32 = 1024;
+    /// Street dressing and detail (lamps, trees, trims, awnings): in a static region it is
+    /// culled beyond `Cull::detail` from the camera.
+    pub const DETAIL: u32 = 2048;
+}
+
+/// The sky dome, drawn behind all geometry in place of the flat `Scene::clear_color`: a
+/// zenith/horizon/ground gradient, the sun's disc and glow, the moon, stars, drifting clouds and
+/// lightning. With a sky, distance fog fades into the sky's colour in each direction, so fogged
+/// geometry melts into it whether the camera looks up, level or down.
+#[derive(Clone, Copy, Debug)]
+pub struct Sky {
+    /// Linear RGB: straight up, at the horizon, and well below it (the gradient's three stops).
+    pub zenith: Vec3,
+    pub horizon: Vec3,
+    pub ground: Vec3,
+    /// Direction toward the sun (unit). Below the horizon its disc is hidden but its glow
+    /// still colours the horizon (twilight).
+    pub to_sun: Vec3,
+    /// The sun disc's angular diameter (radians; 0 = no disc) and radiance (linear HDR, well
+    /// above 1 so it blooms).
+    pub sun_size: f32,
+    pub sun_color: Vec3,
+    /// The glow around the sun (sunsets), linear.
+    pub glow: Vec3,
+    /// Direction toward the moon, when it is up.
+    pub to_moon: Option<Vec3>,
+    /// Star brightness, 0..1 (they fade behind clouds and near the horizon).
+    pub stars: f32,
+    /// Cloud cover 0..1 (0.2 a few puffs, 1 overcast) and the clouds' linear colour.
+    pub clouds: f32,
+    pub cloud_color: Vec3,
+    /// Wind at cloud height (m/s, x and z): the clouds drift by `wind * Scene::time`.
+    pub wind: glam::Vec2,
+    /// A lightning flash, 0..1: brightens the sky and the clouds.
+    pub lightning: f32,
+}
+
+impl Default for Sky {
+    fn default() -> Self {
+        Self {
+            zenith: srgb(0x4f, 0x7f, 0xbf),
+            horizon: srgb(0xb9, 0xcd, 0xe0),
+            ground: srgb(0x6b, 0x5a, 0x4a),
+            to_sun: Vec3::new(0.35, 1.0, 0.55).normalize(),
+            sun_size: 0.03,
+            sun_color: Vec3::new(16.0, 15.0, 13.0),
+            glow: srgb(0xff, 0xcf, 0x8a),
+            to_moon: None,
+            stars: 0.0,
+            clouds: 0.2,
+            cloud_color: Vec3::ONE,
+            wind: glam::Vec2::new(4.0, 1.5),
+            lightning: 0.0,
+        }
+    }
+}
+
+/// Distance culling of static regions' instances (`Scene::regions`), in metres from the camera.
+#[derive(Clone, Copy, Debug)]
+pub struct Cull {
+    /// `flags::SMALL` instances beyond this are not drawn.
+    pub small: f32,
+    /// `flags::DETAIL` instances beyond this are not drawn.
+    pub detail: f32,
+    /// Regions whose bounds lie wholly beyond this (horizontally, from the fog's centre) are not
+    /// drawn; 0 = the fog's end while fog is on, else no limit.
+    pub far: f32,
+}
+
+impl Default for Cull {
+    fn default() -> Self {
+        Self { small: 90.0, detail: 150.0, far: 0.0 }
+    }
+}
+
+/// A static region's cached instances and their world bounds. The renderer draws the regions
+/// the camera can see (and, in the sun's shadow pass, those the shadow box holds), appending
+/// their instances into the same per-mesh batches as `Scene::meshes`: one instanced draw per mesh
+/// kind, however many regions. The lists are shared, so a view hands over the same `Arc`s every
+/// frame until a region changes, and nothing is copied per frame.
+#[derive(Clone, Debug)]
+pub struct StaticRegion {
+    pub min: Vec3,
+    pub max: Vec3,
+    pub meshes: std::sync::Arc<Vec<MeshInstance>>,
+    pub sdfs: std::sync::Arc<Vec<SdfInstance>>,
 }
 
 /// Wind for swaying foliage and grass (vertex shader).
@@ -628,6 +721,32 @@ pub struct Scene {
     /// same `Arc` and version while the rows are unchanged.
     pub materials: std::sync::Arc<Vec<GpuMaterial>>,
     pub materials_version: u64,
+    /// The sky dome (None: the flat `clear_color`, exactly as before skies existed).
+    pub sky: Option<Sky>,
+    /// Wet surfaces, 0..1: darker and glossier, and level ground gathers puddles that mirror
+    /// the sky (and the lamps at night).
+    pub wetness: f32,
+    /// How lit `flags::NIGHT` instances are, 0..1 (street lamps, signs, neon come on at dusk).
+    pub street_lights: f32,
+    /// How many facade windows are lit, 0..1 (`windows` material layers: each pane lights up by
+    /// a hash against its layer's `cover` times this).
+    pub windows: f32,
+    /// Static regions: drawn where the camera (or the sun's shadow box) sees them.
+    pub regions: Vec<StaticRegion>,
+    /// Distance culling of the regions' instances.
+    pub cull: Cull,
+}
+
+impl Scene {
+    /// Every mesh instance: the static regions' (all of them, culled or not), then `meshes`.
+    pub fn all_meshes(&self) -> impl Iterator<Item = &MeshInstance> {
+        self.regions.iter().flat_map(|r| r.meshes.iter()).chain(self.meshes.iter())
+    }
+
+    /// Every SDF instance: the static regions', then `sdfs`.
+    pub fn all_sdfs(&self) -> impl Iterator<Item = &SdfInstance> {
+        self.regions.iter().flat_map(|r| r.sdfs.iter()).chain(self.sdfs.iter())
+    }
 }
 
 impl Default for Scene {
@@ -654,6 +773,12 @@ impl Default for Scene {
             time: 0.0,
             materials: std::sync::Arc::default(),
             materials_version: 0,
+            sky: None,
+            wetness: 0.0,
+            street_lights: 0.0,
+            windows: 0.0,
+            regions: Vec::new(),
+            cull: Cull::default(),
         }
     }
 }

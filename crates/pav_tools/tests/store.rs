@@ -167,7 +167,7 @@ fn the_store_finds_shelves_credits_and_refuses() {
         assert!(line.len() <= asset_library::STORE_ROW_BYTES, "{line}");
         *kinds.entry(kind.to_owned()).or_insert(0) += 1;
     }
-    assert!(kinds["prop"] >= 90 && kinds["clip"] >= 400 && kinds["material"] == 18, "{kinds:?}");
+    assert!(kinds["prop"] >= 90 && kinds["clip"] >= 400 && kinds["material"] == 40, "{kinds:?}");
     assert!(table.contains("\nLIB/core/cask\tprop\tstandard\tCC0-1.0\tedited\timport\t"), "the Kenney fork is standard");
     let shares = table.lines().nth(1).unwrap();
     assert!(["prop", "clip", "material"].iter().all(|kind| shares.contains(&format!("{kind} "))), "{shares}");

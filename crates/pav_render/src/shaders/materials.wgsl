@@ -258,9 +258,90 @@ fn magic(p: vec3<f32>, depth: u32, distort: f32) -> f32 {
     return 0.5 + 0.5 * x;
 }
 
+struct Win {
+    col: vec3<f32>,  // the surface: wall, frames, glass and lit panes
+    glow: f32,
+    refl: f32,
+    m: f32,          // how much of the pixel is window (frame and glass): what masked_by sees
+};
+
+// Facade windows (kernel 11) on a part's vertical faces: bays `a.x` wide and storeys `a.y`
+// high, each with a pane `a.z` x `a.w` of its cell (centred, a little above the middle) in a
+// frame `c.w` wide, split by `head.w` - 1 mullions. Object and axis maps (`fit`) fit whole bays
+// across each face and whole storeys up from its bottom; a world map lays the grid in world
+// space. After dark a share `b.x` x `g.levels.z` of the panes is lit, picked per pane by a hash
+// (floors lean together), in one of the `cells` colours (`c.x` varies their brightness). Glass
+// is `paint` and reflects (`dir.x`); lit panes glow (`c.z`); frames are `head.z` (sRGB8, alpha 0
+// = the wall darkened).
+fn pat_windows(p: vec3<f32>, n: vec3<f32>, ext: vec3<f32>, fit: bool, l: MatLayer, fw: f32, salt: u32, base: vec3<f32>) -> Win {
+    let a = abs(n);
+    var u = p.x;
+    var eu = ext.x;
+    var face = select(3, 2, n.z > 0.0);
+    if (a.x >= a.z) {
+        u = p.z;
+        eu = ext.z;
+        face = select(1, 0, n.x > 0.0);
+    }
+    var v = p.y;
+    var cw = l.a.x;
+    var ch = l.a.y;
+    if (fit) {
+        cw = 2.0 * eu / max(floor(2.0 * eu / cw + 0.5), 1.0);
+        ch = 2.0 * ext.y / max(floor(2.0 * ext.y / ch + 0.5), 1.0);
+        u = u + eu;
+        v = v + ext.y;
+    }
+    let col = floor(u / cw);
+    let row = floor(v / ch);
+    let pw = l.a.z * cw;
+    let ph = l.a.w * ch;
+    let gap = l.c.w;
+    let du = (u / cw - col - 0.5) * cw;
+    let dv = (v / ch - row - 0.5 - 0.12 * (1.0 - l.a.w)) * ch;
+    let panes = f32(l.head.w);
+    var glass = pulse(du, pw, fw) * pulse(dv, ph, fw);
+    if (panes > 1.0) {
+        let x = (du / pw + 0.5) * panes;
+        glass *= 1.0 - pulse(abs(x - floor(x + 0.5)) * pw / panes, gap, fw);
+    }
+    let opening = pulse(du, pw + 2.0 * gap, fw) * pulse(dv, ph + 2.0 * gap, fw);
+    // Windows a few pixels small fade to their mean.
+    let k = fade(min(pw, ph), fw);
+    let glass_mean = l.a.z * l.a.w * max(1.0 - (panes - 1.0) * gap / pw, 0.0);
+    let open_mean = min((pw + 2.0 * gap) * (ph + 2.0 * gap) / (cw * ch), 1.0);
+    glass = mix(glass_mean, glass, k);
+    let frame = max(mix(open_mean, opening, k) - glass, 0.0);
+    // After dark: each pane against the lit share, some floors busier than others.
+    let h = hash3i(i32(col), i32(row), face + 16, salt);
+    let busy = 0.4 + 1.2 * rnd(hash3i(face, i32(row), 23, salt));
+    let share = l.b.x * g.levels.z;
+    let lit = mix(share, select(0.0, 1.0, rnd(h) < share * busy), k);
+    let ncells = max((l.head.x >> 28u) & 0xfu, 1u);
+    let pick = min(u32(rnd(pcg(h ^ 0x51u)) * f32(ncells)), ncells - 1u);
+    let vary = 1.0 + l.c.x * (2.0 * rnd(pcg(h ^ 0xa3u)) - 1.0);
+    let lit_col = mix(l.b.yzw, srgb8_to_linear(l.cells[pick]) * (vary * vary), k);
+    var glass_col = l.paint.rgb;
+    if (((l.head.x >> 24u) & 0xfu) == 1u) {
+        glass_col = base * l.paint.r;
+    }
+    var frame_col = base * 0.62;
+    if ((l.head.z >> 24u) != 0u) {
+        frame_col = srgb8_to_linear(l.head.z);
+    }
+    var o: Win;
+    o.col = base * (1.0 - glass - frame) + mix(glass_col, lit_col, lit) * glass + frame_col * frame;
+    o.glow = l.c.z * glass * lit;
+    o.refl = l.dir.x * glass * (1.0 - lit);
+    o.m = glass + frame;
+    return o;
+}
+
 struct MatOut {
     albedo: vec3<f32>,
     glow: f32,
+    // How mirror-like the surface is (glass), for the shading's sky reflection.
+    refl: f32,
 };
 
 // Evaluates material row `mid` over `base` (the instance colour). `p_loc`/`n_loc`: the part's
@@ -286,6 +367,7 @@ fn eval_material(mid: u32, seed: u32, base: vec3<f32>, p_loc: vec3<f32>, n_loc: 
     let p3 = p - n * 1e-3; // inside the surface, so lattice faces never land on it
     var c = base;
     var glow = 0.0;
+    var refl = 0.0;
     var prev = 0.0;
     for (var li = 0u; li < count; li++) {
         let l = materials[mid].layers[li];
@@ -298,6 +380,27 @@ fn eval_material(mid: u32, seed: u32, base: vec3<f32>, p_loc: vec3<f32>, n_loc: 
         let ncells = (l.head.x >> 28u) & 0xfu;
         let salt = l.head.y + seed * 0x9e3779b9u;
         let fw = fw0;
+        if (kind == 11u) {
+            // Windows paint their own wall, frames, glass and lit panes, on vertical faces only.
+            var side = 1.0 - smoothstep(0.3, 0.7, abs(wn.y));
+            if (facing == 1u) {
+                side *= smoothstep(0.3, 0.7, wn.y);
+            } else if (facing == 2u) {
+                side *= smoothstep(0.3, 0.7, -wn.y);
+            }
+            if (maskby == 1u) {
+                side *= prev;
+            } else if (maskby == 2u) {
+                side *= 1.0 - prev;
+            }
+            let w = pat_windows(p, n, ext * inv_scale, map != 1u, l, fw, salt, c);
+            let s = side * l.paint.a;
+            c = mix(c, w.col, s);
+            glow += w.glow * s;
+            refl += w.refl * s;
+            prev = w.m * side;
+            continue;
+        }
         var uv: vec2<f32>;
         if (map == 2u && abs(n.y) < 0.7) {
             // around the part's local y axis: u = arc length, v = height
@@ -490,5 +593,6 @@ fn eval_material(mid: u32, seed: u32, base: vec3<f32>, p_loc: vec3<f32>, n_loc: 
     var o: MatOut;
     o.albedo = c;
     o.glow = glow;
+    o.refl = refl;
     return o;
 }
