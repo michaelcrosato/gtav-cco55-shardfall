@@ -15,7 +15,7 @@ do not edit. A CC-BY credit travels with every copy and fork.
 
 ## Objects
 
-- LIB/gtf_city (on disk): CC0-1.0. Credit: Grand Theft Freeway-BX contributors (own work).
+- LIB/gtf_city, LIB/gtf_vehicles (on disk): CC0-1.0. Credit: Grand Theft Freeway-BX contributors (own work).
 - LIB/kaykit_adventurers (on disk): CC0-1.0. Credit: Kay Lousberg (www.kaylousberg.com).
 - LIB/kenney_mini_dungeon (on disk): CC0-1.0. Credit: Kenney (www.kenney.nl).
 - LIB/quaternius_medieval_village (on disk): CC0-1.0. Credit: Quaternius (quaternius.com).

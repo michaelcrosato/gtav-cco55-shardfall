@@ -1,0 +1,13 @@
+{"format":2,"name":"wheel","unit":"cm",
+"description":"A road wheel, 0.33 m radius: rubber tyre with rounded sidewalls, five-spoke alloy rim, chrome hub cap on +x.",
+"tags":["wheel","vehicle","tyre","car","rim"],
+"category":"town",
+"materials":{
+"alloy":{"base":"MAT/gtf/chrome","color":"#b4b9bf","roughness":0.3},
+"chrome":"MAT/gtf/chrome",
+"tyre":"MAT/gtf/rubber"},
+"parts":{
+"cap":{"type":"cylinder","radius":6,"height":4,"pos":[8.5,33,0],"axis":"x","mat":"chrome"},
+"lip":{"type":"tube","radius":22.6,"thickness":2.8,"height":3.6,"pos":[8.6,33,0],"axis":"x","mat":"alloy"},
+"spoke":{"type":"box","size":[1.8,18,4.6],"pos":[7.6,33,0],"mat":"alloy","radial":{"count":5,"radius":10.6,"axis":"x"}},
+"tyre":{"type":"lathe","profile":[[22.5,-6.5],[24,-10.2],[27,-11],[31,-10],[32.6,-8],[33,-5],[33,5],[32.6,8],[31,10],[27,11],[24,10.2],[22.5,6.5]],"pos":[0,33,0],"axis":"x","mat":"tyre"}}}
