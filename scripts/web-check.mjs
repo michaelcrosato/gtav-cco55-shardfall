@@ -58,12 +58,15 @@ const stamp = () => (performance.now() / 1000).toFixed(1).padStart(6);
 page.on('console', m => logs.push(`${stamp()} [${m.type()}] ${m.text()}`));
 page.on('pageerror', e => logs.push(`${stamp()} [pageerror] ${e.message}`));
 
+let n = 0;
+let ok = true;
+page.on('crash', () => logs.push(`${stamp()} [crash] the page crashed`));
+// A crashed page (out of memory, a lost GPU) still leaves its console log and the reason.
+try {
 await page.goto('file://' + page_path + (query ? `?${query}` : ''));
 await page.waitForTimeout(wait);
 await page.screenshot({ path: join(out, 'start.png') });
 
-let n = 0;
-let ok = true;
 for (const s of steps) {
   n += 1;
   const [kind, ...rest] = s.split(':');
@@ -103,7 +106,12 @@ for (const s of steps) {
   }
   await page.screenshot({ path: join(out, `step-${n}.png`) });
 }
-await browser.close();
+} catch (e) {
+  logs.push(`${stamp()} [crash] ${String(e.message).split('\n')[0]}`);
+  console.error(`the page failed: ${String(e.message).split('\n')[0]}`);
+  ok = false;
+}
+await browser.close().catch(() => {});
 
 const text = logs.join('\n');
 writeFileSync(join(out, 'console.log'), text + '\n');
