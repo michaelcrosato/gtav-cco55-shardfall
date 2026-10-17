@@ -120,10 +120,22 @@ impl PhysicsState {
     }
 }
 
-/// Collects contact force events above a threshold (used for impact sounds).
+/// A contact force event: two colliders pressed together this hard (N, summed over their
+/// contact points), and where, on each one's surface (world space, the mean of the deepest
+/// manifold's points; exact for simple shapes such as a vehicle's body).
+#[derive(Clone, Copy, Debug)]
+pub struct ContactForce {
+    pub c1: ColliderHandle,
+    pub c2: ColliderHandle,
+    pub force: Real,
+    pub point1: Vector,
+    pub point2: Vector,
+}
+
+/// Collects contact force events above a threshold (breakable blocks, impact sounds, crashes).
 #[derive(Default)]
 pub struct EventCollector {
-    pub contacts: std::sync::Mutex<Vec<(ColliderHandle, ColliderHandle, Real)>>,
+    pub contacts: std::sync::Mutex<Vec<ContactForce>>,
 }
 
 impl EventHandler for EventCollector {
@@ -132,12 +144,21 @@ impl EventHandler for EventCollector {
         &self,
         _dt: Real,
         _: &RigidBodySet,
-        _: &ColliderSet,
+        colliders: &ColliderSet,
         pair: &ContactPair,
         total_force_magnitude: Real,
     ) {
+        let pose = |h: ColliderHandle| colliders.get(h).map(|c| *c.position());
+        let (mut p1, mut p2) = (Vector::ZERO, Vector::ZERO);
+        let deepest =
+            pair.manifolds().iter().filter(|m| !m.points.is_empty()).min_by(|a, b| a.points[0].dist.total_cmp(&b.points[0].dist));
+        if let (Some(m), Some(a), Some(b)) = (deepest, pose(pair.collider1), pose(pair.collider2)) {
+            let n = m.points.len() as Real;
+            p1 = m.points.iter().map(|p| a * p.local_p1).sum::<Vector>() / n;
+            p2 = m.points.iter().map(|p| b * p.local_p2).sum::<Vector>() / n;
+        }
         if let Ok(mut v) = self.contacts.lock() {
-            v.push((pair.collider1, pair.collider2, total_force_magnitude));
+            v.push(ContactForce { c1: pair.collider1, c2: pair.collider2, force: total_force_magnitude, point1: p1, point2: p2 });
         }
     }
     fn handle_soft_body_tear_event(&self, _: &SoftBodySet, _: &SoftBodyTearEvent) {}

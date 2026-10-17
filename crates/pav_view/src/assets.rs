@@ -135,6 +135,82 @@ pub fn emit_asset(scene: &mut Scene, name: &str, at: Placement, seed: u32, palet
     Ok(())
 }
 
+/// A change to one part of an asset drawn with [`emit_asset_tweaked`]: turned by `turn`'s
+/// rotation about its pivot (the asset's frame, metres, before `at`'s scale), then moved by
+/// `offset` (the same frame); its glow, or its linear colour, replaced; or not drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PartTweak {
+    pub offset: Vec3,
+    pub turn: Option<(Vec3, Quat)>,
+    pub emissive: Option<f32>,
+    pub color: Option<Vec3>,
+    pub hide: bool,
+}
+
+/// [`emit_asset`] with a change per part (a vehicle's doors swung, dents, lamps lit):
+/// `tweak` sees each visible part and returns its change, or None to draw it as authored. The
+/// asset's own lights are left out (a tweaked asset glows without lighting the scene).
+pub fn emit_asset_tweaked(
+    scene: &mut Scene,
+    name: &str,
+    at: Placement,
+    seed: u32,
+    palette: &Palette,
+    tweak: &dyn Fn(&pav_core::props::ResolvedPart) -> Option<PartTweak>,
+) -> Result<(), String> {
+    let (asset, def, params) = props::resolve_placed(name, &props::Params::new())?;
+    validate_scale(at.scale)?;
+    if !at.pos.is_finite() || !at.rot.is_finite() || at.rot.length_squared() < 1e-6 {
+        return Err(format!("{name}: placement needs a finite pos and rotation"));
+    }
+    validate_roles(palette)?;
+    let rot = at.rot.normalize();
+    let parts = def.variant_with(&params, seed);
+    let mut cache = MESHES.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let meshes = cache.get_or_insert_with(GeneratedMeshes::default);
+    if meshes.built.len() > KEEP {
+        meshes.built.clear();
+    }
+    meshes.sent = scene
+        .custom_meshes
+        .iter()
+        .filter_map(|(key, _)| match key {
+            MeshKey::Custom(key) => Some(*key),
+            _ => None,
+        })
+        .collect();
+    let frame = FRAME.with_borrow(Clone::clone);
+    let style = frame.as_ref().map_or(StyleOverride::PerObject, |frame| frame.style);
+    let mut table = frame.as_ref().and_then(|frame| frame.materials.try_lock().ok());
+    let library = Library::current();
+    for (index, part) in parts.parts.iter().enumerate().filter(|(_, part)| !part.hidden) {
+        let t = tweak(part).unwrap_or_default();
+        if t.hide {
+            continue;
+        }
+        // The part's frame: turned about its pivot, then moved (both scaled with the asset).
+        let (q, pivot) = t.turn.map_or((Quat::IDENTITY, Vec3::ZERO), |(p, q)| (q, p));
+        let shift = (pivot - q * pivot + t.offset) * at.scale;
+        let o = object(at.id, at.pos + rot * shift, rot * q);
+        let (mut color, material) = match table.as_deref_mut() {
+            Some(table) => Surfaces { table, library: &library, asset: &asset, roles: palette }
+                .part(part, materials::seed(o.id.0, index as u32)),
+            None => (part_color(part.surface_color(), part.tint, palette), 0),
+        };
+        if let Some(c) = t.color {
+            color = c;
+        }
+        match t.emissive {
+            Some(e) => {
+                let lit = pav_core::props::ResolvedPart { emissive: e, glow_light: false, ..part.clone() };
+                emit_prim(scene, meshes, &lit, &o, at.scale, style, color, material);
+            }
+            None => emit_prim(scene, meshes, part, &o, at.scale, style, color, material),
+        }
+    }
+    Ok(())
+}
+
 /// A stand-in object at `pos`, turned `rot`, for drawing parts with `emit_prim`.
 fn object(id: u32, pos: Vec3, rot: Quat) -> RenderObject {
     RenderObject {

@@ -492,10 +492,14 @@ pub fn tick(
     };
     let mut center = st.physics.bodies[body_h].translation();
     if let Some(vid) = ch.riding {
-        // Seated: follow the vehicle (feet at its bottom), no movement of our own.
-        match st.entities.get(vid).map(|v| (v.pos, v.vehicle.as_ref().map(|x| x.def.size.y).unwrap_or(0.5), v.body)) {
-            Some((vpos, half_y, vbody)) => {
-                let seat = vpos + Vec3::Y * (ch.height() * 0.5 - half_y);
+        // Seated: follow the vehicle (in its seat), no movement of our own.
+        let height = ch.height();
+        let spot = |v: &crate::entity::Entity| match v.vehicle.as_ref() {
+            Some(x) => x.rider_center(v.pos, v.rot, x.seat_of(id).unwrap_or(0), height),
+            None => v.pos + Vec3::Y * (height * 0.5 - 0.5),
+        };
+        match st.entities.get(vid).map(|v| (spot(v), v.body)) {
+            Some((seat, vbody)) => {
                 ch.vel = vbody.and_then(|h| st.physics.bodies.get(h)).map(|b| b.linvel()).unwrap_or(Vec3::ZERO);
                 ch.grounded = true;
                 if let Some(b) = st.physics.bodies.get_mut(body_h) {

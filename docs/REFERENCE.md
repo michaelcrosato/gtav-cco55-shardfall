@@ -43,9 +43,10 @@ crates/
               makes each one a scene; starter.rs + starter.toml, the template:
               docs/MAKE_A_GAME.md),
               fxdef.rs (object lights / particle emitters / distortion, view-only),
-              vehicle.rs (drift car on rapier's raycast vehicle, arcade helicopter: flight only,
-              no weapons, damage or fuel), health.rs (shootable rapier objects: hp, score, boss
-              phases/bar, finish),
+              vehicle.rs + vehicle/ (vehicles v2: cars on rapier's raycast springs with the
+              engine's tyre model and free pitch and roll, damage, doors, seats, lamps, a
+              kinematic mode, water; arcade helicopter; feel tracks: "Vehicles" below),
+              health.rs (shootable rapier objects: hp, score, boss phases/bar, finish),
               stealth.rs (guard sight cones with line of sight and an alert meter),
               zones.rs (trigger zones + labels), course.rs (timers, gates, checkpoints, pits,
               pads, camera cues, hits/respawn), behaviors.rs (movers, rotators, emitters,
@@ -416,9 +417,52 @@ Extend it when you add movement features; it is the cheapest way to catch feel r
 Also, named for what they cover: `pav_core/tests/` `animation.rs`, `animation_preview.rs`,
 `asset_library.rs`, `bench_holdout.rs`, `fx.rs`, `genre.rs`, `prop_families.rs`,
 `prop_format2.rs`, `prop_instances.rs`, `prop_patch.rs`, `shipped_pack.rs` (the KayKit figures
-load with no asset files), `vehicles.rs`; `pav_tools/tests/`
+load with no asset files), `vehicles.rs` (the demo's drift car and helicopter), `vehicles_v2.rs`
+(pitch on a grade, lean in a turn, righting, crashes, fire, kinematic mode, doors and seats,
+water, the feel tracks); `pav_tools/tests/`
 `animation_preview.rs`, `asset_errors.rs`, `asset_format2.rs`, `asset_library.rs`,
 `asset_preview.rs`, `foundations.rs`, `reply_budget.rs`, `store.rs`.
+
+## Vehicles
+`pav_core::vehicle` (vehicles v2). A car is a dynamic body on four raycast wheels (front left,
+front right, rear left, rear right): rapier's raycast vehicle springs them with its own friction
+off, and `vehicle/car.rs` turns each wheel's load into tyre forces: a slip-angle curve sideways
+(peak at 8°), the engine (traction control), brakes (60% front) and rolling resistance along,
+inside a friction ellipse; the handbrake locks the rear wheels, which slide at `drift_grip`.
+Pitch and roll are free: forces act nearer the centre of mass's height than the contact
+patches, anti-roll bars, a low centre of mass, damped rotation and light control in the air,
+and righting after 3 s on its side or roof keep it on its wheels. Water floats it for 3 s, then
+it sinks and the engine drowns.
+- **Data:** `VehicleDef` (a room's `vehicle = { .. }`, a game's archetypes:
+  `content/freeway/vehicles.toml` documents every field). Positions are in the body frame: the
+  ground under the centre at rest is the origin, +z the front, +x the vehicle's own left. Left
+  out, the wheels, clearance, centre of mass and drag follow from `size` (the demo's cars).
+- **Driving:** `VehicleInput { throttle, brake, steer, pitch, handbrake, horn, siren }` from the
+  game's `Game::vehicles` map, else a held input (`Sim::set_vehicle_input`, tools and tests),
+  else the demo's keys for the player's car; the brake reverses once nearly stopped. A car with
+  nobody in it and no input is parked (it holds still).
+- **Seats and doors:** `enter_vehicle` (driver) / `enter_vehicle_seat(who, vid, seat)`,
+  `exit_vehicle` (out on the seat's side), `Vehicle::occupants`, `set_vehicle_door(vid, door, open)`.
+- **State:** `Sim::vehicle_status(vid)` → speed, rpm, gear, throttle, slip, drift, health,
+  smoking / burning / wrecked, dents (front, back, left, right), burst tyres, broken lamps,
+  engine, headlights, brake and reverse lamps, siren, horn, wheels down, airborne, upside down,
+  water, occupants. `set_vehicle_lights`, `set_vehicle_engine`.
+- **Damage:** contact forces on the body give `SimEvent::Crash { vehicle, other, impulse, pos }`,
+  dents, broken lamps and lost health; below `SMOKE_BELOW` it smokes, below `FIRE_BELOW` it
+  burns and explodes after `EXPLODE_AFTER` (or burning on its roof). `damage_vehicle`,
+  `burst_tyre`, `break_vehicle_light`, `repair_vehicle`, `explode_vehicle`.
+- **Traffic LOD:** `set_vehicle_kinematic(vid, true)` then `move_kinematic_vehicle(vid, feet,
+  yaw)` each tick; back on its wheels it keeps the speed it was moved at.
+- **Feel:** `vehicle::feel::run(&def, &Test::ALL)` builds test tracks in an empty world (a 4 km
+  slab, a 15% grade, a 12 m kicker) and measures 0–100 km/h (80% of top speed for slower
+  vehicles), top speed, braking, skidpad g, handbrake slide, the climb and the jump.
+- **Drawing** (`pav_view::vehicles`): a `body_asset` prop placed on the ground under the centre,
+  its door parts (`door_l`, `door_r`, or a group) swung by the doors, parts in a dented zone
+  pushed in, lamp parts lit by state (`head_*`, `tail_*` brighter braking, `rev_*`, `siren_*`
+  red and blue in turn); `wheel_asset` at each wheel (authored at 0.33 m radius, hub toward
+  +x); busts in taken seats; smoke and fire by damage. Without a body prop: the box, a cabin,
+  wheels and lamps. `pav_view::assets::emit_asset_tweaked` draws any asset with per-part
+  turns, offsets and glow.
 
 ## Urban kit (pav_world)
 `pav_world` turns a district file (TOML) into an immutable `City` (`City::from_toml`, a pure

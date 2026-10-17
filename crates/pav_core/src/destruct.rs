@@ -134,8 +134,8 @@ impl Sim {
     }
 
     /// Tiles hit harder than their strength break (contact force events from the physics step).
-    pub(crate) fn break_blocks(&mut self, contacts: Vec<(ColliderHandle, ColliderHandle, Real)>, events: &mut Vec<SimEvent>) {
-        for (c1, c2, force) in contacts {
+    pub(crate) fn break_blocks(&mut self, contacts: &[crate::physics::ContactForce], events: &mut Vec<SimEvent>) {
+        for &crate::physics::ContactForce { c1, c2, force, .. } in contacts {
             for (h, other) in [(c1, c2), (c2, c1)] {
                 let Some(r) = self.state.physics.colliders.get(h).and_then(|c| BlockRef::from_tag(c.user_data)) else { continue };
                 let Some(b) = self.state.statics.get(r) else { continue };

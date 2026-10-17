@@ -1105,12 +1105,7 @@ impl Sim {
                 e.body = Some(b);
                 if let Some(v) = &mut e.vehicle {
                     // Same handling as when it was made, and the wheels' new chassis.
-                    if let Some(rb) = self.state.physics.bodies.get_mut(b) {
-                        let heli = v.def.kind == crate::vehicle::VehicleKind::Helicopter;
-                        rb.set_enabled_rotations(false, !heli, false, true);
-                        rb.set_angular_damping(2.0);
-                        rb.set_linear_damping(0.05);
-                    }
+                    crate::vehicle::configure_body(&mut self.state.physics, b, &v.def, v.state.kinematic);
                     if let Some(c) = &mut v.car {
                         c.chassis = b;
                     }
