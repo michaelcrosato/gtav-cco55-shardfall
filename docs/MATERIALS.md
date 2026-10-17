@@ -12,6 +12,8 @@ layers (planks, brick, cobbles, noise …). No images, no UVs. Props wear them b
   $floor dust at the foot), pillar_stone ($pillar drums), wall_cap (1 m coping stones).
   `assets kind=material [find=wood]` lists them with layers and cost.
 - Yours: MAT/workshop/x, saved as assets/materials/workshop/x.json.
+- Packs: assets/materials/<pack>/x.json is MAT/<pack>/x (a game's set: MAT/gtf/asphalt). Native
+  tools read them from disk; builds carry the folders `pav_core/build.rs` embeds.
 
 ## On a prop
 

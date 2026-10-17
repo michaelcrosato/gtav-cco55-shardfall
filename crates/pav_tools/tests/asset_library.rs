@@ -40,6 +40,9 @@ fn indexed_folders() -> Vec<(PathBuf, String)> {
 #[test]
 fn index_files_are_current() {
     let root = assets().join("props");
+    // A pack row is `checked` only when its materials resolve: load the material packs on disk
+    // (`assets/materials/gtf/`), as the tools do natively when they write the indexes.
+    pav_tools::material_tools::reload_authored_at(&assets().join("materials")).unwrap();
     for (folder, set) in indexed_folders() {
         let path = folder.join("index.tsv");
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));

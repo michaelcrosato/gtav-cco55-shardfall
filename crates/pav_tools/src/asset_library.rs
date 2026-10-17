@@ -593,6 +593,8 @@ pub fn publish(
     let mut result = json!({"published": published, "revision": def.revision, "file": file});
     if pack == store::CORE {
         result["note"] = json!("LIB/core is embedded: rebuild to load it");
+    } else if store::SHIPPED.contains(&pack) {
+        result["note"] = json!(format!("LIB/{pack} ships in every build: rebuild to embed it"));
     }
     Ok(result)
 }

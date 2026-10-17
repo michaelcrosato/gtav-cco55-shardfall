@@ -395,7 +395,8 @@ fn nearest(hits: &[Hit], rows: &[Row], terms: &[Term]) -> (Vec<Row>, bool) {
 /// `shelf=prop`: the foundations first (`store/foundations.tsv`), by archetype, each `name
 /// size_cm`, its sockets, knobs (`name=lo-hi` or `name=a/b`) and `:presets`; then the other
 /// standard and checked rows with an admitted licence, by category, each `name size_cm` and its
-/// sockets; within about 1,500 tokens.
+/// sockets; within about 1,500 tokens. A shipped pack (`props::store::SHIPPED`) is one game's own
+/// library: `find=` reaches its rows, and the shelf keeps to the shared store.
 pub fn prop_shelf(rows: &[Row]) -> Value {
     use pav_core::props::doc::Param;
     use std::collections::BTreeMap;
@@ -426,6 +427,7 @@ pub fn prop_shelf(rows: &[Row]) -> Value {
         .filter(|row| matches!(row.level.as_str(), "standard" | "checked") && row.kind == index::KIND)
         .filter(|row| rules::admitted(&row.src, "prop").is_ok())
         .filter(|row| rules::foundation(&row.name).is_none())
+        .filter(|row| !props::store::pack(&row.name).is_some_and(|pack| props::store::SHIPPED.contains(&pack)))
         .collect();
     entries.sort_by(|a, b| a.name.cmp(&b.name));
     for row in entries {

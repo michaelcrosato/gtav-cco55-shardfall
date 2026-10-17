@@ -325,7 +325,8 @@ the 3 nearest rows and a route ("make it: copy LIB/core/table"); tier and mesh s
 so choosing needs no second call. Each miss appends a line to `store/misses.tsv`.
 
 **The shelf.** `assets shelf=prop` (and `=clip`) returns one kind's best entries, at most about
-1,500 tokens each (a token test). It stays out of the fixed prompt; AGENTS.md and the MCP
+1,500 tokens each (a token test); a shipped pack, one game's own library, is reached by `find=`
+and left off it. It stays out of the fixed prompt; AGENTS.md and the MCP
 instructions name it in one line. Without it discovery fails: an outside agent built a climbing
 game without a store's climb and hang clips, which sat outside the file it was handed.
 

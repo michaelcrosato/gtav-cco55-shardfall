@@ -393,7 +393,7 @@ fn check_args(a: &Args) -> Result<(&str, bool)> {
         "replace" => &["asset", "if_revision", "dry_run"],
         "undo" | "redo" => &["if_revision"],
         "schema" => &["topic", "format"],
-        "publish" => &["review", "if_revision"],
+        "publish" => &["review", "if_revision", "pack"],
         _ => bail!(
             "{}",
             Issue::error("action", Code::UnknownValue, format!("unknown action \"{action}\""))
@@ -420,6 +420,7 @@ fn check_args(a: &Args) -> Result<(&str, bool)> {
                 "target",
                 "all",
                 "review",
+                "pack",
             ];
             let fix = if known.contains(&key.as_str()) {
                 Some(format!("{key} belongs to another action"))
@@ -433,7 +434,7 @@ fn check_args(a: &Args) -> Result<(&str, bool)> {
                     .maybe_fix(fix)
             );
         }
-        if ["action", "name", "from", "template", "description", "if_revision", "topic", "target", "review"]
+        if ["action", "name", "from", "template", "description", "if_revision", "topic", "target", "review", "pack"]
             .contains(&key.as_str())
             && !value.is_string()
         {
@@ -676,7 +677,9 @@ fn edit_at(root: &Path, a: &Args) -> Result<Edited> {
         let reviewed =
             get_str(a, "if_revision").ok_or_else(|| anyhow!("if_revision= is the revision whose sheet you reviewed"))?;
         let found = check_lines(&def);
-        return read_only(crate::asset_library::publish(root, &name, &def, reviewed, found, props::store::CORE, review)?);
+        // The library pack it joins (`lib/<pack>/` with its PACK.json); the core by default.
+        let pack = get_str(a, "pack").unwrap_or(props::store::CORE);
+        return read_only(crate::asset_library::publish(root, &name, &def, reviewed, found, pack, review)?);
     }
     if !props::editable(&name) {
         let what = if name.starts_with("BUILTIN/") { "built-in templates are" } else { "library assets are" };
