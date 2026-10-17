@@ -108,3 +108,29 @@ pub fn blips(city: &City) -> Vec<Blip> {
 pub fn flat(p: Vec3) -> Vec2 {
     Vec2::new(p.x, p.z)
 }
+
+/// The lit lamp of every traffic light near `at` (signal heads are drawn live: their state is a
+/// function of the game clock).
+pub fn signal_lamps(city: &City, at: Vec3, t: f32, out: &mut Vec<pav_core::present::PrimDraw>) {
+    use pav_world::lanes::Light;
+    for h in &city.signal_heads {
+        if h.red.distance_squared(at) > 160.0 * 160.0 {
+            continue;
+        }
+        let Some(plan) = city.lanes.junctions[h.junction as usize].signal else { continue };
+        let (pos, hex) = match plan.light(h.ns, t) {
+            Light::Green => (h.green, "#3dff8a"),
+            Light::Amber => (h.amber, "#ffb52e"),
+            Light::Red => (h.red, "#ff3b30"),
+        };
+        out.push(pav_core::present::PrimDraw {
+            shape: pav_core::shape::Shape::Cylinder { half_height: 0.012, radius: 0.12 },
+            pos: pos + h.facing * 0.02,
+            rot: glam::Quat::from_rotation_arc(Vec3::Y, h.facing),
+            color: Color::hex(hex),
+            emissive: 3.5,
+            look: pav_core::shape::Look::Unlit,
+            shadow: false,
+        });
+    }
+}

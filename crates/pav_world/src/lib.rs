@@ -21,7 +21,7 @@ use pav_core::zones::{Label, Zone};
 pub mod channel;
 pub mod cover;
 pub mod def;
-mod dress;
+pub mod dress;
 mod extras;
 pub mod freeway;
 pub mod grid;
@@ -79,6 +79,8 @@ pub struct City {
     pub channels: Vec<channel::ChannelGeom>,
     /// Every drivable lane, junctions with their signals, parking spots.
     pub lanes: lanes::LaneGraph,
+    /// Traffic light heads (their lamps are drawn live from the signal plans).
+    pub signal_heads: Vec<dress::SignalHead>,
     /// Where people walk (2 m tiles) and where they take cover.
     pub walk: walk::WalkMap,
     pub cover: cover::Cover,
@@ -119,8 +121,11 @@ impl City {
         extras::build(&def, &grid, &terrain, &mut out);
         lots::build(&def, &grid, &terrain, &mut out);
         dress::build(&def, &grid, &terrain, &mut out);
+        dress::docks(&def, &grid, &mut out);
+        dress::beach(&def, &grid, &mut out);
         let freeways = freeway::build(&def, &grid, &terrain, &mut out);
         let lanes = lanes::LaneGraph::build(&grid, &terrain, &freeways, &channels, def.seed);
+        let signal_heads = dress::signals(&grid, &lanes, &mut out);
         let walk = walk::WalkMap::build(&def, &grid, &out.buildings, &lanes);
         let cover = cover::Cover::build(&out.buildings, &walk, &channels, &freeways);
         let lo = grid.origin;
@@ -160,6 +165,7 @@ impl City {
             freeways,
             channels,
             lanes,
+            signal_heads,
             walk,
             cover,
             chunk_bounds,

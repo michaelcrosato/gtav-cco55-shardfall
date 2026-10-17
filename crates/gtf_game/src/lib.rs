@@ -522,6 +522,9 @@ impl Game for Freeway {
         if page == Page::Play {
             draw.ribbons.extend(self.gps.ribbon(feet, 160.0));
         }
+        if let Some(c) = &self.city {
+            world::signal_lamps(c, self.camera().target, self.time, &mut draw.prims);
+        }
         Some(PlayFrame {
             ui,
             draw,

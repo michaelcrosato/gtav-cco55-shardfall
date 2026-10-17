@@ -462,9 +462,9 @@ fn one(def: &DistrictDef, grid: &Grid, terrain: &Terrain, f: &Freeway, out: &mut
         i += 10;
     }
     for i in (8..n - 2).step_by(15) {
+        // A two-armed lamp on the median, arms over both carriageways.
         let at = deck.at(i, 0.0, 0.85);
-        crate::dress::lamp(at, deck.right[i], &mut out.decor);
-        crate::dress::lamp(at, -deck.right[i], &mut out.decor);
+        out.props.push(crate::dress::prop("LIB/gtf_city/street_lamp_double", at, crate::dress::yaw_to(deck.right[i]), 1.0, 0));
     }
     patches(bufs, out);
     FreewayGeom {

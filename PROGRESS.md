@@ -5,17 +5,23 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current โ
 resumed or compacted session reads first.
 
 ## Now
-- **Phase:** M2 City in progress (2026-10-17). Landed: E14 world regions (`b5de689`); `pav_world`
-  + Paloma Bay + far view (`d905d41`); Mirador Hills terrain, reference views (`a24dbb6`); Route 404
-  with the Pretzel and Harbor Gate ramps and the broken end (`db8772e`); The Ditch (`6c0ed5e`).
-  In progress (uncommitted): lane graph, signals, parking, walk tiles, cover (`pav_world::lanes`,
-  `walk`, `cover`), `[[jump]]`/`[[sign]]` placements, the Proving Grounds (`dev_district.toml`),
-  time of day + weather (`gtf_game::daytime`, `content/freeway/world.toml`), the streaming tour
-  (`freeway/tour` + `tests/streaming.rs`), `gtf citymap` and `gtf perf`. Helpers running in
-  worktrees: E7 renderer (sky, weather visuals, window kernel, night emissives, culling, shadow
-  follow, render-style fields on `ViewIntent`) and the `LIB/gtf_city` props + `MAT/gtf` materials.
-  Next: merge both, tune the presets with the sky, captures of all views at three times of day,
-  web build into the city, then M3 (player + vehicles, E9).
+- **Phase:** M2 City in progress (2026-10-17); **paused at the user's request until 11:59 PDT
+  (18:59 UTC)**, with a scheduled message to resume. Landed for M2: E14 regions; `pav_world` +
+  Paloma Bay; Mirador Hills; Route 404 + ramps + broken end; The Ditch; lane graph, signals,
+  parking, walk tiles, cover; time of day + weather; the Proving Grounds; the streaming tour test
+  (10.6 km at 40 m/s, no holes, <= 146 active chunks); GPS; sprint/crouch; `gtf citymap`,
+  `gtf perf`; `LIB/gtf_city` (44 props) + `MAT/gtf` (18 materials) merged; the city dressed
+  with them, mast-arm signals with live lamps.
+- **Open:** triangles at street views are over budget with the props (3.15 M at
+  `downtown_street`, budget 2.5 M): mesh LOD for round primitives requested from the E7 helper.
+- **Helpers (worktrees, asked to commit and stop; resume with SendMessage):** E7 renderer (sky,
+  weather visuals, window kernel, night emissives, culling + distance classes, mesh LOD, shadow
+  follow, render-style `ViewIntent` fields) in `.claude/worktrees/agent-a73e1fb49a0cee6a4`; E9
+  vehicles v2 + `gtf_vehicles` bodies + `vehicles.toml` + feel test in the E9 worktree.
+- **Next after resuming:** merge E7 (then `gtf assets reindex=store`), tune the time-of-day
+  presets with the sky, captures of every view at three times of day, `gtf perf view=all`, web
+  build booting into the city, close M2; merge E9 and start M3 (driving, enter/exit, camera
+  modes, vehicle audio, radio skeleton).
 - **Branch / PR:** the session's designated branch; the draft PR opened with the plan.
 
 ## Milestones (PLAN.md ยง9 has the full task lists and acceptance criteria)
