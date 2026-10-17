@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "name": "gtf/glass_curtain",
+  "unit": "cm",
+  "description": "Downtown tower curtain wall: blue-grey reflective glass in slim dark mullions, bays 150 cm wide and storeys 360 cm high fitted to each face; the wall colour (the part's) shows only in the spandrel strips. At night some floors light up.",
+  "tags": ["facade", "glass", "tower", "windows", "downtown", "office"],
+  "source": {"library": "own", "license": "CC0-1.0", "author": "Grand Theft Freeway-BX contributors"},
+  "color": "#5f7d96",
+  "look": "lit",
+  "roughness": 0.3,
+  "map": "object",
+  "layers": [
+    {"type": "windows", "size": [150, 360], "pane": [0.92, 0.82], "gap": 5, "color": "#3b566c", "frame": "#29323b", "reflect": 0.85, "cover": 0.45, "glow": 1.1},
+    {"type": "noise", "size": 900, "detail": 2, "cover": 0.5, "shade": 0.82, "strength": 0.6, "masked_by": "prev"}
+  ]
+}
