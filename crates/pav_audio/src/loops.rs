@@ -29,12 +29,15 @@ pub enum LoopKind {
     },
     Tyre,
     Rotor,
+    /// A car horn (two notes a third apart), and a car alarm (alternating beeps).
+    Horn,
+    Alarm,
     Bed(Bed),
 }
 
 impl LoopKind {
     /// The loop a cue names: `engine.<class>`, `siren.wail`, `siren.yelp`, `tyre`, `rotor`,
-    /// `amb.<bed>`.
+    /// `horn`, `alarm`, `amb.<bed>`.
     pub fn from_cue(cue: &str) -> Option<LoopKind> {
         Some(match cue {
             "engine.compact" => LoopKind::Engine { base: 52.0, grit: 0.15, sub: 0.3 },
@@ -48,6 +51,8 @@ impl LoopKind {
             "siren.yelp" => LoopKind::Siren { yelp: true },
             "tyre" => LoopKind::Tyre,
             "rotor" => LoopKind::Rotor,
+            "horn" => LoopKind::Horn,
+            "alarm" => LoopKind::Alarm,
             "amb.city" => LoopKind::Bed(Bed::City),
             "amb.surf" => LoopKind::Bed(Bed::Surf),
             "amb.wind" => LoopKind::Bed(Bed::Wind),
@@ -187,6 +192,24 @@ impl LoopVoice {
                 let body = self.lowpass(0, n, 380.0, dt);
                 body * (0.25 + pulse * 1.6) * 0.8
             }
+            LoopKind::Horn => {
+                // Two reedy notes a major third apart (F#4 and A#4), a little detuned.
+                let mut s = 0.0;
+                for (i, f) in [370.0f32, 466.2].iter().enumerate() {
+                    self.phase[i] = (self.phase[i] + f * self.pitch.clamp(0.5, 2.0) * dt).fract();
+                    s += if self.phase[i] < 0.42 { 0.5 } else { -0.5 };
+                }
+                self.lowpass(0, s, 2400.0, dt) * 0.3
+            }
+            LoopKind::Alarm => {
+                // Two tones swapping three times a second, pulsing.
+                let hi = (self.t * 3.0).fract() < 0.5;
+                let f = if hi { 1350.0 } else { 950.0 };
+                self.phase[0] = (self.phase[0] + f * dt).fract();
+                let sq = if self.phase[0] < 0.5 { 1.0 } else { -1.0 };
+                let gate = if (self.t * 12.0).fract() < 0.8 { 1.0 } else { 0.0 };
+                self.lowpass(0, sq * gate, 3000.0, dt) * 0.18
+            }
             LoopKind::Bed(bed) => {
                 let n = self.noise();
                 match bed {
@@ -247,6 +270,8 @@ mod tests {
             "siren.yelp",
             "tyre",
             "rotor",
+            "horn",
+            "alarm",
             "amb.city",
             "amb.surf",
             "amb.wind",
