@@ -313,8 +313,8 @@ fn shade(p: vec3<f32>, n: vec3<f32>, albedo_in: vec3<f32>, emissive: f32, style:
         let d = pl.pos_radius.xyz - p;
         let dist = length(d);
         let r = pl.pos_radius.w;
+        let ld = d / max(dist, 1e-4);
         if (dist < r) {
-            let ld = d / max(dist, 1e-4);
             var att = pow(clamp(1.0 - dist / r, 0.0, 1.0), 2.0);
             if (pl.color.w > 0.5 && (flags & FLAG_NO_RECEIVE_SHADOW) == 0u) {
                 att *= point_shadow_factor(u32(pl.color.w - 0.5), pl.pos_radius.xyz, p, n);
@@ -326,11 +326,13 @@ fn shade(p: vec3<f32>, n: vec3<f32>, albedo_in: vec3<f32>, emissive: f32, style:
                 k = quantize(k, 3.0);
             }
             col += albedo * pl.color.rgb * k;
-            if (refl > 0.0 && style != 0u) {
-                // Lamps shine in wet streets and glass.
-                let hl = normalize(ld + v);
-                col += pl.color.rgb * pow(max(dot(n, hl), 0.0), 48.0) * att * refl * 1.5;
-            }
+        }
+        // Lamps shine in wet streets and glass well beyond their own pool: a mirror shows the
+        // lamp itself.
+        if (refl > 0.0 && style != 0u && dist < r * 4.0) {
+            let hl = normalize(ld + v);
+            let reach = pow(1.0 - dist / (r * 4.0), 2.0);
+            col += pl.color.rgb * pow(max(dot(n, hl), 0.0), 96.0) * reach * refl * 2.0;
         }
     }
     col = col + albedo * emissive;

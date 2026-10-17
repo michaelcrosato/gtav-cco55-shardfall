@@ -1,12 +1,12 @@
-//! Static regions reach the renderer as shared, bounded instance lists: night-only decor carries
-//! the renderer's night flag (its light follows the street lights), small dressing and detail
-//! carry their distance classes, and a region's bounds hold everything in it.
+//! Static regions reach the renderer as shared, bounded instance lists: night-only decor and
+//! prop parts carry the renderer's night flag (their lights follow the street lights), small
+//! dressing and detail carry their distance classes, and a region's bounds hold everything in it.
 
 use std::sync::Arc;
 
 use glam::{Quat, Vec3};
 use pav_core::shape::{Look, Shape, Sway};
-use pav_core::statics::{ChunkKey, Decor, Glow, StaticChunk};
+use pav_core::statics::{ChunkKey, Decor, Glow, StaticChunk, StaticProp};
 use pav_core::{Color, Sim};
 use pav_render::scene::{MeshInstance, Scene, flags};
 use pav_view::atmosphere::Atmosphere;
@@ -106,4 +106,33 @@ fn a_regions_bounds_hold_everything_in_it() {
     for (ra, rb) in a.regions.iter().zip(&b.regions) {
         assert!(Arc::ptr_eq(&ra.meshes, &rb.meshes) && Arc::ptr_eq(&ra.sdfs, &rb.sdfs));
     }
+}
+
+/// A baked street lamp (`LIB/gtf_city/street_lamp`, its lens `glow:"night"` with a light of its
+/// own): the lens carries the night flag, and the light is off by day, full at night and dimmed
+/// at dusk by the street lights.
+#[test]
+fn a_night_glow_prop_lights_the_road_after_dark() {
+    let lamp = Vec3::new(3.0, 0.0, -4.0);
+    let build = |atmosphere| {
+        let mut sim = Sim::new("empty", 1).unwrap();
+        let mut frame = sim.frame();
+        let prop = StaticProp::new("LIB/gtf_city/street_lamp", lamp, Quat::IDENTITY, 1.0, 0, false);
+        let chunk = StaticChunk { props: vec![prop], version: 1, ..Default::default() };
+        frame.statics.chunks.insert(ChunkKey::Chunk(0, -1), Arc::new(chunk));
+        let view = ViewSettings { atmosphere, ..Default::default() };
+        ViewBuilder::new().build(&frame, &frame, 1.0, &CameraRig::default(), 16.0 / 9.0, &view, Vec3::ZERO)
+    };
+    let head = lamp + Vec3::new(0.0, 8.98, 2.66);
+    let light = |s: &Scene| s.point_lights.iter().find(|l| l.position.distance(head) < 0.01).copied();
+    let day = build(Atmosphere::Scene);
+    assert!(light(&day).is_none(), "off by day");
+    let lens = day.all_meshes().find(|m| m.emissive > 0.0).expect("the lamp's lens");
+    assert!(lens.flags & flags::NIGHT != 0, "its glow waits for dark: {}", lens.flags);
+    let night = build(Atmosphere::Night);
+    let on = light(&night).expect("on at night");
+    assert!((on.radius - 22.0).abs() < 1e-3 && on.color.max_element() > 3.0, "{on:?}");
+    let dusk = build(Atmosphere::Dusk);
+    let dim = light(&dusk).expect("on at dusk");
+    assert!((dim.color - on.color * dusk.street_lights).length() < 1e-3);
 }

@@ -132,10 +132,20 @@ game's `ViewIntent` (`pav_core::present`):
   per mesh kind. Distance classes (`Scene::cull`): `flags::SMALL` beyond 90 m, `flags::DETAIL`
   beyond 150 m, whole regions past the fog's end (horizontal distance from the fog's centre).
   `Scene::all_meshes()` and `all_sdfs()` walk the regions' instances, then the loose ones.
+- Mesh detail by screen size: the regions' instances of the round built-ins (`MeshKey::Sphere`,
+  `Cylinder`, `Cone`; 32 segments) draw as `MeshKey::Coarse` with 16 segments under 26 px of
+  radius and 8 under 6.5 px (`MeshKey::for_size`: the outline stays within half a pixel), one
+  instanced draw per mesh and coarseness. Scenes keep naming the full meshes; loose instances
+  (objects, previews) keep every segment.
 - The view classes static dressing by size: decor under 0.5 m across (baked props under
   1.2 m) is `SMALL`, under 6 m (8 m) `DETAIL`, bigger stays; glowing things never drop out.
   `Decor::glow` and `PrimDraw::glow` = `Glow::Night` (serde default `always`) set
-  `flags::NIGHT`, and their glow lights follow `street_lights`. Blocks wearing an
+  `flags::NIGHT`, and their glow lights follow `street_lights`; so do prop parts written
+  `"glow":"night"` (a format-2 surface field that cascades like `emissive`; their `light`s
+  too) wherever the prop is drawn: baked into a region, placed, or from a draw list (the
+  `LIB/gtf_city` street lamps, billboard lamps, bus-stop ads, mast beacons). With more than 64
+  point lights the renderer keeps those whose reach is in view, nearest the camera first.
+  Blocks wearing an
   object-mapped material are seeded by their position (facades differ building to building).
 - `ViewIntent` → scene (`pav_view::play::apply_view`): sun and ambient light, `sky` (`moon_dir`
   points toward the moon; no sun disc when the light is the moonlight), `fog` (fades into the
@@ -153,7 +163,8 @@ game's `ViewIntent` (`pav_core::present`):
   `night`, `rain`, `storm`, `lightning`, `fog`; `pav_view::atmosphere`) replaces any scene's
   atmosphere and keeps a game's look and shadow radius (a tool session starts each new preset
   without the last one's rain streaks). `capture stats=true` adds `regions`,
-  `regions_drawn`, `regions_shadow`, `shadow_instances` and `view_ms` (the view's CPU build).
+  `regions_drawn`, `regions_shadow`, `shadow_instances`, `view_ms` (the view's CPU build) and
+  `heaviest` (the mesh kinds the triangles go to: [kind, instances, triangles]).
   `cargo test -p pav_tools --test e7_city -- --ignored` renders Paloma Bay with the facades from
   the street, at the skyline, from the drone and into the sun, and the four facades side by
   side, under every preset (`out/e7/city_*.png`).

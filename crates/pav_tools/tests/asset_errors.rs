@@ -83,7 +83,8 @@ fn the_field_guide_and_tool_list_stay_compact() {
     for key in ["legend", "document", "node", "shapes", "materials", "ops", "limits"] {
         assert!(v2.get(key).is_some(), "{key}");
     }
-    assert!(v2.to_string().len() < 7_200, "format 2's field guide is {} chars", v2.to_string().len());
+    // (7,200 until night `glow` joined the surface fields.)
+    assert!(v2.to_string().len() < 7_350, "format 2's field guide is {} chars", v2.to_string().len());
     let v1 = guide(json!({"action":"schema","format":1}));
     for key in ["legend", "document", "part", "shapes", "ops", "limits"] {
         assert!(v1.get(key).is_some(), "{key}");

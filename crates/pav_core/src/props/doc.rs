@@ -11,6 +11,7 @@ use serde_json::{Map, Value};
 use super::{PropAsset, PropPart, read};
 use crate::issue::Issue;
 use crate::shape::{Look, Shape, Sway};
+use crate::statics::Glow;
 
 /// A closed set of names, read and written as the strings listed.
 macro_rules! names {
@@ -253,6 +254,9 @@ pub struct Surface {
     pub color: Option<String>,
     pub look: Option<Look>,
     pub emissive: Option<f32>,
+    /// When the emissive shows: always (the default), or only after dark (street lamps, lit
+    /// signs: the view dims it, and the part's lights, by the scene's street-light level).
+    pub glow: Option<Glow>,
     pub solid: Option<bool>,
 }
 
@@ -621,6 +625,7 @@ impl Doc {
                     color: Some(part.color.clone()),
                     look: (part.look != Look::Cel).then_some(part.look),
                     emissive: number(part.emissive),
+                    glow: None,
                     solid: (!part.solid).then_some(false),
                 };
                 (name.clone(), node)
@@ -656,6 +661,7 @@ impl Doc {
             ("color", self.surface.color.is_some()),
             ("look", self.surface.look.is_some()),
             ("emissive", self.surface.emissive.is_some()),
+            ("glow", self.surface.glow.is_some()),
             ("solid", self.surface.solid.is_some()),
             ("tags", !self.tags.is_empty()),
             ("category", self.category.is_some()),
@@ -698,6 +704,7 @@ impl Doc {
                 ("axis", node.axis.is_some()),
                 ("spin", node.spin.is_some()),
                 ("mat", node.surface.mat.is_some()),
+                ("glow", node.surface.glow.is_some()),
                 ("hidden", node.hidden.is_some()),
                 ("light", node.light.is_some()),
                 ("fx", node.fx.is_some()),

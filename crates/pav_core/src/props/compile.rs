@@ -18,6 +18,7 @@ use super::{Bounds, PropDef, fnv};
 use crate::issue::{self, Code, Issue};
 use crate::material::{Library, Material, resolve};
 use crate::shape::{Look, Sway};
+use crate::statics::Glow;
 
 /// Parts after copies, mirrors and references.
 pub const MAX_PARTS: usize = 1_024;
@@ -73,6 +74,8 @@ pub struct ResolvedPart {
     pub tint: f32,
     pub look: Look,
     pub emissive: f32,
+    /// When its emissive (and its glow light) shows: always, or only after dark.
+    pub glow: Glow,
     /// The nearest material in the cascade, whose patterns the part wears.
     pub mat: Option<PartMat>,
     pub solid: bool,
@@ -172,6 +175,8 @@ pub struct PartLight {
     pub flicker: f32,
     pub pulse: f32,
     pub shadows: bool,
+    /// Its part's glow: a `night` part's light comes on with the street lights.
+    pub glow: Glow,
 }
 
 /// A part's particle emitter (`EmitterDef` at the part).
@@ -365,6 +370,7 @@ struct Level<'a> {
     color: Option<&'a str>,
     look: Option<Look>,
     emissive: Option<f32>,
+    glow: Option<Glow>,
     solid: Option<bool>,
 }
 
@@ -375,6 +381,7 @@ impl<'a> Level<'a> {
             color: surface.color.as_deref(),
             look: surface.look,
             emissive: surface.emissive,
+            glow: surface.glow,
             solid: surface.solid,
         }
     }
@@ -967,6 +974,7 @@ impl<'a> Compiler<'a> {
             info.part.clone()
         });
         let solid = levels.iter().rev().find_map(|l| l.solid).unwrap_or(true);
+        let glow = levels.iter().rev().find_map(|l| l.glow).unwrap_or_default();
         let (mirrored, rot) = (world.mirrored(), world.rotation());
         let pos = world.t;
         let (centre, extent) = prim.placed_box(pos, rot, world.s, mirrored);
@@ -980,6 +988,7 @@ impl<'a> Compiler<'a> {
                 flicker: light.flicker.unwrap_or(0.0),
                 pulse: light.pulse.unwrap_or(0.0),
                 shadows: light.shadows.unwrap_or(false),
+                glow,
             });
         }
         if let Some(fx) = &node.fx {
@@ -1005,6 +1014,7 @@ impl<'a> Compiler<'a> {
             tint,
             look,
             emissive,
+            glow,
             mat,
             solid,
             hidden: node.hidden.unwrap_or(false),
