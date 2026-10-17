@@ -1354,6 +1354,7 @@ impl App {
                     t.gain *= scene.effects;
                 }
                 a.set_loops(loops);
+                a.set_music(pav_audio::music_target(scene));
                 a.set_bus(scene.reverb, 0.5, scene.ducking);
                 let master = self.audio_settings.master * scene.master;
                 if (master - self.play.master).abs() > 1e-3 {

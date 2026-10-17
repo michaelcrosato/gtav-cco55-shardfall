@@ -260,7 +260,7 @@ pub static TOOLS: &[Tool] = &[
     },
     Tool {
         name: "audio_capture",
-        help: "Run N ticks (optionally driving the player) and render the game's sounds to a .wav file.",
+        help: "Run N ticks (optionally driving the player) and render the game's sounds to a .wav file: its events, and a hook game's loops, radio and effects bus. Reports peak, rms and the song on the radio.",
         args: &[
             arg("ticks", "integer", "ticks to run (default 180)"),
             arg("move", "array", "[x, z] move direction"),
@@ -1794,6 +1794,8 @@ fn t_audio_capture(s: &mut Session, a: &Args) -> Result<Output> {
     s.keep_events();
     let dt = s.sim.dt();
     let mut events = Vec::new();
+    // Each tick's events and the game's audio scene (loops, radio, bus), for the mix.
+    let mut ticks = Vec::new();
     for i in 0..n {
         let f = pav_core::InputFrame {
             move_dir: dir.clamp_length_max(1.0),
@@ -1805,13 +1807,16 @@ fn t_audio_capture(s: &mut Session, a: &Args) -> Result<Output> {
         };
         s.sim.step(&f);
         s.sync_camera();
-        for e in s.sim.drain_events() {
-            events.push((i as f32 * dt, e));
-        }
+        let tick: Vec<_> = s.sim.drain_events();
+        events.extend(tick.iter().map(|e| (i as f32 * dt, e.clone())));
+        ticks.push((tick, s.sim.frame().present.as_ref().map(|p| p.audio.clone())));
     }
     let listener = pav_audio::Listener { pos: s.sim.state.focus, right: glam::Vec3::X };
     let duration = n as f32 * dt + 1.5;
-    let samples = pav_audio::render_events(&events, duration, 44100.0, &listener);
+    let samples = pav_audio::render_run(&ticks, dt, 1.5, 44100.0, &listener);
+    let music = ticks.last().and_then(|(_, a)| a.as_ref()).and_then(|a| a.music.as_ref()).map(|m| {
+        json!({ "station": m.station, "title": m.song.title, "artist": m.song.artist, "genre": m.song.genre, "bpm": m.song.bpm, "offset": (m.offset * 10.0).round() / 10.0 })
+    });
     let path = PathBuf::from(get_str(a, "out").map(String::from).unwrap_or(format!("out/audio-{}.wav", s.sim.state.tick)));
     pav_audio::write_wav(&path, &samples, 44100)?;
     let peak = samples.iter().fold(0.0f32, |m, x| m.max(x.abs()));
@@ -1823,7 +1828,15 @@ fn t_audio_capture(s: &mut Session, a: &Args) -> Result<Output> {
         *m.entry(k).or_default() += 1;
         m
     });
-    Ok(Output::Json(json!({ "path": path, "seconds": duration, "events": kinds, "peak": (peak * 1000.0).round() / 1000.0 })))
+    let rms = (samples.iter().map(|x| x * x).sum::<f32>() / samples.len().max(1) as f32).sqrt();
+    Ok(Output::Json(json!({
+        "path": path,
+        "seconds": duration,
+        "events": kinds,
+        "peak": (peak * 1000.0).round() / 1000.0,
+        "rms": (rms * 1000.0).round() / 1000.0,
+        "music": music,
+    })))
 }
 
 fn t_course(s: &mut Session, _: &Args) -> Result<Output> {

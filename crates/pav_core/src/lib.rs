@@ -42,6 +42,7 @@ pub mod prop_instance;
 pub mod prop_preview;
 pub mod props;
 pub mod puppet;
+pub mod radio;
 pub mod region;
 pub mod rig;
 pub mod rng;

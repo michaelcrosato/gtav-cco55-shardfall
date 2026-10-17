@@ -1083,9 +1083,9 @@ pub struct LoopSource {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Music {
     pub station: String,
-    /// The song's seed (`pav_core` derives its title, tempo and length from it).
-    pub song: u64,
-    /// Seconds into the song.
+    /// The song (`pav_core::radio::song`): what the host renders and the HUD names.
+    pub song: crate::radio::SongMeta,
+    /// Seconds into the song's slot (past its `seconds`: the ident between songs).
     pub offset: f32,
     pub volume: f32,
     /// 0..1: heard from outside the car (low-passed).

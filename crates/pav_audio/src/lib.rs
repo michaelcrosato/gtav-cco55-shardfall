@@ -11,6 +11,7 @@ use pav_core::SimEvent;
 pub mod bank;
 pub mod fx;
 pub mod loops;
+pub mod music;
 
 pub use bank::Bank;
 pub use loops::{LoopKind, LoopTarget};
@@ -148,6 +149,9 @@ impl Voice {
 pub struct Mixer {
     voices: Vec<Voice>,
     loops: Vec<loops::LoopVoice>,
+    /// The radio: the song playing, and songs fading out after a switch.
+    music: Option<music::MusicVoice>,
+    music_out: Vec<music::MusicVoice>,
     reverb: fx::Reverb,
     /// Reverb send (0 = dry, which also skips its cost) and room size.
     pub reverb_mix: f32,
@@ -175,6 +179,8 @@ impl Mixer {
         Self {
             voices: Vec::new(),
             loops: Vec::new(),
+            music: None,
+            music_out: Vec::new(),
             reverb: fx::Reverb::new(sample_rate),
             reverb_mix: 0.0,
             room: 0.5,
@@ -267,6 +273,34 @@ impl Mixer {
         }
     }
 
+    /// What the radio should play (None: nothing). The same song keeps playing on the mixer's own
+    /// clock (it jumps only when it drifts more than 0.75 s from the game's); a new station or song
+    /// crossfades.
+    pub fn set_music(&mut self, target: Option<&music::MusicTarget>) {
+        let same = |v: &music::MusicVoice, t: &music::MusicTarget| v.station == t.station && v.song.seed == t.song.seed;
+        match (target, self.music.as_mut()) {
+            (Some(t), Some(v)) if same(v, t) => {
+                v.target_gain = t.volume;
+                v.target_muffle = t.muffle;
+                if (v.t - t.offset as f64).abs() > 0.75 {
+                    v.t = t.offset as f64;
+                }
+            }
+            (t, _) => {
+                if let Some(mut old) = self.music.take() {
+                    old.target_gain = 0.0;
+                    self.music_out.push(old);
+                }
+                self.music = t.map(|t| music::MusicVoice::new(t, self.sample_rate));
+            }
+        }
+    }
+
+    /// The song the radio plays, if any (its station, and seconds into its slot).
+    pub fn music(&self) -> Option<(&str, f64)> {
+        self.music.as_ref().map(|v| (v.station.as_str(), v.t))
+    }
+
     /// Renders into an interleaved stereo buffer (overwrites).
     pub fn render(&mut self, out: &mut [f32]) {
         let dt = 1.0 / self.sample_rate;
@@ -284,6 +318,12 @@ impl Mixer {
                 l += a * k;
                 r += b * k;
             }
+            // The radio ducks under dialogue and menus like the beds.
+            for v in self.music.iter_mut().chain(self.music_out.iter_mut()) {
+                let (a, b) = v.next(dt);
+                l += a * duck;
+                r += b * duck;
+            }
             if self.reverb_mix > 0.0 {
                 let (wl, wr) = self.reverb.next(l, r, self.room);
                 l += wl * self.reverb_mix;
@@ -297,6 +337,7 @@ impl Mixer {
         }
         self.voices.retain(|v| !v.done());
         self.loops.retain(|v| !v.silent());
+        self.music_out.retain(|v| !v.silent());
     }
 
     pub fn active(&self) -> usize {
@@ -656,6 +697,17 @@ pub fn play_event(mixer: &mut Mixer, ev: &SimEvent, l: &Listener, sfx: f32) {
     }
 }
 
+/// The radio a game's audio scene asks for (its volume times the effects volume is the game's).
+pub fn music_target(scene: &pav_core::present::AudioScene) -> Option<music::MusicTarget> {
+    scene.music.as_ref().map(|m| music::MusicTarget {
+        station: m.station.clone(),
+        song: m.song.clone(),
+        offset: m.offset,
+        volume: m.volume,
+        muffle: m.muffle,
+    })
+}
+
 /// The loops a game's audio scene asks for, placed for the listener (distance and pan).
 pub fn loop_targets(scene: &pav_core::present::AudioScene, l: &Listener) -> Vec<LoopTarget> {
     let mut out = Vec::new();
@@ -692,6 +744,44 @@ pub fn render_events(events: &[(f32, SimEvent)], duration: f32, sample_rate: f32
 }
 
 /// Writes interleaved stereo f32 samples as a 16-bit PCM WAV file.
+/// Renders a run tick by tick: each tick's events, then the loops, radio and bus its audio scene
+/// asks for (a hook game's `PlayFrame::audio`), then `tail` seconds more. Interleaved stereo.
+pub fn render_run(
+    ticks: &[(Vec<SimEvent>, Option<pav_core::present::AudioScene>)],
+    dt: f32,
+    tail: f32,
+    sample_rate: f32,
+    l: &Listener,
+) -> Vec<f32> {
+    let mut mixer = Mixer::new(sample_rate);
+    let per = (dt * sample_rate).round().max(1.0) as usize;
+    let mut out = Vec::with_capacity((ticks.len() * per + (tail * sample_rate) as usize) * 2);
+    let mut buf = vec![0.0f32; per * 2];
+    for (events, scene) in ticks {
+        let sfx = scene.as_ref().map_or(1.0, |s| s.effects);
+        for e in events {
+            play_event(&mut mixer, e, l, sfx);
+        }
+        if let Some(scene) = scene {
+            let mut loops = loop_targets(scene, l);
+            for t in &mut loops {
+                t.gain *= scene.effects;
+            }
+            mixer.set_loops(&loops);
+            mixer.set_music(music_target(scene).as_ref());
+            mixer.reverb_mix = scene.reverb;
+            mixer.duck = scene.ducking;
+            mixer.master = 0.8 * scene.master;
+        }
+        mixer.render(&mut buf);
+        out.extend_from_slice(&buf);
+    }
+    let mut rest = vec![0.0f32; (tail * sample_rate) as usize * 2];
+    mixer.render(&mut rest);
+    out.extend(rest);
+    out
+}
+
 pub fn write_wav(path: &std::path::Path, samples: &[f32], sample_rate: u32) -> std::io::Result<()> {
     let data_len = (samples.len() * 2) as u32;
     let mut b = Vec::with_capacity(44 + data_len as usize);
@@ -722,6 +812,7 @@ enum Cmd {
     Loops(Vec<LoopTarget>),
     Bus { reverb: f32, room: f32, duck: f32 },
     Master(f32),
+    Music(Option<music::MusicTarget>),
 }
 
 /// Live output through the default sound device.
@@ -797,6 +888,11 @@ impl AudioOut {
         let _ = self.tx.send(Cmd::Bus { reverb, room, duck });
     }
 
+    /// What the radio should play (from a game's audio scene: `music_target`).
+    pub fn set_music(&self, target: Option<music::MusicTarget>) {
+        let _ = self.tx.send(Cmd::Music(target));
+    }
+
     pub fn set_master(&self, v: f32) {
         let _ = self.tx.send(Cmd::Master(v));
     }
@@ -830,6 +926,7 @@ where
                         mixer.duck = duck;
                     }
                     Cmd::Master(v) => mixer.master = v,
+                    Cmd::Music(t) => mixer.set_music(t.as_ref()),
                 }
             }
             let frames = data.len() / channels.max(1);

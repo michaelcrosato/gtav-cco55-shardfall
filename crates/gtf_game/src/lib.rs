@@ -28,6 +28,7 @@ pub mod hud;
 pub mod pad;
 pub mod player;
 pub mod protagonists;
+pub mod radio;
 pub mod settings;
 pub mod tour;
 pub mod views;
@@ -94,6 +95,9 @@ pub struct Freeway {
     pub sky: daytime::Sky,
     /// Sprint stamina and crouch.
     pub foot: player::Foot,
+    /// The car radio (stations are live on the game clock).
+    #[serde(default)]
+    pub radio: radio::Radio,
     /// The district (rebuilt from its file when missing, e.g. after loading a snapshot; a
     /// cache, so not part of the state).
     #[serde(skip)]
@@ -170,6 +174,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         view,
         sky,
         foot: player::Foot::default(),
+        radio: radio::Radio::default(),
         tour: (mode_is_tour).then(|| Arc::new(tour::Tour::new(&city))),
         gps: gps::Gps::default(),
         city: Some(city),
@@ -228,6 +233,7 @@ impl Freeway {
                     Ok(k) if (0.0..=1000.0).contains(&k) => self.sky.speed = k,
                     _ => log::warn!("clock: '{k}' is not a speed (0-1000)"),
                 },
+                (Some("radio"), Some(arg)) => self.radio_cmd(arg),
                 (Some("weather"), Some("auto")) => self.sky.held = false,
                 (Some("weather"), Some(name)) => {
                     if let Err(e) = self.sky.set_weather(&world, name, true) {
@@ -236,6 +242,19 @@ impl Freeway {
                 }
                 _ => {}
             }
+        }
+    }
+
+    /// `radio <station id>|off|next|prev`: tunes, and shows the dial card.
+    fn radio_cmd(&mut self, arg: &str) {
+        let Ok(def) = radio::def() else { return };
+        match self.radio.command(&def, arg) {
+            Ok(()) => {
+                if let Some((head, line)) = self.radio.card(&def, self.time as f64) {
+                    self.note("radio", &head, &line);
+                }
+            }
+            Err(e) => log::warn!("{e}"),
         }
     }
 
@@ -448,6 +467,7 @@ impl Game for Freeway {
             "camera_yaw": round(self.cam.yaw.to_degrees()),
             "clock": daytime::format_time(self.sky.hour),
             "weather": self.sky.weather,
+            "radio": radio::def().ok().and_then(|d| self.radio.card(&d, self.time as f64)).map(|(head, line)| format!("{head}: {line}")),
             "web": self.web,
             "touch": self.touch,
         })
@@ -543,6 +563,7 @@ impl Game for Freeway {
                 effects: self.settings.sfx,
                 // The menus duck the city.
                 ducking: if menu { 0.6 } else { 0.0 },
+                music: radio::def().ok().and_then(|d| self.radio.music(&d, self.time as f64, self.settings.music)),
                 ..Default::default()
             },
             map: self.city.as_ref().map(|c| c.map.clone()),

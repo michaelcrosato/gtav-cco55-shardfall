@@ -1,0 +1,70 @@
+# Radio stations (PLAN.md §5.6.13, §5.12). Each station's songs come from its seed, one per `slot`
+# seconds of air (the song, then the station ident), and every station runs on the game clock, so
+# they are live: tuning in lands mid-song, as in the source. `genre` picks the music renderer's
+# groove and instruments; the words make song titles and artist names.
+
+[[station]]
+id = "freeway_fm"
+name = "Freeway FM"
+freq = "104.04"
+genre = "synthwave"
+bpm = [95.0, 118.0]
+seed = 10404
+dj = "Tarmac Tina"
+title_words = ["Freeway", "Dreams", "Neon", "Sunset", "Overdrive", "Midnight", "Chrome", "Boulevard", "Pacific", "Heat", "Mirage", "Signal", "Coastline", "Velocity", "Afterglow", "Exit"]
+artist_words = ["Tarmac", "Chrome", "Palm", "Vector", "Laser", "Nightcall", "Vapor", "Grid", "Cruiser", "Horizon"]
+
+[[station]]
+id = "westside_99"
+name = "Westside 99"
+freq = "99.0"
+genre = "boombap"
+bpm = [82.0, 94.0]
+seed = 9900
+dj = "MC Lowrider"
+title_words = ["Block", "Corner", "Westside", "Smoke", "Dusk", "Cypher", "Gold", "Hustle", "Concrete", "Rewind", "Vinyl", "Summer", "Porch", "Avenue"]
+artist_words = ["Dusty", "Crates", "Loose", "Change", "Mirados", "Static", "Tape", "Stoop", "Brass", "Kid"]
+
+[[station]]
+id = "k_surf"
+name = "K-SURF"
+freq = "101.5"
+genre = "surf"
+bpm = [140.0, 170.0]
+seed = 10150
+dj = "Wipeout Wendy"
+title_words = ["Pipeline", "Riptide", "Boardwalk", "Wave", "Shark", "Sandbar", "Tiki", "Undertow", "Breaker", "Surf", "Salt", "Swell", "Pier"]
+artist_words = ["Reef", "Wax", "Barrel", "Kelp", "Dune", "Gremmie", "Longboard", "Tide", "Pelican"]
+
+[[station]]
+id = "radio_sol"
+name = "Radio Sol"
+freq = "92.3"
+genre = "cumbia"
+bpm = [90.0, 105.0]
+seed = 9230
+dj = "La Reina Rosa"
+title_words = ["Corazón", "Sol", "Noche", "Baile", "Luna", "Fuego", "Calle", "Amor", "Playa", "Caramelo", "Estrella", "Verano"]
+artist_words = ["Los", "Sonidos", "Mirador", "Paloma", "Tropical", "Hermanos", "Ritmo", "Dorados", "Cielo"]
+
+[[station]]
+id = "smooth_88"
+name = "Smooth 88.8"
+freq = "88.8"
+genre = "smooth"
+bpm = [72.0, 92.0]
+seed = 8880
+dj = "Velvet Vance"
+title_words = ["Silk", "Velvet", "Candle", "Honey", "Moonlight", "Slow", "Groove", "Satin", "Lounge", "Easy", "Twilight", "Harbor"]
+artist_words = ["Silk", "Saxon", "Marina", "Velour", "Quiet", "Storm", "Lagoon", "Smooth", "Operator"]
+
+[[station]]
+id = "spnn"
+name = "SPNN"
+freq = "1040 AM"
+genre = "talk"
+bpm = [90.0, 90.0]
+seed = 1040
+dj = "Brock Hardwell"
+title_words = ["Traffic", "Weather", "Markets", "Outrage", "Hour", "Report", "Panel", "Update", "Exclusive"]
+artist_words = ["Newsdesk", "Anchor", "Panel", "Desk", "Live"]
