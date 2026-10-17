@@ -10,6 +10,7 @@ use super::doc::{Anchor, Attach, Doc, Kind, MaterialEntry, Node, Param, Prim, Re
 use super::{Look, PropAsset, PropPart, Shape};
 use crate::params::ChoiceParam;
 use crate::shape::Sway;
+use crate::statics::Glow;
 
 pub(crate) fn quoted(text: &str) -> String {
     serde_json::to_string(text).expect("strings serialize")
@@ -152,6 +153,7 @@ fn surface(f: &mut Fields, s: &Surface) {
     f.opt("color", s.color.as_ref(), |c| quoted(c));
     f.opt("look", s.look, |l| quoted(look_name(l)));
     f.opt("emissive", s.emissive, num);
+    f.opt("glow", s.glow, |g| quoted(if g == Glow::Night { "night" } else { "always" }));
 }
 
 fn attach(a: &Attach) -> String {

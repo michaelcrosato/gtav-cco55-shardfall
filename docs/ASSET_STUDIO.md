@@ -43,9 +43,10 @@ centre. Part names: lowercase letters, digits, _ and -.
   $light) or mat: a key in materials ({color, look, emissive}, or a patterned library material
   such as "MAT/oak_planks"), or a library name itself. Patterns, the library and your own
   materials: docs/MATERIALS.md. look: cel (default), flat, lit, unlit, cutout. emissive 0-32
-  glows; above 0.5 it lights the room.
+  glows; above 0.5 it lights the room. glow:"night" shows the glow and the part's light only
+  after dark, with the scene's street lights (street lamps, lit signs; default "always").
 - **Groups.** parts:{…} in a node makes a group: its children sit in its frame and inherit mat,
-  color, look, emissive and solid.
+  color, look, emissive, glow and solid.
 - **Copies.** mirror:"x" (or ["x","z"]) adds the reflection; array:{count, step:[x,y,z]} a row;
   grid:{count:[a,b], step:[sa,sb]} a floor grid (plane:"xy": a wall); radial:{count, radius} a
   ring round the part's position, each copy facing out (axis:"z", arc:180, start:-90: an arch).

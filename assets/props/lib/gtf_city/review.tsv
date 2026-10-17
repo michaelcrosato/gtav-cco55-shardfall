@@ -1,12 +1,12 @@
 name	revision	review
 LIB/gtf_city/ac_unit	prop2-72645ed528bb77e3	ok: 1.8 m beige rooftop unit on rails, louvred front +z, dark fan grille on top, side pipe; 7 parts
-LIB/gtf_city/antenna_mast	prop2-156505b93540d1a3	ok: 9.6 m mast on a concrete block, 3 TV crossbars, white dish toward +z, whip and red beacon; 8 parts
+LIB/gtf_city/antenna_mast	prop2-587f9ff14fe41f88	ok: 9.6 m mast on a concrete block, 3 TV crossbars, white dish toward +z, whip; red beacon glows only after dark (night sheet); 8 parts
 LIB/gtf_city/barricade	prop2-b118ff0478152ca6	ok (fix 1: panel seated on the top rail): Type III barricade, diagonal striped rails, blank panel, amber lamp; 8 parts
 LIB/gtf_city/beach_umbrella	prop2-4db573f207c79d7b	ok: 2.2 m cream canopy with coral gores on a white pole; instantly reads as beach umbrella; 3 parts
 LIB/gtf_city/bench	prop2-20d29d767da54a00	ok: 1.9 m wooden seat and leaning back on concrete blocks and steel posts, sit socket on the seat, front +z; 6 parts
-LIB/gtf_city/billboard	prop2-3a5f3a4e2fdfa626	ok: blank 12x4 m panel facing +z in a dark frame on two legs, catwalk with 4 lamp fixtures; reads as freeway billboard; 10 parts
+LIB/gtf_city/billboard	prop2-66d93972b819e778	ok: blank 12x4 m panel facing +z in a dark frame on two legs; 4 catwalk lamps light the panel only after dark (night sheet); 10 parts
 LIB/gtf_city/bollard	prop2-6615b3fe60085433	ok: 95 cm dark steel bollard with dome and yellow band; clear silhouette; 3 parts
-LIB/gtf_city/bus_stop	prop2-77a871e2074a3bf4	ok (fix 1: ad off the post faces): cantilever shelter, glass back, roof, ref'd bench, lit ad panel at -x; open to +z; sit socket; 12 parts
+LIB/gtf_city/bus_stop	prop2-3f9fe76a147e2949	ok: cantilever shelter, glass back, roof, ref'd bench, ad panel at -x backlit only after dark (night sheet); open to +z; sit socket; 12 parts
 LIB/gtf_city/chain_link_fence	prop2-5b7d3148e04acb97	ok (fix 1: coarse light diamond lattice on dark base): 3 m chain-link with posts and top rail, reads as mesh (opaque); 4 parts
 LIB/gtf_city/dumpster	prop2-cad42874991a244a	ok: slanted green front-load dumpster, black lids, fork pockets, skids; profile reads from the side, front +z; 7 parts
 LIB/gtf_city/fire_hydrant	prop2-b7e68854d5e301d1	ok: 80 cm yellow wet-barrel hydrant with silver bonnet, side outlets and pumper nozzle toward +z reads at once; 7 parts
@@ -32,8 +32,8 @@ LIB/gtf_city/shipping_container	prop2-a939839867958d9a	ok (fix 1: own rib layers
 LIB/gtf_city/shrub	prop2-c1b335168b7419ff	ok: 80 cm two-tone rounded shrub from 4 ellipsoids; reads as landscaping; 4 parts
 LIB/gtf_city/speed_sign	prop2-b4f51f8f7ebc2406	ok (fix 1: shorter description): blank white 60x75 cm face, black border at 2.25 m, grey back, square post; face +z; 4 parts
 LIB/gtf_city/stop_sign	prop2-f89dee408579081d	ok: flat-topped red octagon with white border at 2.25 m reads instantly, grey back, square post; face +z; 4 parts
-LIB/gtf_city/street_lamp	prop2-f8598be56468bfd0	ok: 9.2 m cobra-head reads at street distance; pole, rising arm and head toward +z, lamp lens under the head; grounded, 6 parts
-LIB/gtf_city/street_lamp_double	prop2-5f3e411356e7cfd2	ok: 9.2 m median light, two arms and heads toward +-z read clearly, lamp and lamp~z lenses; grounded, 9 parts
+LIB/gtf_city/street_lamp	prop2-ddf4233efff86937	ok: 9.2 m cobra-head toward +z; the lens glows and lights a 22 m pool only after dark (night sheet, downtown at night); grounded, 6 parts
+LIB/gtf_city/street_lamp_double	prop2-b2cf5149c20eb869	ok: 9.2 m median light, two heads toward +-z; both lenses glow and light the road only after dark (night sheet); grounded, 9 parts
 LIB/gtf_city/street_name_sign	prop2-3335155f61d13515	ok: two crossed blank green blades on a 3 m pole read as a corner street sign from all sides; 5 parts
 LIB/gtf_city/street_tree	prop2-c711648f594b1089	ok: 7.4 m trunk, two branches and a lobed rounded canopy ~5 m across; reads as a street tree; 9 parts
 LIB/gtf_city/traffic_cone	prop2-958f6d954303f70b	ok: 70 cm orange cone, two white bands, black square base; instantly readable; 4 parts

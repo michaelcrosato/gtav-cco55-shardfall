@@ -1094,15 +1094,21 @@ impl Renderer {
         let view_proj = cam.proj * cam.view;
         let (light_vp, texel) = Self::light_matrix(scene);
         let sun_dir = scene.sun.direction.normalize_or(Vec3::NEG_Y);
-        // The lights nearest the point of interest, if there are too many.
+        // If there are too many lights: those whose reach the camera sees, nearest the camera first
+        // (a city's street lamps, however many are streamed in), then the rest.
         let mut light_order: Vec<usize> = (0..scene.point_lights.len()).collect();
         if light_order.len() > MAX_POINT_LIGHTS {
-            let focus = scene.cutaway.focus;
+            let planes = crate::cull::planes(view_proj);
             let score = |i: usize| {
                 let l = &scene.point_lights[i];
-                (l.position.distance(focus) - l.radius).max(0.0)
+                let reach = Vec3::splat(l.radius);
+                let unseen = crate::cull::box_outside(&planes, l.position - reach, l.position + reach);
+                (unseen, (l.position.distance(cam.eye) - l.radius).max(0.0))
             };
-            light_order.sort_by(|&a, &b| score(a).total_cmp(&score(b)));
+            light_order.sort_by(|&a, &b| {
+                let ((ua, da), (ub, db)) = (score(a), score(b));
+                ua.cmp(&ub).then(da.total_cmp(&db))
+            });
             light_order.truncate(MAX_POINT_LIGHTS);
         }
         let n_lights = light_order.len();

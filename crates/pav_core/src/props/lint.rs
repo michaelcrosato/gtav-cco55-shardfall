@@ -13,6 +13,7 @@ use glam::Vec3;
 use super::geom::Primitive;
 use super::{CompiledProp, PropDef, ResolvedPart};
 use crate::shape::Look;
+use crate::statics::Glow;
 
 /// Parts closer than this count as touching (floating, floor contact).
 const JOIN: f32 = 0.005;
@@ -460,6 +461,16 @@ pub fn lint(compiled: &CompiledProp, options: &Options) -> Vec<Finding> {
     let tiny: Vec<&str> = solids.iter().filter(|s| s.size().max_element() < 0.02).map(|s| s.name).collect();
     if !tiny.is_empty() {
         push("tiny", tiny.clone(), format!("{} under 2 cm (about a pixel in game)", names(&tiny, 4)));
+    }
+    // A night glow shows its emissive or its light after dark: without either it does nothing.
+    let dark: Vec<&str> = solids
+        .iter()
+        .filter(|s| s.part.glow == Glow::Night && s.part.emissive <= 0.0)
+        .filter(|s| !compiled.lights.iter().any(|l| l.part == s.part.id))
+        .map(|s| s.name)
+        .collect();
+    if !dark.is_empty() {
+        push("night_glow_unlit", dark.clone(), format!("{} glow at night but have no emissive or light", names(&dark, 4)));
     }
     // The compile warnings, but its box-contact `floating`: the gaps above are exact.
     out.extend(compiled.warnings.iter().filter(|w| w.code != "floating").cloned());

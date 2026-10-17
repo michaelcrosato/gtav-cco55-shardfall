@@ -415,3 +415,35 @@ fn the_object_doc_names_every_checked_key() {
         .unwrap_or_else(|issues| panic!("{}", render(&issues)));
     assert_eq!((family.doc.params.len(), family.doc.presets.len()), (3, 1));
 }
+
+/// `glow:"night"` cascades through groups like the other surface fields (a part may say
+/// `always`), reaches the part's own light, writes back, and a wrong word says what it takes;
+/// a night part with nothing to show is a lint finding.
+#[test]
+fn night_glow_cascades_to_parts_and_their_lights() {
+    use pav_core::props::lint::{Options, lint};
+    use pav_core::statics::Glow;
+    let text = r##"{"format":2,"name":"lamp_post","unit":"cm",
+"materials":{
+"lens":{"color":"#ffcf8a","emissive":3}},
+"parts":{
+"head":{"glow":"night","parts":{
+"lens":{"type":"box","size":[20,4,20],"pos":[0,400,0],"mat":"lens","light":{"color":"#ffc27a","radius":1500,"intensity":4}},
+"plate":{"type":"box","size":[30,20,2],"pos":[0,380,10],"mat":"lens","glow":"always"}}},
+"pole":{"type":"cylinder","radius":6,"height":400,"pos":[0,200,0],"color":"#9ea4a8"}}}
+"##;
+    let doc = read("lamp_post", text);
+    assert!(doc.text().contains(r#""glow":"night""#) && doc.text().contains(r#""glow":"always""#), "{}", doc.text());
+    assert_eq!(read("lamp_post", &doc.text()), doc);
+    let prop = compiled("lamp_post", text);
+    let glow = |end: &str| prop.parts.iter().find(|p| p.id.ends_with(end)).unwrap_or_else(|| panic!("no {end}")).glow;
+    assert_eq!((glow("lens"), glow("plate"), glow("pole")), (Glow::Night, Glow::Always, Glow::Always));
+    assert_eq!(prop.lights.iter().map(|l| l.glow).collect::<Vec<_>>(), [Glow::Night]);
+    let wrong = render(&Doc::read(&text.replace(r#""glow":"night""#, r#""glow":"dusk""#)).unwrap_err());
+    assert!(wrong.contains(r#"unknown glow "dusk" (expected always, night)"#) && wrong.contains("use \"night\""), "{wrong}");
+    // Without its emissive and its light, the night part shows nothing.
+    let unlit =
+        text.replace(r##""mat":"lens","light":{"color":"#ffc27a","radius":1500,"intensity":4}"##, r##""color":"#ffffff""##);
+    let findings = lint(&compiled("unlit", &unlit), &Options::default());
+    assert!(findings.iter().any(|f| f.code == "night_glow_unlit" && f.ids.iter().any(|id| id.ends_with("lens"))), "{findings:?}");
+}

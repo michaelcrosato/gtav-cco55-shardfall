@@ -19,6 +19,7 @@ use crate::props::doc::{
 use crate::props::family::{self, MAX_CHOICES, MAX_PARAMS, MAX_PRESETS, MAX_TARGETS, Target};
 use crate::props::{MAX_PARTS, PropDef, validate_name, validate_part_name};
 use crate::shape::{Look, Sway};
+use crate::statics::Glow;
 
 /// Groups inside groups.
 pub const MAX_GROUP_DEPTH: usize = 4;
@@ -41,7 +42,7 @@ full length along a round part's axis (y unless axis says otherwise). yaw, pitch
 degrees applied Y, then X, then Z: +yaw turns +z toward +x, +pitch tips +z down. A from/to part's \
 local y runs from to to; its local z is up made perpendicular, so x is horizontal: a board \
 leaning sideways turns its width front-to-back (spin:90 turns it back). Groups pass their frame \
-and their surface (mat, color, look, emissive, solid) to their children; the nearest level wins. \
+and their surface (mat, color, look, emissive, glow, solid) to their children; the nearest level wins. \
 mirror adds reflected copies; array, grid and radial add copies centred on the node, and a cycle \
 gives copy i entry i mod n. Colours are #rrggbb or a theme role ($floor $floor2 $wall $pillar \
 $accent $light). A batch is accepted or rejected as a whole.";
@@ -55,6 +56,7 @@ pub const DOCUMENT_FIELDS: &[(&str, &str)] = &[
     ("color", "default colour: #rrggbb or a role ($floor $floor2 $wall $pillar $accent $light)"),
     ("look", "default look: flat | cel | lit | unlit | cutout"),
     ("emissive", "default glow 0-32"),
+    ("glow", "default glow time: always | night (only after dark, with the street lights)"),
     ("solid", "default: part of the collider (true)"),
     ("description", "what it is and how it stands; at most 4096 bytes"),
     ("tags", "up to 16 words of a-z, 0-9 and _, each at most 24 characters"),
@@ -97,6 +99,7 @@ pub const NODE_FIELDS: &[(&str, &str)] = &[
     ("color", "#rrggbb or a role such as $wall"),
     ("look", "flat | cel | lit | unlit | cutout"),
     ("emissive", "glow 0-32"),
+    ("glow", "always (default) | night: the glow and the part's light show only after dark"),
     ("solid", "part of the collider; default true"),
     ("hidden", "true: collision only, not drawn"),
     ("light", "{color,radius,intensity,flicker,pulse,shadows}: a point light at the part"),
@@ -163,8 +166,8 @@ pub const MATERIAL_FIELDS: &[(&str, &str)] = &[
 
 /// The fields a node kind takes besides the shape fields, in canonical order.
 const NODE_ORDER: &[&str] = &[
-    "from", "to", "pos", "attach", "offset", "axis", "yaw", "pitch", "roll", "spin", "mat", "color", "look", "emissive", "solid",
-    "hidden", "light", "fx", "sway", "mirror", "array", "grid", "radial", "chance", "jitter", "pick", "scale", "remap",
+    "from", "to", "pos", "attach", "offset", "axis", "yaw", "pitch", "roll", "spin", "mat", "color", "look", "emissive", "glow",
+    "solid", "hidden", "light", "fx", "sway", "mirror", "array", "grid", "radial", "chance", "jitter", "pick", "scale", "remap",
     "recolor", "parts",
 ];
 
@@ -245,7 +248,7 @@ fn hint(level: &str, key: &str, value: &Value) -> Option<String> {
         ("node", "collide" | "collision" | "collider" | "collidable" | "physics") => {
             "use solid (true: part of the collider)".into()
         }
-        ("node", "glow" | "emission" | "emit") => "use emissive (0-32)".into(),
+        ("node", "emission" | "emit") => "use emissive (0-32)".into(),
         ("node", "visible" | "invisible") => "use hidden:true for collision without drawing".into(),
         ("node", "name" | "id") => "a part's name is its key in parts".into(),
         ("node", "shape") => "format 2 parts are flat: put type and the shape fields on the part".into(),
@@ -333,10 +336,10 @@ fn misplaced(kind: &str, prim: Option<PrimType>, key: &str) -> Option<String> {
         (_, _, "spin") => "spin turns a from/to part about its axis".into(),
         ("type", Some(p), "axis") => format!("a {} has no axis: turn it with yaw, pitch and roll", p.name()),
         (_, _, "axis") => "turn it with yaw, pitch and roll".into(),
-        ("ref", _, "mat" | "color" | "look" | "emissive" | "solid") => {
+        ("ref", _, "mat" | "color" | "look" | "emissive" | "glow" | "solid") => {
             "a ref keeps its own surfaces: remap:{its material: a material here}".into()
         }
-        ("mesh", _, "mat" | "color" | "look" | "emissive") => "use recolor:{palette index: material}".into(),
+        ("mesh", _, "mat" | "color" | "look" | "emissive" | "glow") => "use recolor:{palette index: material}".into(),
         (_, _, "hidden" | "light" | "fx" | "sway") => format!("put {key} on a part with a type"),
         (_, _, "pick") => "pick chooses among a group's children".into(),
         (_, _, "scale") => "scale resizes a ref: change this part's size instead".into(),
@@ -360,7 +363,7 @@ fn allowed(kind: &str, prim: Option<PrimType>) -> Vec<&'static str> {
     keys.extend(NODE_ORDER.iter().copied().filter(|key| match *key {
         "from" | "to" | "spin" => ends,
         "axis" => prim.is_some_and(PrimType::takes_axis),
-        "mat" | "color" | "look" | "emissive" => shaped,
+        "mat" | "color" | "look" | "emissive" | "glow" => shaped,
         // A mesh part may stay out of the collider (decorative sheets).
         "solid" => shaped || kind == "mesh",
         "hidden" | "light" | "fx" | "sway" => kind == "type",
@@ -665,6 +668,20 @@ impl Reader<'_> {
         self.choice(path, value, "look", names, parse, |text| look_hint(text).map(String::from))
     }
 
+    /// When a glow shows: `always` or `night`.
+    fn glow(&mut self, path: &str, value: &Value) -> Option<Glow> {
+        let parse = |text: &str| match text {
+            "always" => Some(Glow::Always),
+            "night" => Some(Glow::Night),
+            _ => None,
+        };
+        let hint = |text: &str| {
+            matches!(text, "dark" | "dusk" | "evening" | "nighttime" | "street" | "lamp" | "lamps")
+                .then(|| "use \"night\": it glows only after dark, with the street lights".to_owned())
+        };
+        self.choice(path, value, "glow", &["always", "night"], parse, hint)
+    }
+
     /// A material key here, or a library material (`MAT/…`). A library name the library lacks
     /// reads (a snapshot keeps naming a material that is gone); `check` reports it.
     fn material_ref(&mut self, path: &str, value: &Value) -> Option<String> {
@@ -698,6 +715,7 @@ impl Reader<'_> {
             color: object.get("color").and_then(|v| self.color(&at("color"), v)),
             look: object.get("look").and_then(|v| self.look(&at("look"), v, true)),
             emissive: object.get("emissive").and_then(|v| self.ranged(&at("emissive"), v, 0.0, 32.0)),
+            glow: object.get("glow").and_then(|v| self.glow(&at("glow"), v)),
             solid: object.get("solid").and_then(|v| self.boolean(&at("solid"), v)),
         }
     }

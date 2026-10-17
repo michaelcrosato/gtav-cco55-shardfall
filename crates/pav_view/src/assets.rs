@@ -130,7 +130,9 @@ pub fn emit_asset(scene: &mut Scene, name: &str, at: Placement, seed: u32, palet
             offset: Vec3::ZERO,
         };
         let pos = at.pos + rot * (light.pos * at.scale);
-        scene.point_lights.push(crate::fx::light(&def, pos, scene.time, at.id as f32 * 1.7 + i as f32));
+        let phase = at.id as f32 * 1.7 + i as f32;
+        let lit = crate::build::part_light(&def, light.glow, pos, scene.time, phase, scene.street_lights);
+        scene.point_lights.extend(lit);
     }
     Ok(())
 }

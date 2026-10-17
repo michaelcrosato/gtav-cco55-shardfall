@@ -134,7 +134,12 @@ game's `ViewIntent` (`pav_core::present`):
 - The view classes static dressing by size: decor under 0.5 m across (baked props under
   1.2 m) is `SMALL`, under 6 m (8 m) `DETAIL`, bigger stays; glowing things never drop out.
   `Decor::glow` and `PrimDraw::glow` = `Glow::Night` (serde default `always`) set
-  `flags::NIGHT`, and their glow lights follow `street_lights`. Blocks wearing an
+  `flags::NIGHT`, and their glow lights follow `street_lights`; so do prop parts written
+  `"glow":"night"` (a format-2 surface field that cascades like `emissive`; their `light`s
+  too) wherever the prop is drawn: baked into a region, placed, or from a draw list (the
+  `LIB/gtf_city` street lamps, billboard lamps, bus-stop ads, mast beacons). With more than 64
+  point lights the renderer keeps those whose reach is in view, nearest the camera first.
+  Blocks wearing an
   object-mapped material are seeded by their position (facades differ building to building).
 - `ViewIntent` → scene (`pav_view::play::apply_view`): sun and ambient light, `sky` (`moon_dir`
   points toward the moon; no sun disc when the light is the moonlight), `fog` (fades into the

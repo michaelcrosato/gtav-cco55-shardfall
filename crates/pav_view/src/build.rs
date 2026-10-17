@@ -639,9 +639,9 @@ struct RegionCache {
     terrain: Vec<(MeshKey, Arc<MeshData>)>,
     /// Generated meshes its baked props draw (every scene carries them).
     custom: Vec<(u64, Arc<MeshData>)>,
-    /// Its baked props' own lights, made each frame since they flicker and pulse: the light,
-    /// where it is, its phase.
-    prop_lights: Vec<(LightDef, Vec3, f32)>,
+    /// Its baked props' own lights, made each frame since they flicker and pulse (and night
+    /// ones follow the street lights): the light, its part's glow, where it is, its phase.
+    prop_lights: Vec<(LightDef, Glow, Vec3, f32)>,
 }
 
 /// Keeps per-region instance caches and short-lived visual effects between frames.
@@ -964,7 +964,8 @@ impl ViewBuilder {
                 shadows: light.shadows,
                 offset: Vec3::ZERO,
             };
-            scene.point_lights.push(crate::fx::light(&def, at(light.pos), time, o.id.0 as f32 * 1.7 + i as f32));
+            let phase = o.id.0 as f32 * 1.7 + i as f32;
+            scene.point_lights.extend(part_light(&def, light.glow, at(light.pos), time, phase, scene.street_lights));
         }
         if settings.particles {
             for (i, fx) in compiled.fx.iter().enumerate() {
@@ -1336,8 +1337,10 @@ impl ViewBuilder {
                 for z in &chunk.zones {
                     emit_zone(&mut list, z, settings.style);
                 }
-                // Baked props draw as placed copies do, into a scratch scene the cache keeps.
-                let mut baked = Scene::default();
+                // Baked props draw as placed copies do, into a scratch scene the cache keeps. Its
+                // street lights are on, so night glows give their lights in full: those go to
+                // the night lights, which each frame dims by the street-light level.
+                let mut baked = Scene { street_lights: 1.0, ..Scene::default() };
                 let mut prop_lights = Vec::new();
                 let mut generated = GeneratedMeshes { built: std::mem::take(&mut self.generated.built), sent: HashSet::new() };
                 for (index, p) in chunk.props.iter().enumerate() {
@@ -1360,7 +1363,11 @@ impl ViewBuilder {
                     let (m0, s0) = (baked.meshes.len(), baked.sdfs.len());
                     for (i, part) in parts.parts.iter().enumerate().filter(|(_, part)| !part.hidden) {
                         let (color, material) = surfaces.part(part, materials::seed(id, i as u32));
+                        let l0 = baked.point_lights.len();
                         emit_prim(&mut baked, &mut generated, part, &o, p.scale, settings.style, color, material);
+                        if part.glow == Glow::Night {
+                            night_lights.extend(baked.point_lights.drain(l0..));
+                        }
                     }
                     // A small prop (a bin, a hydrant, a bench) drops out with distance as a
                     // whole; its glowing parts never do.
@@ -1386,7 +1393,8 @@ impl ViewBuilder {
                             shadows: light.shadows,
                             offset: Vec3::ZERO,
                         };
-                        prop_lights.push((def, p.pos + p.rot * (light.pos * p.scale), id as f32 * 1.7 + i as f32));
+                        let at = p.pos + p.rot * (light.pos * p.scale);
+                        prop_lights.push((def, light.glow, at, id as f32 * 1.7 + i as f32));
                     }
                 }
                 self.generated.built = generated.built;
@@ -1506,8 +1514,8 @@ impl ViewBuilder {
                     scene.custom_meshes.push((MeshKey::Custom(*mesh), data.clone()));
                 }
             }
-            for (def, pos, phase) in &c.prop_lights {
-                scene.point_lights.push(crate::fx::light(def, *pos, time, *phase));
+            for (def, glow, pos, phase) in &c.prop_lights {
+                scene.point_lights.extend(part_light(def, *glow, *pos, time, *phase, street));
             }
             for (mk, data) in &c.terrain {
                 scene.custom_meshes.push((*mk, data.clone()));
@@ -2214,6 +2222,13 @@ pub(crate) fn emit_prim(
         return;
     }
     let mut flags = if part.sway == Sway::Leaves { rs::flags::SWAY } else { 0 };
+    // A night glow: the renderer dims its emissive by the street lights, and its glow light
+    // comes on with them.
+    let night = part.glow == Glow::Night;
+    let lit = if night { scene.street_lights } else { 1.0 };
+    if night {
+        flags |= rs::flags::NIGHT;
+    }
     // A mesh part with open surfaces seen from both sides: back faces lit, not capped.
     if let Primitive::Mesh { mesh, .. } = &part.prim
         && mesh.mesh.file.two_sided
@@ -2223,9 +2238,24 @@ pub(crate) fn emit_prim(
     let generated_mesh = Generated::of(&part.prim, part.mirrored);
     if let Some(shape) = part.prim.shape(s).filter(|_| generated_mesh.is_none()) {
         // A part with a light of its own does not also light the scene with its glow.
-        let mut unlit = Vec::new();
-        let lights = if part.glow_light { &mut scene.point_lights } else { &mut unlit };
-        emit_shape(&mut scene.meshes, &mut scene.sdfs, lights, &shape, pos, rot, color, emissive, style, group, flags, material);
+        let mut glows = Vec::new();
+        emit_shape(
+            &mut scene.meshes,
+            &mut scene.sdfs,
+            &mut glows,
+            &shape,
+            pos,
+            rot,
+            color,
+            emissive,
+            style,
+            group,
+            flags,
+            material,
+        );
+        if part.glow_light && lit > 0.0 {
+            scene.point_lights.extend(glows.into_iter().map(|l| rs::PointLight { color: l.color * lit, ..l }));
+        }
         return;
     }
     let mesh = |mesh, size: Vec3| MeshInstance {
@@ -2269,14 +2299,24 @@ pub(crate) fn emit_prim(
             _ => return,
         }
     }
-    if part.glow_light && emissive > 0.5 {
+    if part.glow_light && emissive > 0.5 && lit > 0.0 {
         scene.point_lights.push(rs::PointLight {
             position: pos,
-            color: color * emissive,
+            color: color * (emissive * lit),
             radius: 4.0 + emissive * 2.0,
             shadows: false,
         });
     }
+}
+
+/// A prop part's own light (`light` on a part) at `pos` this frame: a `night` part's light is
+/// dimmed by the street lights (None while they are off).
+pub(crate) fn part_light(def: &LightDef, glow: Glow, pos: Vec3, time: f32, phase: f32, street: f32) -> Option<rs::PointLight> {
+    let k = if glow == Glow::Night { street } else { 1.0 };
+    (k > 0.0).then(|| {
+        let l = crate::fx::light(def, pos, time, phase);
+        rs::PointLight { color: l.color * k, ..l }
+    })
 }
 
 /// Instances for one shape (meshes for boxes/cylinders, SDF impostors for spheres/capsules).
