@@ -128,7 +128,6 @@ fn foundation(min: Vec2, max: Vec2, terrain: &Terrain, out: &mut Out) -> f32 {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 fn building(
     style: &str,
     lot: Lot,
