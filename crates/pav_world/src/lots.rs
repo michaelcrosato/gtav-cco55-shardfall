@@ -13,7 +13,8 @@ use pav_core::zones::{Label, LabelMode};
 
 use crate::def::{DistrictDef, ZoneRules};
 use crate::grid::{Grid, rectangles};
-use crate::ground::LOT_Y;
+use crate::ground::{LOT_Y, ROAD_Y};
+use crate::terrain::Terrain;
 use crate::{Building, Out, rng};
 
 /// A lot: its rectangle and the side facing the street (0 N, 1 E, 2 S, 3 W).
@@ -74,7 +75,7 @@ fn trim(min: Vec3, max: Vec3, c: Color) -> Decor {
     }
 }
 
-pub fn build(def: &DistrictDef, grid: &Grid, out: &mut Out) {
+pub fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut Out) {
     for (zone, cells) in grid.blocks() {
         let name = &grid.zones[zone as usize];
         let rules = &def.zones[name];
@@ -91,12 +92,12 @@ pub fn build(def: &DistrictDef, grid: &Grid, out: &mut Out) {
                 let front = facing(grid, lmin, lmax);
                 let lot = Lot { min: lmin, max: lmax, front };
                 let style = rules.styles[r.below(rules.styles.len() as u32) as usize].clone();
-                building(&style, lot, rules, zone, &mut r, out);
+                building(&style, lot, rules, zone, terrain, &mut r, out);
             }
         }
     }
     for (i, l) in def.landmark.iter().enumerate() {
-        landmark(def, grid, i, l, out);
+        landmark(def, grid, terrain, i, l, out);
     }
 }
 
@@ -112,7 +113,19 @@ fn facing(grid: &Grid, min: Vec2, max: Vec2) -> usize {
     probes.iter().position(|p| grid.road(grid.cell_of(*p)).is_some()).unwrap_or(2)
 }
 
-fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, r: &mut Rng, out: &mut Out) {
+/// On a slope a building is cut into the hill: its floor sits a little above the middle of the
+/// ground under it, on a stone foundation down to the lowest ground; returns the floor height.
+fn foundation(min: Vec2, max: Vec2, terrain: &Terrain, out: &mut Out) -> f32 {
+    let (lo, hi) = terrain.range(min, max);
+    let floor = lo + (hi - lo) * 0.6;
+    if hi - lo > 0.05 {
+        out.blocks.push(block(min, max, LOT_Y + lo - 0.4, LOT_Y + floor, Color::hex("#a39a88")));
+    }
+    LOT_Y + floor
+}
+
+#[allow(clippy::too_many_arguments)]
+fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, terrain: &Terrain, r: &mut Rng, out: &mut Out) {
     let gap = 0.6;
     let mut min = lot.min + Vec2::splat(gap);
     let mut max = lot.max - Vec2::splat(gap);
@@ -128,7 +141,7 @@ fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, r: &mut Rng, ou
         return;
     }
     let h = r.range(rules.height[0], rules.height[1]);
-    let y0 = LOT_Y;
+    let y0 = foundation(min, max, terrain, out);
     let size = max - min;
     let inset = |k: f32| (min + size * k, max - size * k);
     match style {
@@ -161,7 +174,7 @@ fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, r: &mut Rng, ou
                     y += 3.6;
                 }
             }
-            out.buildings.push(Building { min, max, height: h + crown_h, zone, color: body.0 });
+            out.buildings.push(Building { min, max, base: y0, height: h + crown_h, zone, color: body.0 });
         }
         "stucco_shop" | "apartment" => {
             let apt = style == "apartment";
@@ -198,7 +211,7 @@ fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, r: &mut Rng, ou
                 let q1 = Vec3::new(a1.x, y + 1.6, a1.y) + out_dir * 0.25;
                 out.decor.push(trim(q0.min(q1), q0.max(q1), sign));
             }
-            out.buildings.push(Building { min, max, height: h, zone, color: wall.0 });
+            out.buildings.push(Building { min, max, base: y0, height: h, zone, color: wall.0 });
         }
         "bungalow" => {
             let w = color(r, &["#f2e3c9", "#e8cdb0", "#d9e2d0", "#efd3c7", "#e6dcc3", "#c9d6df"]);
@@ -219,7 +232,7 @@ fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, r: &mut Rng, ou
                 hi -= Vec2::splat(1.0);
                 y += 0.45;
             }
-            out.buildings.push(Building { min: bmin, max: bmax, height: hh + 1.4, zone, color: w.0 });
+            out.buildings.push(Building { min: bmin, max: bmax, base: y0, height: hh + 1.4, zone, color: w.0 });
         }
         "shed" | "warehouse" => {
             let w = color(r, &["#9aa3a8", "#b9a07a", "#8f9a9e", "#a7a199", "#7f8c8d", "#b0a48a"]);
@@ -252,11 +265,11 @@ fn building(style: &str, lot: Lot, rules: &ZoneRules, zone: u16, r: &mut Rng, ou
                 out.decor.push(trim(p3.min(q3), p3.max(q3), door));
                 t += 7.0;
             }
-            out.buildings.push(Building { min, max, height: h + 1.2, zone, color: w.0 });
+            out.buildings.push(Building { min, max, base: y0, height: h + 1.2, zone, color: w.0 });
         }
         _ => {
             out.blocks.push(block(min, max, y0, y0 + h, Color::hex("#c8c0b0")));
-            out.buildings.push(Building { min, max, height: h, zone, color: Color::hex("#c8c0b0").0 });
+            out.buildings.push(Building { min, max, base: y0, height: h, zone, color: Color::hex("#c8c0b0").0 });
         }
     }
 }
@@ -273,13 +286,18 @@ fn front_edge(min: Vec2, max: Vec2, front: usize) -> (Vec2, Vec2, Vec3) {
 
 /// A landmark's placeholder: masses by assembly, and its name on a sign (authored assemblies
 /// replace these as content lands).
-fn landmark(def: &DistrictDef, grid: &Grid, i: usize, l: &crate::def::Landmark, out: &mut Out) {
+fn landmark(def: &DistrictDef, grid: &Grid, terrain: &Terrain, i: usize, l: &crate::def::Landmark, out: &mut Out) {
     let [[x0, z0], [x1, z1]] = l.cells;
     let min = grid.corner(IVec2::new(x0, z0)) + Vec2::splat(2.0);
     let max = grid.corner(IVec2::new(x1 + 1, z1 + 1)) - Vec2::splat(2.0);
     let mut r = rng(def.seed, 0x1a9 + i as u64, x0, z0);
     let size = max - min;
-    let y0 = LOT_Y;
+    match l.assembly.as_str() {
+        "paloma_sign" => return paloma_sign(min, max, terrain, &l.name, out),
+        "lookout" => return lookout(grid, min, max, terrain, l, out),
+        _ => {}
+    }
+    let y0 = foundation(min - Vec2::splat(1.5), max + Vec2::splat(1.5), terrain, out);
     let zone = grid.at(IVec2::new(x0, z0)).and_then(|c| if let crate::Cell::Zone(z) = c { Some(z) } else { None }).unwrap_or(0);
     // Plaza paving under it.
     out.blocks.push(block(min - Vec2::splat(1.5), max + Vec2::splat(1.5), y0 - 0.05, y0 + 0.02, Color::hex("#cfc6b4")));
@@ -329,13 +347,95 @@ fn landmark(def: &DistrictDef, grid: &Grid, i: usize, l: &crate::def::Landmark, 
         }
     };
     if top > 0.0 {
-        out.buildings.push(Building { min, max, height: top, zone, color: body.0 });
+        out.buildings.push(Building { min, max, base: y0, height: top, zone, color: body.0 });
     }
     // The name over the front, facing south.
     out.labels.push(Label {
         text: l.name.to_uppercase(),
         pos: Vec3::new((min.x + max.x) * 0.5, y0 + top.clamp(4.0, 9.0) + 1.0, max.y + 0.4),
         size: 1.4,
+        color: Color::hex("#f4f1ea"),
+        mode: LabelMode::Billboard,
+        facing: Default::default(),
+    });
+}
+
+/// Strokes of the sign's letters on a 5 x 7 grid: (x, y, w, h) from the bottom left.
+fn letter(ch: char) -> &'static [(f32, f32, f32, f32)] {
+    match ch {
+        'P' => &[(0.0, 0.0, 1.0, 7.0), (1.0, 6.0, 3.0, 1.0), (1.0, 3.0, 3.0, 1.0), (4.0, 3.5, 1.0, 3.0)],
+        'A' => &[(0.0, 0.0, 1.0, 6.0), (4.0, 0.0, 1.0, 6.0), (0.6, 6.0, 3.8, 1.0), (1.0, 3.0, 3.0, 1.0)],
+        'L' => &[(0.0, 0.0, 1.0, 7.0), (1.0, 0.0, 4.0, 1.0)],
+        'O' => &[(0.0, 0.6, 1.0, 5.8), (4.0, 0.6, 1.0, 5.8), (0.6, 0.0, 3.8, 1.0), (0.6, 6.0, 3.8, 1.0)],
+        'M' => &[(0.0, 0.0, 1.0, 7.0), (4.0, 0.0, 1.0, 7.0), (1.0, 5.2, 1.0, 1.4), (3.0, 5.2, 1.0, 1.4), (2.0, 3.8, 1.0, 1.8)],
+        _ => &[],
+    }
+}
+
+/// The giant hillside letters: white boxes on dark legs, standing on the slope and facing south.
+fn paloma_sign(min: Vec2, max: Vec2, terrain: &Terrain, text: &str, out: &mut Out) {
+    let unit = 2.4;
+    let letters: Vec<char> = text.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+    let pitch = unit * 6.6;
+    let width = pitch * letters.len() as f32 - unit * 1.6;
+    let mid = (min + max) * 0.5;
+    let z = mid.y + 4.0;
+    let white = Color::hex("#f3f0e6");
+    let legs = Color::hex("#4a4740");
+    for (k, ch) in letters.iter().enumerate() {
+        let x0 = mid.x - width * 0.5 + k as f32 * pitch;
+        // Each letter stands on its own ground, a little above it.
+        let ground = LOT_Y + terrain.height_at(Vec2::new(x0 + unit * 2.5, z)) + 1.2;
+        for &(sx, sy, sw, sh) in letter(*ch) {
+            let a = Vec3::new(x0 + sx * unit, ground + sy * unit, z);
+            let b = Vec3::new(x0 + (sx + sw) * unit, ground + (sy + sh) * unit, z + 0.6);
+            out.blocks.push(Block::new(a, b, white));
+        }
+        for lx in [0.6, 3.9] {
+            let x = x0 + lx * unit;
+            let foot = LOT_Y + terrain.height_at(Vec2::new(x, z + 2.0)) - 0.5;
+            out.blocks.push(Block::new(Vec3::new(x, foot, z + 0.6), Vec3::new(x + 0.35, ground + 6.0 * unit, z + 0.95), legs));
+        }
+    }
+}
+
+/// Lookout Point: a paved pull-out level with the road's end, a low wall on the view side,
+/// coin binoculars and benches.
+fn lookout(grid: &Grid, min: Vec2, max: Vec2, terrain: &Terrain, l: &crate::def::Landmark, out: &mut Out) {
+    let road = grid.corner(IVec2::new(l.cells[1][0] + 1, (l.cells[0][1] + l.cells[1][1]) / 2)) + Vec2::new(8.0, 8.0);
+    let top = ROAD_Y + terrain.height_at(road);
+    let (lo, _) = terrain.range(min, max);
+    let pad = (min - Vec2::new(2.0, 2.0), max + Vec2::new(2.5, 0.0));
+    out.blocks.push(block(pad.0, pad.1, LOT_Y + lo - 1.0, top, Color::hex("#9c978d")));
+    // The wall along the south edge and the sides.
+    let stone = Color::hex("#c8b89a");
+    out.blocks.push(block(Vec2::new(pad.0.x, pad.1.y - 0.6), pad.1, top, top + 0.9, stone));
+    out.blocks.push(block(pad.0, Vec2::new(pad.0.x + 0.6, pad.1.y), top, top + 0.9, stone));
+    for k in 0..3 {
+        let x = pad.0.x + 6.0 + k as f32 * 9.0;
+        let z = pad.1.y - 1.6;
+        out.decor.push(Decor {
+            shape: Shape::Cylinder { half_height: 0.55, radius: 0.08 },
+            pos: Vec3::new(x, top + 0.55, z),
+            rot: Quat::IDENTITY,
+            color: Color::hex("#3c4a52"),
+            look: Look::Cel,
+            emissive: 0.0,
+            solid: true,
+            collider: None,
+            sway: Default::default(),
+            material: None,
+        });
+        out.decor.push(trim(
+            Vec3::new(x - 0.25, top + 1.05, z - 0.18),
+            Vec3::new(x + 0.25, top + 1.35, z + 0.18),
+            Color::hex("#2f6f8f"),
+        ));
+    }
+    out.labels.push(Label {
+        text: l.name.to_uppercase(),
+        pos: Vec3::new(pad.0.x + 3.0, top + 3.2, (pad.0.y + pad.1.y) * 0.5),
+        size: 1.2,
         color: Color::hex("#f4f1ea"),
         mode: LabelMode::Billboard,
         facing: Default::default(),

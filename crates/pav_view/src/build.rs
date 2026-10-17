@@ -1123,15 +1123,17 @@ impl ViewBuilder {
             .and_then(|id| curr.objects.iter().find(|o| o.id == id))
             .and_then(|o| o.puppet.as_ref().map(|p| focus - Vec3::Y * p.feet_offset))
             .unwrap_or(focus);
+        // A game's own camera keeps clear of walls itself: no cutaway.
+        let cut = curr.focus_is_player && intent.is_none();
         scene.cutaway = rs::Cutaway {
             focus: feet + Vec3::Y * 0.9,
-            height_cut: c.height_cut && curr.focus_is_player,
+            height_cut: c.height_cut && cut,
             cut_height: feet.y + c.cut_above,
             cut_radius: c.cut_radius,
-            fade: c.fade && curr.focus_is_player,
+            fade: c.fade && cut,
             fade_radius: c.fade_radius,
             // Low cameras look through walls: cut away everything in front of the player.
-            front_cut: if c.front_cut && curr.focus_is_player && rig.current().tilt < c.front_cut_below { 0.9 } else { 0.0 },
+            front_cut: if c.front_cut && cut && rig.current().tilt < c.front_cut_below { 0.9 } else { 0.0 },
         };
         // The haze lies on the ground the player stands on.
         scene.post.haze_base = feet.y;

@@ -28,10 +28,18 @@ pub struct DistrictDef {
     pub landmark: Vec<Landmark>,
     #[serde(default)]
     pub freeway: Vec<Freeway>,
-    #[serde(default)]
-    pub hill: Vec<Hill>,
     /// Rows of characters, north first.
     pub map: String,
+    /// Ground heights, one character per map cell (`0`-`9`, then `a`-`z`), in steps of
+    /// `terrain_step` metres; none: flat.
+    #[serde(default)]
+    pub terrain: Option<String>,
+    #[serde(default = "four")]
+    pub terrain_step: f32,
+}
+
+fn four() -> f32 {
+    4.0
 }
 
 /// What a map character means: a zone or a road class.
@@ -144,6 +152,9 @@ pub struct Landmark {
     /// The map icon (`bank`, `police`, `hospital`, `gun`...).
     #[serde(default)]
     pub blip: String,
+    /// Level the terrain under it (a pad on a slope).
+    #[serde(default)]
+    pub level: bool,
 }
 
 /// An elevated freeway alignment.
@@ -171,20 +182,4 @@ pub struct Ramp {
     /// Where it leaves the freeway and where it lands (map cell coordinates).
     pub from: [f32; 2],
     pub to: [f32; 2],
-}
-
-/// Raised ground.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Hill {
-    /// Map cell rectangle, inclusive.
-    pub cells: [[i32; 2]; 2],
-    /// Height at the top (m) and how many cells it takes to fall back to 0.
-    pub height: f32,
-    #[serde(default = "three")]
-    pub falloff: f32,
-}
-
-fn three() -> f32 {
-    3.0
 }

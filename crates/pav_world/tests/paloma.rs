@@ -15,8 +15,20 @@ fn paloma_bay_builds() {
     let ms = t.elapsed().as_millis();
     let (chunks, items) = city.stats();
     eprintln!("Paloma Bay: {chunks} chunks, {items} items, {} buildings, built in {ms} ms", city.buildings.len());
-    assert_eq!(city.chunk_bounds.0, glam::IVec2::new(-16, -16));
+    assert_eq!(city.chunk_bounds.0, glam::IVec2::new(-16, -20));
     assert_eq!(city.chunk_bounds.1, glam::IVec2::new(15, 15));
+    // The hills rise to the north; the city stays flat.
+    let hills = city.terrain.max_height();
+    assert!((35.0..70.0).contains(&hills), "hills top out at {hills} m");
+    assert_eq!(city.terrain.height_at(glam::Vec2::new(-148.0, -225.0)), 0.0, "Sunset Row is flat");
+    for (name, x, z) in [
+        ("lookout", -248.0, -584.0),
+        ("lookout drive", -200.0, -584.0),
+        ("mirador drive", -100.0, -488.0),
+        ("sign", -56.0, -620.0),
+    ] {
+        eprintln!("ground at {name}: {:.1} m", city.ground_y(glam::Vec2::new(x, z)));
+    }
     assert!(chunks >= 1000, "nearly every chunk has something: {chunks}");
     assert!(city.buildings.len() > 300, "{} buildings", city.buildings.len());
     // The same file builds the same city.
@@ -29,7 +41,7 @@ fn paloma_bay_builds() {
     assert_eq!(format!("{:?}", a.blocks), format!("{:?}", b.blocks));
     // The map picture.
     let m = &city.map;
-    assert_eq!((m.width, m.height), (1024, 1024));
+    assert_eq!((m.width, m.height), (1024, 1152));
     if std::env::var("CITYMAP").is_ok() {
         let f = std::fs::File::create(concat!(env!("CARGO_MANIFEST_DIR"), "/../../out/citymap.png")).unwrap();
         let mut e = png::Encoder::new(std::io::BufWriter::new(f), m.width, m.height);

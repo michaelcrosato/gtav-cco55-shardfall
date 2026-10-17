@@ -27,6 +27,7 @@ pub mod pad;
 pub mod player;
 pub mod protagonists;
 pub mod settings;
+pub mod views;
 pub mod world;
 
 use camera::{Look, OrbitCam};
@@ -84,6 +85,8 @@ pub struct Freeway {
     /// Seconds since free roam began (the first tip shows for a while).
     pub roam_age: f32,
     pub quit: bool,
+    /// A reference view's still camera (`freeway/view/<name>`).
+    pub view: Option<views::View>,
     /// The district (rebuilt from its file when missing, e.g. after loading a snapshot; a
     /// cache, so not part of the state).
     #[serde(skip)]
@@ -95,10 +98,18 @@ pub struct Freeway {
 /// Builds a scene of the game: Paloma Bay with the frontend (or straight into play).
 pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
     let mode = rest.unwrap_or("").to_string();
-    let city = world::build_scene(sim)?;
+    let view = match mode.strip_prefix("view/") {
+        Some(name) => Some(views::find(name)?),
+        None => None,
+    };
+    let city = match &view {
+        Some(v) => world::build_scene(sim, Vec2::new(v.target.x, v.target.z), &[v.eye, v.target])?,
+        None => world::build_scene(sim, world::flat(world::SPAWN), &[])?,
+    };
     let mut front = Front::default();
     front.page = match mode.as_str() {
         "roam" | "dev" => Page::Play,
+        _ if view.is_some() => Page::Play,
         "gallery" => {
             front.back = Page::Title;
             Page::Gallery
@@ -107,8 +118,8 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         _ => Page::Boot,
     };
     let mut cam = OrbitCam::default();
-    // The player starts facing south: look over their shoulder.
-    cam.face(std::f32::consts::PI);
+    // Look east along Sunset Row from the start.
+    cam.face(std::f32::consts::FRAC_PI_2);
     let game = Freeway {
         mode,
         time: 0.0,
@@ -130,6 +141,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         next_note: 1,
         roam_age: 0.0,
         quit: false,
+        view,
         city: Some(city),
         settings_json: None,
     };
@@ -217,6 +229,9 @@ impl Freeway {
 
     /// The menus show the city from a drone; play uses the orbit camera.
     fn drone_view(&self) -> bool {
+        if self.view.is_some() {
+            return false;
+        }
         match self.front.page {
             Page::Boot | Page::Title | Page::Main | Page::About => true,
             Page::Settings => self.front.back != Page::Pause,
@@ -226,6 +241,9 @@ impl Freeway {
 
     /// The camera for this page.
     fn camera(&self) -> CameraIntent {
+        if let Some(v) = &self.view {
+            return v.camera();
+        }
         if self.drone_view() { camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0) } else { self.cam.intent() }
     }
 
@@ -283,6 +301,9 @@ impl Game for Freeway {
             let c = camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0);
             sim.state.world.interest.push(c.target);
         }
+        if let Some(v) = &self.view {
+            sim.state.world.interest.extend_from_slice(&[v.eye, v.target]);
+        }
         self.host_cmds(input);
         let feet = Self::feet(sim);
         let mut ctx = Ctx {
@@ -325,7 +346,7 @@ impl Game for Freeway {
                 self.cam.update(&InputFrame::default(), feet, look, real);
             } else {
                 self.cam.update(input, feet, look, real);
-                if let Some(id) = sim.state.player {
+                if let (Some(id), None) = (sim.state.player, &self.view) {
                     out.insert(id, player::on_foot(input, &self.cam));
                 }
             }

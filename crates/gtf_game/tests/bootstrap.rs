@@ -21,6 +21,20 @@ fn every_freeway_scene_builds_and_steps() {
 }
 
 #[test]
+fn every_reference_view_loads_with_its_camera() {
+    let views = gtf_game::views::all().unwrap();
+    assert!(views.len() >= 6, "the six reference views of PLAN §7.2");
+    for v in views {
+        let scene = format!("freeway/view/{}", v.name);
+        let mut s = sim(&scene, 1);
+        s.run(10, &InputFrame::default());
+        let cam = s.frame().present.as_ref().and_then(|p| p.camera.clone()).unwrap_or_else(|| panic!("{scene}: no camera"));
+        assert!((cam.eye - v.eye).length() < 1e-3, "{scene}: the camera sits at the view's eye");
+    }
+    assert!(Sim::new("freeway/view/nowhere", 1).is_err(), "an unknown view is an error");
+}
+
+#[test]
 fn snapshots_rewind_and_replays_are_exact() {
     let mut s = sim("freeway/roam", 3);
     let walk = InputFrame { move_dir: glam::Vec2::new(0.6, -0.4), ..Default::default() };

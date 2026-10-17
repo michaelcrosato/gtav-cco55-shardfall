@@ -12,7 +12,8 @@ use pav_core::zones::{Label, LabelMode};
 
 use crate::def::{DistrictDef, RoadClass};
 use crate::grid::{Cell, DIRS, Grid};
-use crate::ground::{LOT_Y, SIDEWALK};
+use crate::ground::{LOT_Y, ROAD_Y, SIDEWALK};
+use crate::terrain::Terrain;
 use crate::{Out, rng};
 
 fn decor(shape: Shape, pos: Vec3, rot: Quat, color: &str) -> Decor {
@@ -120,12 +121,99 @@ fn billboard(at: Vec3, toward: Vec3, text: &str, out: &mut Out) {
     });
 }
 
-pub fn build(def: &DistrictDef, grid: &Grid, out: &mut Out) {
+/// A low round shrub (chaparral on the hills).
+fn shrub(at: Vec3, r: &mut Rng, out: &mut Vec<Decor>) {
+    let rad = r.range(0.7, 1.5);
+    let green = ["#56653a", "#4b5a34", "#66713f", "#5b5f39"][r.below(4) as usize];
+    let mut s = decor(Shape::Sphere { radius: rad }, at + Vec3::Y * rad * 0.55, Quat::IDENTITY, green);
+    s.sway = Sway::Leaves;
+    out.push(s);
+}
+
+/// Buildings' footprints by map cell (to keep trees out of houses on the hills).
+fn footprints(grid: &Grid, out: &Out) -> std::collections::BTreeMap<(i32, i32), Vec<(Vec2, Vec2)>> {
+    let mut m: std::collections::BTreeMap<(i32, i32), Vec<(Vec2, Vec2)>> = Default::default();
+    for b in &out.buildings {
+        let (a, z) = (grid.cell_of(b.min), grid.cell_of(b.max));
+        for cz in a.y..=z.y {
+            for cx in a.x..=z.x {
+                m.entry((cx, cz)).or_default().push((b.min - Vec2::splat(1.2), b.max + Vec2::splat(1.2)));
+            }
+        }
+    }
+    m
+}
+
+/// Dressing on the hills: trees and shrubs on the slopes, lamps along the hill roads.
+fn hills(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut Out) {
+    let taken = footprints(grid, out);
+    let cs = grid.cell;
+    for z in 0..grid.h {
+        for x in 0..grid.w {
+            let c = IVec2::new(x, z);
+            if !terrain.is_terrain(c) {
+                continue;
+            }
+            let lo = grid.corner(c);
+            let ground = |p: Vec2, y0: f32| Vec3::new(p.x, y0 + terrain.height_at(p), p.y);
+            match grid.at(c).unwrap() {
+                Cell::Zone(zi) => {
+                    if grid.landmark_at(c).is_some() {
+                        continue;
+                    }
+                    let rules = &def.zones[&grid.zones[zi as usize]];
+                    let trees = rules.props.get("tree").copied().unwrap_or(0.0);
+                    if trees <= 0.0 {
+                        continue;
+                    }
+                    let mut r = rng(def.seed, 0x4111, x, z);
+                    let near = taken.get(&(x, z));
+                    let free =
+                        |p: Vec2| near.is_none_or(|v| !v.iter().any(|(a, b)| p.x > a.x && p.y > a.y && p.x < b.x && p.y < b.y));
+                    let n = (trees * 0.5).round() as i32 + 2;
+                    for _ in 0..n {
+                        let p = lo + Vec2::new(r.range(1.5, cs - 1.5), r.range(1.5, cs - 1.5));
+                        if !free(p) {
+                            continue;
+                        }
+                        if r.f32() < 0.35 {
+                            tree(ground(p, LOT_Y - 0.1), &mut r, &mut out.decor);
+                        } else {
+                            shrub(ground(p, LOT_Y - 0.2), &mut r, &mut out.decor);
+                        }
+                    }
+                }
+                Cell::Road(_) => {
+                    // A lamp every other cell on alternating sides, at the road's edge.
+                    if (x + z) % 2 != 0 {
+                        continue;
+                    }
+                    for (i, d) in DIRS.iter().enumerate() {
+                        if grid.road(c + *d).is_some() || (x / 2 + i as i32) % 2 != 0 {
+                            continue;
+                        }
+                        let inward = -Vec3::new(d.x as f32, 0.0, d.y as f32);
+                        let (a, b) = side(lo, cs, i);
+                        let p = (a + b) * 0.5 + Vec2::new(inward.x, inward.z) * 0.5;
+                        lamp(ground(p, ROAD_Y), inward, &mut out.decor);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut Out) {
+    hills(def, grid, terrain, out);
     let cs = grid.cell;
     for z in 0..grid.h {
         for x in 0..grid.w {
             let c = IVec2::new(x, z);
             let lo = grid.corner(c);
+            if terrain.is_terrain(c) {
+                continue;
+            }
             match grid.at(c).unwrap() {
                 Cell::Road(class) if class != RoadClass::Path && class != RoadClass::Alley && class != RoadClass::Channel => {
                     // Each sidewalk edge, dressed by the zone behind it.

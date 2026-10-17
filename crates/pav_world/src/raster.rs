@@ -7,12 +7,13 @@ use pav_core::present::MapImage;
 use crate::Building;
 use crate::def::{DistrictDef, RoadClass};
 use crate::grid::{Cell, Grid};
+use crate::terrain::Terrain;
 
 fn rgb(hex: u32) -> [u8; 4] {
     [(hex >> 16) as u8, (hex >> 8) as u8, hex as u8, 255]
 }
 
-pub fn draw(grid: &Grid, buildings: &[Building], def: &DistrictDef) -> MapImage {
+pub fn draw(grid: &Grid, terrain: &Terrain, buildings: &[Building], def: &DistrictDef) -> MapImage {
     let mpp = 1.0;
     let w = (grid.w as f32 * grid.cell / mpp) as u32;
     let h = (grid.h as f32 * grid.cell / mpp) as u32;
@@ -34,9 +35,23 @@ pub fn draw(grid: &Grid, buildings: &[Building], def: &DistrictDef) -> MapImage 
                     "grass" => rgb(0x2c4a2e),
                     "sand" => rgb(0x7d6f50),
                     "water" => rgb(0x1b3b5a),
+                    "brush" => rgb(0x2a3324),
                     _ => land,
                 },
                 None => land,
+            };
+            // Hill shading from the north-west on slopes.
+            let color = if terrain.is_terrain(c) {
+                let n = terrain.normal_at(p);
+                let k = (1.0f32 + (n.x * -0.55 + n.z * -0.55) * 2.2).clamp(0.6, 1.45);
+                [
+                    (color[0] as f32 * k).min(255.0) as u8,
+                    (color[1] as f32 * k).min(255.0) as u8,
+                    (color[2] as f32 * k).min(255.0) as u8,
+                    255,
+                ]
+            } else {
+                color
             };
             let i = ((y * w + x) * 4) as usize;
             px[i..i + 4].copy_from_slice(&color);

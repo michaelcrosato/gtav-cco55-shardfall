@@ -36,14 +36,17 @@ pub fn city() -> Result<Arc<City>> {
     Ok(city)
 }
 
-/// Builds the city scene: hands the simulation the district, loads the start area and puts the
-/// player on the sidewalk.
-pub fn build_scene(sim: &mut Sim) -> Result<Arc<City>> {
+/// Builds the city scene: hands the simulation the district, loads the area around `at` (the
+/// start, or a view's target and eye) and puts the player on the ground at `at`.
+pub fn build_scene(sim: &mut Sim, at: Vec2, also: &[Vec3]) -> Result<Arc<City>> {
     let city = city()?;
-    sim.state.spawn = SPAWN;
-    sim.state.focus = SPAWN;
+    let spawn = Vec3::new(at.x, city.ground_y(at) + 0.05, at.y);
+    sim.state.spawn = spawn;
+    sim.state.focus = spawn;
     sim.set_region_provider(city.clone(), STREAM);
+    sim.state.world.interest.extend_from_slice(also);
     sim.stream_now();
+    sim.state.world.interest.clear();
     sim.spawn_player();
     Ok(city)
 }
