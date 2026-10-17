@@ -84,6 +84,10 @@ pub struct HudInput<'a> {
     pub map_blips: Vec<Blip>,
     /// The GPS route on the radar (map points from the player on).
     pub route: Vec<Vec2>,
+    /// Health and armour (0..1), the weapon's magazine and reserve, the reticle while aiming.
+    pub vitals: (f32, f32),
+    pub ammo: Option<(u32, u32)>,
+    pub crosshair: Option<pav_core::present::Crosshair>,
 }
 
 pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
@@ -100,12 +104,13 @@ pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
             cones: Vec::new(),
             circles: Vec::new(),
         }),
-        vitals: Some(Vitals { health: 1.0, armor: 0.5, ability: 0.8, ability_color: Color::hex("#ffc145") }),
+        vitals: Some(Vitals { health: h.vitals.0, armor: h.vitals.1, ability: 0.8, ability_color: Color::hex("#ffc145") }),
         money: Some(Money { amount: h.money.0, delta: h.money.1, delta_age: h.money.2 }),
         weapon: armed.then(|| {
             let (name, icon, _) = WEAPONS[h.weapon];
-            WeaponHud { name: name.into(), icon: icon.into(), clip: Some(12), reserve: Some(48) }
+            WeaponHud { name: name.into(), icon: icon.into(), clip: h.ammo.map(|a| a.0), reserve: h.ammo.map(|a| a.1) }
         }),
+        crosshair: h.crosshair.clone(),
         objective: Some("Explore Paloma Bay. Hold ~btn:l1~ for the weapon wheel.".into()),
         ..Default::default()
     };

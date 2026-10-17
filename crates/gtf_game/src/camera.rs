@@ -20,8 +20,8 @@ pub const AIM_DISTANCE: f32 = 2.0;
 pub const AIM_SHOULDER: f32 = 0.65;
 pub const AIM_FOV: f32 = 45.0;
 /// How far above the feet the camera's target sits on foot and aiming (m).
-const FOOT_LIFT: f32 = 0.65;
-const AIM_LIFT: f32 = 1.2;
+pub const FOOT_LIFT: f32 = 0.65;
+pub const AIM_LIFT: f32 = 1.2;
 /// Sprinting widens the view by this much (degrees).
 pub const SPRINT_FOV: f32 = 5.0;
 /// Seconds without look input before the camera swings back behind a moving player.

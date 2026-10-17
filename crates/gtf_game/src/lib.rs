@@ -20,6 +20,7 @@ use serde_json::json;
 pub mod about;
 pub mod ambience;
 pub mod camera;
+pub mod combat;
 pub mod content;
 pub mod daytime;
 pub mod frontend;
@@ -97,6 +98,9 @@ pub struct Freeway {
     pub sky: daytime::Sky,
     /// Sprint stamina and crouch.
     pub foot: player::Foot,
+    /// The player's weapons and vitals, everyone's health.
+    #[serde(default)]
+    pub combat: combat::Combat,
     /// People on foot around the player.
     #[serde(default)]
     pub peds: peds::Peds,
@@ -181,6 +185,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         foot: player::Foot::default(),
         radio: radio::Radio::default(),
         peds: peds::Peds::default(),
+        combat: combat::Combat::default(),
         tour: (mode_is_tour).then(|| Arc::new(tour::Tour::new(&city))),
         gps: gps::Gps::default(),
         city: Some(city),
@@ -224,9 +229,10 @@ impl Freeway {
         }
     }
 
-    /// World commands (also typed by tests and tools): `time HH:MM`, `clock <speed>`,
-    /// `weather <name>` (held until changed), `weather auto`.
-    fn world_cmds(&mut self, input: &InputFrame) {
+    /// World commands (also typed by tests, tools and bots): `time HH:MM`, `clock <speed>`,
+    /// `weather <name>` (held until changed), `weather auto`, `radio <station>|off|next|prev`,
+    /// `weapon <id or icon>`.
+    fn world_cmds(&mut self, sim: &mut Sim, input: &InputFrame) {
         let Ok(world) = daytime::def() else { return };
         for c in &input.cmds {
             let mut w = c.split_whitespace();
@@ -240,6 +246,13 @@ impl Freeway {
                     _ => log::warn!("clock: '{k}' is not a speed (0-1000)"),
                 },
                 (Some("radio"), Some(arg)) => self.radio_cmd(arg),
+                (Some("target"), Some(m)) => self.target_cmd(sim, m.parse().unwrap_or(8.0)),
+                (Some("weapon"), Some(arg)) => {
+                    match combat::def().ok().and_then(|d| d.weapon.iter().position(|w| w.id == arg || w.icon == arg)) {
+                        Some(i) => self.weapon = i,
+                        None => log::warn!("weapon: no weapon '{arg}'"),
+                    }
+                }
                 (Some("weather"), Some("auto")) => self.sky.held = false,
                 (Some("weather"), Some(name)) => {
                     if let Err(e) = self.sky.set_weather(&world, name, true) {
@@ -249,6 +262,18 @@ impl Freeway {
                 _ => {}
             }
         }
+    }
+
+    /// `target <metres>`: a stranger standing that far along the camera's view (the Proving
+    /// Grounds' range, bots and checks).
+    fn target_cmd(&mut self, sim: &mut Sim, ahead: f32) {
+        let (Some(id), cam) = (sim.state.player, self.cam.intent()) else { return };
+        let Some(feet) = sim.feet(id) else { return };
+        let f = (cam.target - cam.eye).normalize_or(Vec3::NEG_Z);
+        let flat = Vec3::new(f.x, 0.0, f.z).normalize_or(Vec3::NEG_Z);
+        let at = feet + flat * ahead.clamp(1.0, 60.0);
+        let look = pav_core::puppet::PuppetDef { shirt: "#3a5a40".into(), ..Default::default() };
+        sim.spawn_npc("target", at, (-flat.x).atan2(-flat.z), look, None, None);
     }
 
     /// `radio <station id>|off|next|prev`: tunes, and shows the dial card.
@@ -378,7 +403,7 @@ impl Game for Freeway {
             }
         }
         self.host_cmds(input);
-        self.world_cmds(input);
+        self.world_cmds(sim, input);
         if let Ok(world) = daytime::def() {
             self.sky.step(&world, dt, &mut sim.state.rng, events);
         }
@@ -438,10 +463,34 @@ impl Game for Freeway {
                 self.cam.update(input, feet, look, moving, real, &hit);
                 if let (Some(id), None, false) = (sim.state.player, &self.view, self.mode == "tour") {
                     let (frame, haste) = self.foot.input(input, &self.cam, 50.0, dt);
+                    let wdef = combat::def().ok();
+                    let gun = wdef.as_ref().and_then(|d| d.weapon.get(self.weapon)).is_some_and(|w| w.kind == combat::Kind::Gun);
+                    let cam = self.cam.intent();
+                    let look = (cam.target - cam.eye).normalize_or(Vec3::NEG_Z);
                     if let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut()) {
                         c.haste = haste;
+                        // Aiming a gun turns the body to the aim (strafing).
+                        c.face = (moving.aiming && gun).then(|| look.x.atan2(look.z));
                     }
                     out.insert(id, frame);
+                    // The weapon in hand: fire, reload, melee; the people around react.
+                    if let Some(wdef) = wdef {
+                        let facing = sim.state.entities.get(id).and_then(|e| e.character.as_ref()).map_or(0.0, |c| c.facing);
+                        let shooter = combat::Shooter { id, feet, facing, camera: &cam, moving: moving.dir.length() > 0.3 };
+                        let res = self.combat.tick(sim, &wdef, self.weapon, input, &shooter, &mut self.cam, dt, events);
+                        if let Some(city) = self.city.clone() {
+                            if let Some(at) = res.gunfire {
+                                self.peds.scare(sim, &city.walk, at, 40.0);
+                            }
+                            for &(_, at) in &res.hurt {
+                                self.peds.scare(sim, &city.walk, at, 15.0);
+                            }
+                            for &(who, at) in &res.killed {
+                                self.peds.forget(who);
+                                self.peds.scare(sim, &city.walk, at, 25.0);
+                            }
+                        }
+                    }
                 }
             }
             // The people around the player (not on the streaming tour's flight).
@@ -457,6 +506,7 @@ impl Game for Freeway {
         } else {
             self.wheel = None;
         }
+        self.combat.update(sim, dt);
         events.extend(sounds.into_iter().map(|cue| SimEvent::Sound { cue: cue.into(), pos: None, gain: 1.0, pitch: 1.0 }));
         out
     }
@@ -537,6 +587,12 @@ impl Game for Freeway {
                 help,
                 map_blips: blips.clone(),
                 route: self.gps.minimap(feet),
+                vitals: (self.combat.health / combat::MAX_HEALTH, self.combat.armor / combat::MAX_ARMOR),
+                ammo: self.combat.mag.get(self.weapon).map(|&m| (m, self.combat.reserve.get(self.weapon).copied().unwrap_or(0))),
+                crosshair: combat::def()
+                    .ok()
+                    .and_then(|d| d.weapon.get(self.weapon).cloned())
+                    .and_then(|w| self.combat.crosshair(&w, self.combat.aiming, false)),
             });
             ui.hud = Some(hud);
             ui.help = help;
@@ -573,6 +629,7 @@ impl Game for Freeway {
         if let Some(c) = &self.city {
             world::signal_lamps(c, self.camera().target, self.time, &mut draw.prims);
         }
+        self.combat.draw(&mut draw);
         let cam = self.camera();
         let view = self.look_now();
         // The beds: where the ears are, who is near, the weather and the hour.

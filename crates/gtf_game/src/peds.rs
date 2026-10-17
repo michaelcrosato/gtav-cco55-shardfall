@@ -110,6 +110,9 @@ pub enum Doing {
     /// At a crossing, waiting for the walk light.
     Wait,
     Linger,
+    /// Running away from a threat (gunfire, a fight), or crouched where it could not get away.
+    Flee,
+    Cower,
 }
 
 /// One person.
@@ -221,6 +224,15 @@ impl Peds {
     fn step(&mut self, i: usize, sim: &mut Sim, def: &PedsDef, m: &Moment, pos: Vec2) -> InputFrame {
         let walk = &m.city.walk;
         let p = &mut self.list[i];
+        if p.doing == Doing::Cower {
+            p.timer -= m.dt;
+            if p.timer <= 0.0 {
+                p.doing = Doing::Linger;
+                p.timer = 1.0;
+                p.run = def.archetype[p.arch as usize].run;
+            }
+            return InputFrame { held: buttons::CROUCH, ..Default::default() };
+        }
         if p.doing == Doing::Linger {
             p.timer -= m.dt;
             if p.timer > 0.0 {
@@ -244,13 +256,18 @@ impl Peds {
         }
         if p.next >= p.path.len() {
             let a = &def.archetype[p.arch as usize];
+            // A flight ends in a breather, then the walk resumes at the usual pace.
+            p.run = a.run;
             p.doing = Doing::Linger;
             p.timer = sim.state.rng.range(4.0, 16.0) * if a.run { 0.3 } else { 1.0 };
             return InputFrame::default();
         }
         let w = p.path[p.next];
-        // A signalled crossing ahead: step off the kerb only on the walk light.
-        if let (Walk::Crossing { junction, ns }, false) = (walk.at(w), matches!(walk.at(pos), Walk::Crossing { .. })) {
+        let fleeing = p.doing == Doing::Flee;
+        // A signalled crossing ahead: step off the kerb only on the walk light (unless fleeing).
+        if let (Walk::Crossing { junction, ns }, false, false) =
+            (walk.at(w), matches!(walk.at(pos), Walk::Crossing { .. }), fleeing)
+        {
             let plan = m.city.lanes.junctions.get(junction as usize).and_then(|j| j.signal.as_ref());
             if plan.is_some_and(|s| s.walk(ns, m.time).is_none()) {
                 p.doing = Doing::Wait;
@@ -259,7 +276,9 @@ impl Peds {
                 return InputFrame::default();
             }
         }
-        p.doing = Doing::Walk;
+        if !fleeing {
+            p.doing = Doing::Walk;
+        }
         // Stuck: little progress for four seconds means a new destination.
         p.check_t += m.dt;
         if p.check_t > 4.0 {
@@ -371,6 +390,52 @@ impl Peds {
         });
         self.spawned += 1;
         true
+    }
+
+    /// A threat at `at`: everyone within `radius` runs away from it along the walk tiles (or
+    /// cowers where there is nowhere to go).
+    pub fn scare(&mut self, sim: &mut Sim, walk: &pav_world::walk::WalkMap, at: Vec3, radius: f32) {
+        let threat = Vec2::new(at.x, at.z);
+        for p in &mut self.list {
+            if matches!(p.doing, Doing::Flee | Doing::Cower) {
+                continue;
+            }
+            let Some(feet) = sim.feet(p.id) else { continue };
+            let pos = Vec2::new(feet.x, feet.z);
+            if pos.distance(threat) > radius {
+                continue;
+            }
+            let away = (pos - threat).normalize_or(Vec2::X);
+            let rng = &mut sim.state.rng;
+            let mut route = Vec::new();
+            for _ in 0..6 {
+                let a = away.y.atan2(away.x) + (rng.f32() - 0.5) * 2.4;
+                let to = pos + Vec2::new(a.cos(), a.sin()) * rng.range(35.0, 80.0);
+                let t = walk.tile_of(to);
+                if matches!(walk.get(t), Walk::Sidewalk | Walk::Path | Walk::Open) {
+                    route = walk.path(pos, walk.centre(t), 4000);
+                    if route.len() >= 2 {
+                        break;
+                    }
+                }
+            }
+            if route.len() >= 2 {
+                p.path = route;
+                p.next = 1;
+                p.doing = Doing::Flee;
+                p.run = true;
+            } else {
+                p.doing = Doing::Cower;
+                p.timer = rng.range(6.0, 12.0);
+            }
+            p.check = pos;
+            p.check_t = 0.0;
+        }
+    }
+
+    /// Someone left the crowd (killed, arrested): no longer walked by the manager.
+    pub fn forget(&mut self, id: EntityId) {
+        self.list.retain(|p| p.id != id);
     }
 
     /// How many are doing what: (walking, waiting at a crossing, lingering).
