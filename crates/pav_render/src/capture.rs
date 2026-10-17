@@ -27,6 +27,40 @@ pub fn render_to_rgba(renderer: &mut Renderer, scene: &Scene, width: u32, height
     read_texture(&device, &queue, encoder, &texture, width, height)
 }
 
+/// The view format overlays draw into on a capture: the same texels as [`CAPTURE_FORMAT`] seen
+/// without sRGB conversion, as the window's swapchain is, so egui (which blends in gamma space)
+/// looks the same in captures as in the window.
+pub const OVERLAY_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+/// Renders `scene`, then lets `overlay` record a pass over it (the UI kit), and returns RGBA8
+/// pixels. The overlay gets the device, queue, encoder and an [`OVERLAY_FORMAT`] view.
+pub fn render_to_rgba_with(
+    renderer: &mut Renderer,
+    scene: &Scene,
+    width: u32,
+    height: u32,
+    overlay: impl FnOnce(&wgpu::Device, &wgpu::Queue, &mut wgpu::CommandEncoder, &wgpu::TextureView),
+) -> Result<Vec<u8>> {
+    let device = renderer.device().clone();
+    let queue = renderer.queue().clone();
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("capture"),
+        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: CAPTURE_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[OVERLAY_FORMAT],
+    });
+    let view = texture.create_view(&Default::default());
+    let overlay_view = texture.create_view(&wgpu::TextureViewDescriptor { format: Some(OVERLAY_FORMAT), ..Default::default() });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("capture") });
+    renderer.render(&mut encoder, scene, &view, CAPTURE_FORMAT, (width, height));
+    overlay(&device, &queue, &mut encoder, &overlay_view);
+    read_texture(&device, &queue, encoder, &texture, width, height)
+}
+
 /// Copies an RGBA8 texture back to the CPU (submits `encoder` first).
 pub fn read_texture(
     device: &wgpu::Device,

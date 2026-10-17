@@ -33,6 +33,10 @@ pub struct PlayShell {
     pub frame_ms: f32,
     /// The master volume last set from the game's audio scene.
     pub master: f32,
+    /// The element the pointer was over last frame.
+    hovered: Option<String>,
+    /// The 10-foot UI kit drawing the game's `UiModel`.
+    pub ui: pav_ui::Ui,
 }
 
 impl Default for PlayShell {
@@ -49,6 +53,8 @@ impl Default for PlayShell {
             fps: 60.0,
             frame_ms: 16.7,
             master: -1.0,
+            hovered: None,
+            ui: pav_ui::Ui::new(),
         }
     }
 }
@@ -81,6 +87,23 @@ impl PlayShell {
         }
         for (slot, json) in store::saves() {
             self.pending.push(format!("host.save {slot} {json}"));
+        }
+    }
+
+    /// The pointer over the game's UI: focus what it hovers (when that changes), accept what it
+    /// clicks, open the settings from the touch gear.
+    pub fn pointer(&mut self, r: &pav_ui::UiResponse) {
+        if r.hovered != self.hovered {
+            if let Some(id) = &r.hovered {
+                self.pending.push(format!("ui.focus {id}"));
+            }
+            self.hovered = r.hovered.clone();
+        }
+        if let Some(id) = &r.clicked {
+            self.pending.push(format!("ui.accept {id}"));
+        }
+        if r.gear {
+            self.pending.push("ui.gear".into());
         }
     }
 

@@ -7,6 +7,7 @@ description = "Grand Theft Freeway-BX: the game's rules and content runtime (sim
 
 [dependencies]
 pav_core.workspace = true
+pav_world.workspace = true
 glam.workspace = true
 serde.workspace = true
 serde_json.workspace = true

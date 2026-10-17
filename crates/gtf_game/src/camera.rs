@@ -99,7 +99,16 @@ impl OrbitCam {
 pub fn drone(center: Vec3, t: f32, radius: f32, height: f32) -> CameraIntent {
     let a = t * 0.06 + 0.8;
     let eye = center + Vec3::new(a.sin() * radius, height + (t * 0.21).sin() * 0.6, a.cos() * radius);
-    CameraIntent { eye, target: center + Vec3::Y * 1.2, up: Vec3::Y, fov: 42.0, near: 0.1, far: 1500.0, cut: false, shake: 0.0 }
+    CameraIntent {
+        eye,
+        target: center + Vec3::Y * (height * 0.3),
+        up: Vec3::Y,
+        fov: 42.0,
+        near: 0.5,
+        far: 2500.0,
+        cut: false,
+        shake: 0.0,
+    }
 }
 
 #[cfg(test)]

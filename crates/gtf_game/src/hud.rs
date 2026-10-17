@@ -104,7 +104,7 @@ pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
             let (name, icon, _) = WEAPONS[h.weapon];
             WeaponHud { name: name.into(), icon: icon.into(), clip: Some(12), reserve: Some(48) }
         }),
-        objective: Some("Explore the lot. Hold ~btn:l1~ for the weapon wheel.".into()),
+        objective: Some("Explore Paloma Bay. Hold ~btn:l1~ for the weapon wheel.".into()),
         ..Default::default()
     };
     let help = h.help.map(|(text, age)| Help { text: text.into(), age });

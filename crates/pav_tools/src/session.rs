@@ -12,6 +12,8 @@ pub struct Gpu {
     /// The live bridge keeps this device between requests, even when the human UI opens or
     /// closes a stage through a separate session with no GPU.
     studio_mode: pav_core::prop_preview::StudioMode,
+    /// The UI kit's offscreen renderer for `capture hud=true`, made on first use.
+    ui: Option<pav_ui::Offscreen>,
 }
 
 impl Gpu {
@@ -157,6 +159,7 @@ impl Session {
                 renderer,
                 builder: ViewBuilder::new(),
                 studio_mode: pav_core::prop_preview::StudioMode::World,
+                ui: None,
             });
         }
         Ok(self.gpu.as_mut().unwrap())
@@ -331,6 +334,40 @@ impl Session {
         }
         let scene = gpu.builder.build(&frame, &frame, 1.0, &camera, width as f32 / height as f32, &view, focus);
         pav_render::capture::render_to_rgba(&mut gpu.renderer, &scene, width, height)
+    }
+
+    /// Renders like [`Session::render`] with the running game's UI (`PlayFrame::ui`, drawn by
+    /// `pav_ui`) over the picture. The flag is false when the scene publishes no `PlayFrame`
+    /// (then the picture has no UI). Headless: no perf readout, PlayStation glyphs for `Auto`.
+    pub fn render_hud(&mut self, width: u32, height: u32) -> Result<(Vec<u8>, bool)> {
+        let frame = self.sim.frame();
+        let Some(play) = frame.present.clone() else {
+            return Ok((self.render(width, height)?, false));
+        };
+        let focus = frame.focus;
+        self.camera.snap(focus);
+        let camera = self.camera.clone();
+        let view = self.view_for(&frame);
+        let events = std::mem::take(&mut self.events);
+        let gpu = self.gpu()?;
+        gpu.prepare_frame(&frame);
+        if !frame.studio_active() {
+            gpu.builder.add_events(&events);
+        }
+        let scene = gpu.builder.build(&frame, &frame, 1.0, &camera, width as f32 / height as f32, &view, focus);
+        let host = pav_ui::HostInfo {
+            device: pav_core::input::Device::PlayStation,
+            keys: play.app.keys.as_deref(),
+            view_proj: Some(scene.camera.proj * scene.camera.view),
+            ..Default::default()
+        };
+        let Gpu { headless, renderer, ui, .. } = gpu;
+        let ui = ui.get_or_insert_with(|| pav_ui::Offscreen::new(&headless.device, pav_render::capture::OVERLAY_FORMAT));
+        let rgba =
+            pav_render::capture::render_to_rgba_with(renderer, &scene, width, height, |device, queue, encoder, target| {
+                ui.render(device, queue, encoder, target, (width, height), &play.ui, &host, play.map.as_deref());
+            })?;
+        Ok((rgba, true))
     }
 
     /// Renders `frame`, a stage the simulation does not hold (a material swatch), from the

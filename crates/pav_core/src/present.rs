@@ -28,7 +28,80 @@ pub struct PlayFrame {
     /// `version` means a new picture).
     #[serde(skip)]
     pub map: Option<Arc<MapImage>>,
+    /// The whole world in low detail, drawn wherever streaming has not loaded a region (the
+    /// same `Arc` every tick).
+    #[serde(skip)]
+    pub far: Option<Arc<FarView>>,
     pub app: AppRequests,
+}
+
+/// A low-detail picture of a big world (a city's building masses, ground and water): one mesh
+/// per 32 m streaming chunk, so the view can draw exactly the chunks that are not loaded.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FarView {
+    pub chunks: Vec<((i32, i32), Arc<FarMesh>)>,
+    /// Changes when the meshes do.
+    pub version: u64,
+}
+
+/// A vertex-coloured triangle mesh in world space, and its bounds.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FarMesh {
+    pub positions: Vec<[f32; 3]>,
+    pub normals: Vec<[f32; 3]>,
+    pub colors: Vec<[f32; 3]>,
+    pub indices: Vec<u32>,
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
+impl FarMesh {
+    /// Adds an axis-aligned box's top and four sides (bottoms are never seen from afar).
+    pub fn add_box(&mut self, min: Vec3, max: Vec3, color: [f32; 3]) {
+        let (a, b) = (min, max);
+        let faces: [([f32; 3], [Vec3; 4]); 5] = [
+            (
+                [0.0, 1.0, 0.0],
+                [Vec3::new(a.x, b.y, a.z), Vec3::new(a.x, b.y, b.z), Vec3::new(b.x, b.y, b.z), Vec3::new(b.x, b.y, a.z)],
+            ),
+            (
+                [0.0, 0.0, -1.0],
+                [Vec3::new(a.x, a.y, a.z), Vec3::new(a.x, b.y, a.z), Vec3::new(b.x, b.y, a.z), Vec3::new(b.x, a.y, a.z)],
+            ),
+            (
+                [0.0, 0.0, 1.0],
+                [Vec3::new(b.x, a.y, b.z), Vec3::new(b.x, b.y, b.z), Vec3::new(a.x, b.y, b.z), Vec3::new(a.x, a.y, b.z)],
+            ),
+            (
+                [-1.0, 0.0, 0.0],
+                [Vec3::new(a.x, a.y, b.z), Vec3::new(a.x, b.y, b.z), Vec3::new(a.x, b.y, a.z), Vec3::new(a.x, a.y, a.z)],
+            ),
+            (
+                [1.0, 0.0, 0.0],
+                [Vec3::new(b.x, a.y, a.z), Vec3::new(b.x, b.y, a.z), Vec3::new(b.x, b.y, b.z), Vec3::new(b.x, a.y, b.z)],
+            ),
+        ];
+        for (n, quad) in faces {
+            self.add_quad(quad, n, color);
+        }
+    }
+
+    /// Adds a quad (corners in order) facing `n`.
+    pub fn add_quad(&mut self, quad: [Vec3; 4], n: [f32; 3], color: [f32; 3]) {
+        let i0 = self.positions.len() as u32;
+        if self.positions.is_empty() {
+            self.min = quad[0];
+            self.max = quad[0];
+        }
+        for p in quad {
+            self.positions.push(p.to_array());
+            self.normals.push(n);
+            self.colors.push(color);
+            self.min = self.min.min(p);
+            self.max = self.max.max(p);
+        }
+        self.indices.extend_from_slice(&[i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3]);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

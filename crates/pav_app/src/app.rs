@@ -297,6 +297,10 @@ impl App {
             play: Default::default(),
             settings,
         };
+        // The 10-foot UI kit's faces beside egui's own (games that present themselves use them).
+        let mut fonts = egui::FontDefinitions::default();
+        pav_ui::add_fonts(&mut fonts);
+        app.egui_ctx.set_fonts(fonts);
         if touch_screen {
             // Phones: touch controls from the start, none of the desktop's diagnostics.
             app.input.last_device = Device::Touch;
@@ -1532,10 +1536,26 @@ impl App {
         let mut game_cmds = Vec::new();
         let hook = self.play_frame.is_some();
         let dev = crate::config::get().dev_keys;
+        let play_frame = self.play_frame.clone();
+        let play_ui = &mut self.play.ui;
+        let host_info = pav_ui::HostInfo {
+            fps: self.play.fps,
+            frame_ms: self.play.frame_ms,
+            device: self.input.device_family(),
+            keys: None,
+            view_proj: Some(scene.camera.proj * scene.camera.view),
+            touch_gear: self.touch_screen && crate::config::get().touch == crate::config::TouchMode::AttractOnly,
+        };
+        let mut ui_response = pav_ui::UiResponse::default();
         let out = self.egui_ctx.run_ui(raw, |ui| {
             let ctx = ui.ctx().clone();
             if let Some(c) = &info.crash {
                 ui::crash_banner(ui, c);
+            }
+            // A game that presents itself: its whole UI, under the developer's windows.
+            if let Some(p) = &play_frame {
+                let host = pav_ui::HostInfo { keys: p.app.keys.as_deref(), ..host_info };
+                ui_response = play_ui.draw(&ctx, &p.ui, &host, p.map.as_deref());
             }
             panel_actions = panel.ui(ui, &mut root, &mut ctl, &stats);
             let free = ui.available_rect_before_wrap();
@@ -1706,6 +1726,9 @@ impl App {
         self.look_ui.save_if_dirty(false);
         for c in game_cmds {
             host.shared.command(c);
+        }
+        if hook {
+            self.play.pointer(&ui_response);
         }
         // A hook game's requests: keep saves and settings, quit, hold the pointer for mouse look.
         if let Some(play) = self.play_frame.clone() {

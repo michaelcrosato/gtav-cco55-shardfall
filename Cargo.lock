@@ -1067,6 +1067,7 @@ dependencies = [
  "glam 0.33.11",
  "log",
  "pav_core",
+ "pav_world",
  "serde",
  "serde_json",
  "toml",
@@ -2300,6 +2301,7 @@ dependencies = [
  "pav_core",
  "pav_render",
  "pav_tools",
+ "pav_ui",
  "pav_view",
  "serde",
  "serde_json",
@@ -2366,12 +2368,27 @@ dependencies = [
  "pav_audio",
  "pav_core",
  "pav_render",
+ "pav_ui",
  "pav_view",
  "png",
  "serde",
  "serde_json",
  "tobj",
  "toml",
+]
+
+[[package]]
+name = "pav_ui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "egui",
+ "egui-wgpu",
+ "glam 0.33.11",
+ "log",
+ "pav_core",
+ "pav_render",
+ "wgpu",
 ]
 
 [[package]]
@@ -2383,6 +2400,18 @@ dependencies = [
  "pav_render",
  "serde",
  "serde_json",
+ "toml",
+]
+
+[[package]]
+name = "pav_world"
+version = "0.1.0"
+dependencies = [
+ "glam 0.33.11",
+ "log",
+ "pav_core",
+ "png",
+ "serde",
  "toml",
 ]
 

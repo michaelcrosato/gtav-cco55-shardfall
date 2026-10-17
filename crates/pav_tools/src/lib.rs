@@ -27,6 +27,7 @@ pub mod preview_tools;
 pub mod reply;
 pub mod session;
 pub mod tools;
+pub mod ui_tools;
 
 pub use session::Session;
 pub use tools::{Output, TOOLS, Tool, call};

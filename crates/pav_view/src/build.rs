@@ -656,6 +656,8 @@ pub struct ViewBuilder {
     materials: Arc<Mutex<MaterialTable>>,
     /// Problems in a hook game's draw list already reported (each is printed once).
     draw_errors: HashSet<String>,
+    /// A game's far view, converted for the renderer.
+    far: crate::play::FarCache,
 }
 
 /// Shortest-arc interpolation of object poses between two frames (both sorted by id).
@@ -1286,10 +1288,11 @@ impl ViewBuilder {
                     .chain(chunk.meshes.iter())
                     .enumerate()
                     .map(|(i, t)| {
-                        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-                        for x in [t.cx as i64 as u64, t.cz as i64 as u64, chunk.version, i as u64] {
-                            h = (h ^ x).wrapping_mul(0x0100_0000_01b3);
-                        }
+                        // A well-mixed key: many regions' meshes are live at once, and a
+                        // word-wise FNV over small integers collides.
+                        let h = [t.cx as i64 as u64, t.cz as i64 as u64, chunk.version, i as u64]
+                            .iter()
+                            .fold(0x7e44_a100_0000_0001, |h, v| mix64(h ^ v));
                         (MeshKey::Custom(h), Arc::new(terrain_mesh(t)))
                     })
                     .collect();
@@ -1310,7 +1313,7 @@ impl ViewBuilder {
                 );
             }
             for l in &chunk.labels {
-                emit_label(&mut scene.texts, l, rig);
+                emit_label(&mut scene.texts, l, &scene.camera);
             }
             for z in chunk.zones.iter().filter(|z| !z.label.is_empty() || (z.kind == ZoneKind::Start && z.color.is_some())) {
                 let text = if !z.label.is_empty() { z.label.clone() } else { "START".into() };
@@ -1330,7 +1333,7 @@ impl ViewBuilder {
                     mode: LabelMode::Floor,
                     facing: Default::default(),
                 };
-                emit_label(&mut scene.texts, &label, rig);
+                emit_label(&mut scene.texts, &label, &scene.camera);
             }
             let c = &self.static_cache[key];
             scene.meshes.extend_from_slice(&c.meshes);
@@ -1358,6 +1361,11 @@ impl ViewBuilder {
                     ext: Vec3::ZERO,
                 });
             }
+        }
+        // A game's far view where nothing is loaded.
+        if let Some(far) = play.and_then(|p| p.far.as_ref()) {
+            let chunks = &curr.statics.chunks;
+            crate::play::emit_far(&mut scene, far, &mut self.far, |x, z| chunks.contains_key(&ChunkKey::Chunk(x, z)));
         }
         // Water catches up on longer gaps too (tools render a frame now and then).
         self.water_surfaces(&mut scene, curr, settings, since.min(0.5), to_sun);
@@ -1668,16 +1676,18 @@ fn emit_zone(list: &mut Vec<MeshInstance>, z: &Zone, ov: StyleOverride) {
 }
 
 /// A label as renderer text, oriented for the current camera.
-fn emit_label(out: &mut Vec<Text3d>, l: &Label, rig: &CameraRig) {
-    let (fwd, right) = rig.ground_axes();
+/// A label, turned toward the scene's camera (the rig's, or a game's own camera intent).
+fn emit_label(out: &mut Vec<Text3d>, l: &Label, cam: &rs::CameraData) {
+    let f = cam.forward;
+    let flat = Vec3::new(f.x, 0.0, f.z).normalize_or(Vec3::NEG_Z);
+    let right = flat.cross(Vec3::Y).normalize_or(Vec3::X);
     let (r, u) = match l.mode {
-        LabelMode::Floor => (right, fwd),
+        LabelMode::Floor => (right, flat),
         LabelMode::Wall => {
             let n = l.facing.dir();
             (Vec3::Y.cross(n).normalize_or(Vec3::X), Vec3::Y)
         }
         LabelMode::Billboard => {
-            let f = rig.forward();
             let r = f.cross(Vec3::Y).normalize_or(right);
             (r, r.cross(f).normalize_or(Vec3::Y))
         }
@@ -2164,6 +2174,13 @@ pub fn emit_shape(
     if emissive > 0.5 {
         lights.push(rs::PointLight { position: pos, color: color * emissive, radius: 4.0 + emissive * 2.0, shadows: false });
     }
+}
+
+/// SplitMix64's finaliser: every input bit reaches every output bit.
+fn mix64(mut z: u64) -> u64 {
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }
 
 /// Render mesh for a terrain patch (positions are in world space).

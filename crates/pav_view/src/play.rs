@@ -2,10 +2,14 @@
 //! and the things it draws from game state (markers, held items, route ribbons, tracers,
 //! decals, extra lights, world text).
 
-use glam::{Mat4, Quat, Vec3};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use glam::{Mat4, Quat, Vec3, Vec4};
 use pav_core::Color;
-use pav_core::present::{CameraIntent, DrawList, ViewIntent};
+use pav_core::present::{CameraIntent, DrawList, FarView, ViewIntent};
 use pav_render::CameraData;
+use pav_render::mesh::{MeshData, Vertex};
 use pav_render::scene::{self as rs, MeshInstance, MeshKey, Scene, Style};
 use pav_render::text::{Anchor, Text3d};
 
@@ -194,4 +198,90 @@ pub fn emit_draw(scene: &mut Scene, draw: &DrawList, cam: &CameraData, ov: Style
         });
     }
     errors
+}
+
+/// Far-view meshes already converted for the renderer: chunk → (far view version, key, data).
+#[derive(Default)]
+pub struct FarCache {
+    meshes: HashMap<(i32, i32), (u64, MeshKey, Arc<MeshData>)>,
+}
+
+/// The six planes of a view-projection (Gribb–Hartmann; depth 0..1).
+fn frustum(vp: Mat4) -> [Vec4; 6] {
+    let r = |i: usize| vp.row(i);
+    [r(3) + r(0), r(3) - r(0), r(3) + r(1), r(3) - r(1), r(2), r(3) - r(2)]
+}
+
+fn visible(planes: &[Vec4; 6], min: Vec3, max: Vec3) -> bool {
+    let c = (min + max) * 0.5;
+    let radius = (max - min).length() * 0.5;
+    planes.iter().all(|p| p.truncate().dot(c) + p.w >= -radius * p.truncate().length())
+}
+
+/// Draws the far view's chunks that streaming has not loaded (`active`) and the camera sees.
+pub fn emit_far(scene: &mut Scene, far: &FarView, cache: &mut FarCache, active: impl Fn(i32, i32) -> bool) {
+    let planes = frustum(scene.camera.proj * scene.camera.view);
+    for ((x, z), mesh) in &far.chunks {
+        if active(*x, *z) || mesh.indices.is_empty() || !visible(&planes, mesh.min, mesh.max) {
+            continue;
+        }
+        let entry = cache.meshes.entry((*x, *z)).or_insert((u64::MAX, MeshKey::Cube, Arc::new(MeshData::default())));
+        if entry.0 != far.version {
+            // Packed, not hashed: no two chunks (or versions) can share a key.
+            let h = 0xfa70_0000_0000_0000u64
+                | (((*x + 0x8000) as u64 & 0xffff) << 32)
+                | (((*z + 0x8000) as u64 & 0xffff) << 16)
+                | (far.version & 0xffff);
+            let data = MeshData {
+                vertices: mesh
+                    .positions
+                    .iter()
+                    .zip(&mesh.normals)
+                    .zip(&mesh.colors)
+                    .map(|((p, n), c)| Vertex { pos: *p, normal: *n, uv: [0.0, 0.0], color: [c[0], c[1], c[2], 1.0] })
+                    .collect(),
+                indices: mesh.indices.clone(),
+            };
+            *entry = (far.version, MeshKey::Custom(h), Arc::new(data));
+        }
+        scene.custom_meshes.push((entry.1, entry.2.clone()));
+        scene.meshes.push(MeshInstance {
+            mesh: entry.1,
+            transform: Mat4::IDENTITY,
+            color: Vec3::ONE,
+            emissive: 0.0,
+            style: Style::Cel,
+            flags: rs::flags::NO_SHADOW | rs::flags::NO_CUT,
+            group: 1,
+            material: 0,
+            ext: Vec3::ZERO,
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_frustum_keeps_what_the_camera_sees() {
+        let c = CameraIntent {
+            eye: Vec3::new(0.0, 100.0, 200.0),
+            target: Vec3::ZERO,
+            up: Vec3::Y,
+            fov: 45.0,
+            near: 0.5,
+            far: 2500.0,
+            cut: true,
+            shake: 0.0,
+        };
+        let cam = camera(None, &c, 1.0, 16.0 / 9.0, 0.0);
+        let planes = frustum(cam.proj * cam.view);
+        let b = |x: f32, z: f32| visible(&planes, Vec3::new(x - 16.0, 0.0, z - 16.0), Vec3::new(x + 16.0, 0.2, z + 16.0));
+        assert!(b(0.0, 0.0), "the target");
+        assert!(b(0.0, -400.0), "far ahead");
+        assert!(b(150.0, -300.0), "ahead to the right");
+        assert!(!b(0.0, 600.0), "behind the camera");
+        assert!(!b(2000.0, 0.0), "far to the side");
+    }
 }

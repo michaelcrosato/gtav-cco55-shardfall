@@ -115,6 +115,26 @@ pub struct Zone {
 }
 
 impl Zone {
+    /// A zone of `kind` over a box, everything else unset (generated levels).
+    pub fn new(min: Vec3, max: Vec3, kind: ZoneKind) -> Self {
+        Self {
+            min,
+            max,
+            kind,
+            course: String::new(),
+            index: 0,
+            params: BTreeMap::new(),
+            camera: None,
+            label: String::new(),
+            label_size: None,
+            color: None,
+            facing: None,
+            speed: 0.0,
+            signal: String::new(),
+            note: String::new(),
+        }
+    }
+
     /// Conveyor velocity (zero for other kinds).
     pub fn conveyor_velocity(&self) -> Vec3 {
         if self.kind == ZoneKind::Conveyor { self.facing.unwrap_or(Facing::North).dir() * self.speed } else { Vec3::ZERO }

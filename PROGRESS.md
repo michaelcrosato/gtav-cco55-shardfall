@@ -5,19 +5,19 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase:** M1 Platform in progress (2026-10-17). Landed: E2 input v2, E3 hook v2, E4
-  `pav_core::present`, E6 view (camera intent, view intent, draw list) — `40772ce`; E13 app shell
-  (controller model + key maps, mouse look, Esc/F1 routing, saves/settings/rumble requests, game
-  audio scenes), E8 part 1 (bank, loops, effects bus), `gtf_game` frontend + UI gallery + orbit
-  camera + weapon wheel + settings (uncommitted, waiting on `pav_ui`). In flight: `pav_ui` (E5,
-  a helper agent) → then wire it into `pav_app` (overlay, pointer → `ui.*`, gear, FPS readout),
-  M1 captures (gallery at 1920×1080 and 960×540, window smoke with the FPS readout), commit.
+- **Phase:** M2 City in progress (2026-10-17). M1 is done (see the log). Landed for M2: E14 world
+  regions (`b5de689`); `pav_world` (district TOML → grid, ground with sidewalks, lots, buildings by
+  style, dressing, labels, map raster) with Paloma Bay in `content/freeway/district.toml`; far view
+  per 32 m chunk with CPU frustum culling; the game streams the city around the player and the
+  title drone. Next: Route 404 (elevated deck + ramps), the hills, The Ditch, city props and
+  materials, E7 sky/time of day/weather/window kernel, dev district + views, `citymap`/`lanes`/`perf`
+  tools, perf budgets, the web build booting into the city.
 - **Branch / PR:** the session's designated branch; the draft PR opened with the plan.
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)
 - [x] **M0 Bootstrap** — engine vendored; baseline tests; E1 registry, `pav_tools::cli`, `pav_app`
       lib split, `gtf_game` + `gtf_app`; `freeway` scene in every target; web boot check.
-- [ ] **M1 Platform** — E2 input v2, E3 hook v2, E4 presentation data, E5 `pav_ui` + headless HUD
+- [x] **M1 Platform** — E2 input v2, E3 hook v2, E4 presentation data, E5 `pav_ui` + headless HUD
       capture, E6 camera intent + draw list, E13 app shell, E8 part 1 (bank + loops), UI gallery,
       FPS readout.
 - [ ] **M2 City** — E14 world regions first (region provider, static meshes, speed-aware streaming,
@@ -113,3 +113,15 @@ resumed or compacted session reads first.
   (`scripts/build-gtf-web.sh`, 3 min 37 s): `dist/GrandTheftFreeway-BX.html` 11.2 MB (wasm 27.9 MB,
   8.3 MB gzipped); headless Chromium (`web-check.mjs --expect "boot complete" --expect "scene
   'freeway'"`): boots in 0.6 s, scene `freeway`, HUD visible (`out/web-m0/start.png`).
+- 2026-10-17 — **M1 done.** E2/E3/E4/E6 (`40772ce`); E8 part 1, E12, E13, E14 (`b5de689`);
+  `gtf_game` frontend, orbit camera, weapon wheel, settings, UI gallery (`7686717`); E5 `pav_ui`
+  (10-foot kit on egui: Anton + Barlow Semi Condensed under OFL, procedural pad glyphs per device,
+  HUD, radar and map from the `MapImage`, screens, moments, weapon wheel, phone, offscreen render)
+  wired into `pav_app` (overlay, pointer → `ui.*`, gear, FPS readout) and `capture hud=true`.
+  Tests: `cargo test -p pav_core -p pav_world -p pav_ui -p pav_view -p gtf_game` 360 passed,
+  `cargo test -p pav_tools --lib --test ui_hud --test asset_errors` 54 passed; clippy clean.
+  Captures looked at: `gtf` REPL `load scene=freeway/gallery` + `capture hud=true` at 1920×1080 and
+  960×540 (`out/m1/gallery_*.png`: title, menu, map, HUD, cards — legible at both sizes). Native
+  window (`scripts/smoke-gtf.sh 25 --scene freeway/roam`, Xvfb + lavapipe): boot complete in
+  1.5 s, the FPS readout (software rendering, so red), money, radar with the city map, vitals,
+  objective with a keycap glyph, the generated city (`out/smoke-gtf/screen.png`).

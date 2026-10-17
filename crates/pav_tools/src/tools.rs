@@ -87,6 +87,7 @@ pub static TOOLS: &[Tool] = &[
             arg("width", "integer", "default 960"),
             arg("height", "integer", "default 540"),
             arg("stats", "string", "true adds render cost; only returns it without an image"),
+            arg("hud", "boolean", "draw the game's UI over it"),
         ],
         run: t_capture,
     },
@@ -217,6 +218,7 @@ pub static TOOLS: &[Tool] = &[
             arg("hold", "string", "held buttons while recording"),
             arg("press", "string", "buttons pressed at the start"),
             arg("out", "string", "output path"),
+            arg("hud", "boolean", "draw the game's UI over each frame"),
         ],
         run: t_filmstrip,
     },
@@ -319,6 +321,12 @@ pub static TOOLS: &[Tool] = &[
             arg("cmd", "string", "game command for one tick first"),
         ],
         run: crate::play_tools::t_play,
+    },
+    Tool {
+        name: "ui",
+        help: "The running game's UI model (HUD, screen, wheel, phone, prompts) as compact JSON.",
+        args: &[arg("focus", "boolean", "only the focused element and its pointer id")],
+        run: crate::ui_tools::t_ui,
     },
     Tool {
         name: "autoplay",
@@ -1274,7 +1282,8 @@ fn t_capture(s: &mut Session, a: &Args) -> Result<Output> {
     };
     let path = PathBuf::from(get_str(a, "out").map(String::from).unwrap_or(format!("out/capture-{}.png", s.sim.state.tick)));
     let t = Instant::now();
-    let rgba = s.render(w, h)?;
+    let hud = get_bool(a, "hud", false)?;
+    let (rgba, drawn) = if hud { s.render_hud(w, h)? } else { (s.render(w, h)?, false) };
     if stats == Some(true) {
         let mut reply = render_stats(s)?;
         reply["render_ms"] = json!(t.elapsed().as_millis());
@@ -1289,6 +1298,9 @@ fn t_capture(s: &mut Session, a: &Args) -> Result<Output> {
         json!({ "path": path, "width": w, "height": h, "tick": s.sim.state.tick, "render_ms": t.elapsed().as_millis() });
     if stats.is_some() {
         meta["stats"] = render_stats(s)?;
+    }
+    if hud {
+        meta["hud"] = if drawn { json!(true) } else { json!("no PlayFrame: nothing to draw") };
     }
     Ok(Output::Image { png, path: Some(path), meta })
 }
@@ -1736,9 +1748,10 @@ fn t_filmstrip(s: &mut Session, a: &Args) -> Result<Output> {
     let dir = glam::Vec2::new(mv.first().copied().unwrap_or(0.0), mv.get(1).copied().unwrap_or(0.0));
     let (held, pad_held) = buttons_arg(a, "hold")?;
     let (press, pad_press) = buttons_arg(a, "press")?;
+    let hud = get_bool(a, "hud", false)?;
     let mut shots = Vec::with_capacity(frames);
     for i in 0..frames {
-        shots.push(s.render(w, h)?);
+        shots.push(if hud { s.render_hud(w, h)?.0 } else { s.render(w, h)? });
         if i + 1 < frames {
             for t in 0..every {
                 let first = i == 0 && t == 0;

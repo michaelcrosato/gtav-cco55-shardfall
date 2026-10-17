@@ -6,13 +6,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use glam::{Vec2, Vec3};
 use pav_core::entity::EntityId;
 use pav_core::frame::SimEvent;
 use pav_core::games::{Entry, Game, GameBox, entry};
 use pav_core::present::*;
-use pav_core::room::RoomDef;
 use pav_core::sim::Sim;
 use pav_core::{Color, InputFrame};
 use serde::{Deserialize, Serialize};
@@ -24,11 +23,11 @@ pub mod content;
 pub mod frontend;
 pub mod gallery;
 pub mod hud;
-pub mod map;
 pub mod pad;
 pub mod player;
 pub mod protagonists;
 pub mod settings;
+pub mod world;
 
 use camera::{Look, OrbitCam};
 use frontend::{Action, Ctx, Front, Page};
@@ -85,21 +84,18 @@ pub struct Freeway {
     /// Seconds since free roam began (the first tip shows for a while).
     pub roam_age: f32,
     pub quit: bool,
-    /// The map picture (rebuilt from the level when missing, e.g. after loading a snapshot; a
+    /// The district (rebuilt from its file when missing, e.g. after loading a snapshot; a
     /// cache, so not part of the state).
     #[serde(skip)]
-    map: Option<Arc<MapImage>>,
+    city: Option<Arc<pav_world::City>>,
     #[serde(skip)]
     settings_json: Option<Arc<String>>,
 }
 
-/// Builds a scene of the game. M1: the frontend over a placeholder lot; the generated district
-/// arrives in M2.
+/// Builds a scene of the game: Paloma Bay with the frontend (or straight into play).
 pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
     let mode = rest.unwrap_or("").to_string();
-    let text = content::text("m0_lot.toml", include_str!("../../../content/freeway/m0_lot.toml"));
-    let def = RoomDef::parse(&text).map_err(|e| anyhow!("content/freeway/m0_lot.toml: {e}"))?;
-    pav_core::scenes::build_standalone_room(sim, KEY, def);
+    let city = world::build_scene(sim)?;
     let mut front = Front::default();
     front.page = match mode.as_str() {
         "roam" | "dev" => Page::Play,
@@ -134,7 +130,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         next_note: 1,
         roam_age: 0.0,
         quit: false,
-        map: None,
+        city: Some(city),
         settings_json: None,
     };
     sim.state.play = Some(GameBox::new(game));
@@ -219,18 +215,18 @@ impl Freeway {
         Look { sensitivity: self.settings.sensitivity, invert_y: self.settings.invert_y }
     }
 
-    /// The camera for this page: a drone over the lot in the menus, the orbit camera in play.
-    fn camera(&self, feet: Vec3) -> CameraIntent {
+    /// The menus show the city from a drone; play uses the orbit camera.
+    fn drone_view(&self) -> bool {
         match self.front.page {
-            Page::Boot | Page::Title | Page::Main | Page::About => {
-                camera::drone(Vec3::new(0.0, 0.0, -1.0), self.ui_time, 22.0, 9.0)
-            }
-            Page::Settings if self.front.back != Page::Pause => camera::drone(Vec3::new(0.0, 0.0, -1.0), self.ui_time, 22.0, 9.0),
-            _ => {
-                let _ = feet;
-                self.cam.intent()
-            }
+            Page::Boot | Page::Title | Page::Main | Page::About => true,
+            Page::Settings => self.front.back != Page::Pause,
+            _ => false,
         }
+    }
+
+    /// The camera for this page.
+    fn camera(&self) -> CameraIntent {
+        if self.drone_view() { camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0) } else { self.cam.intent() }
     }
 
     /// Golden hour over the bay (time of day and weather arrive in M2).
@@ -257,7 +253,8 @@ impl Freeway {
                 cloud_color: Color::hex("#fff1e0"),
                 lightning: 0.0,
             }),
-            fog: Some(FogIntent { color: horizon, start: 140.0, end: 520.0 }),
+            // A light marine haze; the far view fills in what streaming has not loaded.
+            fog: Some(FogIntent { color: horizon, start: 220.0, end: 1100.0 }),
             exposure: 1.0,
             bloom: 0.35,
             temperature: 0.12,
@@ -274,9 +271,17 @@ impl Game for Freeway {
     fn pre(&mut self, sim: &mut Sim, input: &InputFrame, _dt: f32, events: &mut Vec<SimEvent>) -> BTreeMap<EntityId, InputFrame> {
         let real = sim.dt();
         self.ui_time += real;
-        if self.map.is_none() {
-            // The level never changes shape yet: one picture, version 1.
-            self.map = Some(Arc::new(map::raster(sim, 1)));
+        if self.city.is_none() {
+            match world::city() {
+                Ok(c) => self.city = Some(c),
+                Err(e) => log::error!("{e:#}"),
+            }
+        }
+        // Streaming follows the camera when it is away from the player (the menus' drone).
+        sim.state.world.interest.clear();
+        if self.drone_view() {
+            let c = camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0);
+            sim.state.world.interest.push(c.target);
         }
         self.host_cmds(input);
         let feet = Self::feet(sim);
@@ -373,7 +378,7 @@ impl Game for Freeway {
     fn present(&self, sim: &Sim) -> Option<PlayFrame> {
         let feet = Self::feet(sim);
         let player = Vec2::new(feet.x, feet.z);
-        let blips = hud::lot_blips();
+        let blips = self.city.as_deref().map(world::blips).unwrap_or_default();
         let page = self.front.page;
         let mut ui =
             if page == Page::Gallery { gallery::page(self.front.gallery, self.front.since, feet) } else { UiModel::default() };
@@ -431,7 +436,7 @@ impl Game for Freeway {
         Some(PlayFrame {
             ui,
             draw: DrawList::default(),
-            camera: Some(self.camera(feet)),
+            camera: Some(self.camera()),
             view: Some(Self::view()),
             audio: AudioScene {
                 master: self.settings.master,
@@ -440,7 +445,8 @@ impl Game for Freeway {
                 ducking: if menu { 0.6 } else { 0.0 },
                 ..Default::default()
             },
-            map: self.map.clone(),
+            map: self.city.as_ref().map(|c| c.map.clone()),
+            far: self.city.as_ref().map(|c| c.far.clone()),
             app: AppRequests {
                 save: None,
                 settings: self

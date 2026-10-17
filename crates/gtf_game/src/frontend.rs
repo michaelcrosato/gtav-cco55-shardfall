@@ -513,7 +513,7 @@ impl Front {
                         ScreenBody::Text(TextCard {
                             heading: "FREE ROAM".into(),
                             lines: vec![
-                                "Explore the lot while Paloma Bay is being built.".into(),
+                                "Paloma Bay is yours to explore: downtown, the docks, the hills.".into(),
                                 "Hold ~btn:l1~ to open the weapon wheel (time slows down).".into(),
                                 "~btn:start~ pauses; ~btn:l1~ ~btn:r1~ switch tabs.".into(),
                             ],
