@@ -5,6 +5,7 @@
 //   node scripts/web-check.mjs <page.html> [--out DIR] [--mobile] [--wait MS]
 //        [--step "press:KEY:WAIT_MS"]... [--step "tap:X:Y:WAIT_MS"]... [--step "wait:MS"]...
 //        [--step "until:TEXT:TIMEOUT_MS"]... [--expect TEXT]... [--forbid TEXT]... [--query "a=1&b=2"]
+//        [--shot-timeout MS]   (a screenshot waits for a frame: 120000 by default, SwiftShader is slow)
 //
 // Each step runs after the initial wait, in order, with a screenshot after it (step-<n>.png).
 // until: polls once a second until a console line logged AFTER the step started contains TEXT
@@ -27,7 +28,7 @@ if (!args.length || args[0].startsWith('--')) {
   process.exit(2);
 }
 const page_path = resolve(args[0]);
-let out = 'out/web-check', mobile = false, wait = 20000, query = '';
+let out = 'out/web-check', mobile = false, wait = 20000, query = '', shotTimeout = 120000;
 const steps = [], expects = [], forbids = [];
 for (let i = 1; i < args.length; i++) {
   const a = args[i], v = () => {
@@ -41,6 +42,7 @@ for (let i = 1; i < args.length; i++) {
   else if (a === '--expect') expects.push(v());
   else if (a === '--forbid') forbids.push(v());
   else if (a === '--query') query = v();
+  else if (a === '--shot-timeout') shotTimeout = Number(v());
   else { console.error(`unknown option ${a}`); process.exit(2); }
 }
 mkdirSync(out, { recursive: true });
@@ -65,7 +67,7 @@ page.on('crash', () => logs.push(`${stamp()} [crash] the page crashed`));
 try {
 await page.goto('file://' + page_path + (query ? `?${query}` : ''));
 await page.waitForTimeout(wait);
-await page.screenshot({ path: join(out, 'start.png') });
+await page.screenshot({ path: join(out, 'start.png'), timeout: shotTimeout });
 
 for (const s of steps) {
   n += 1;

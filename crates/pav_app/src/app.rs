@@ -1739,19 +1739,22 @@ impl App {
                 self.input.vibrate(low, high, secs);
             }
             let want = play.app.mouse_look && !self.menu_open && game_input;
-            if want != self.play.grabbed {
-                let w = &gfx.window;
-                if want {
-                    let ok = w.set_cursor_grab(CursorGrabMode::Locked).or_else(|_| w.set_cursor_grab(CursorGrabMode::Confined));
-                    if ok.is_ok() {
-                        w.set_cursor_visible(false);
-                        self.play.grabbed = true;
-                    }
-                } else {
-                    let _ = w.set_cursor_grab(CursorGrabMode::None);
-                    w.set_cursor_visible(true);
-                    self.play.grabbed = false;
+            // A browser locks the pointer only for a page the player just clicked (asking without
+            // a click fails, and crashes headless Chromium), and unlocks it on Esc without telling
+            // the page: the web asks on each click while the game wants mouse look.
+            let clicked = std::mem::take(&mut self.play.clicked);
+            let ask = if cfg!(target_arch = "wasm32") { clicked } else { !self.play.grabbed };
+            let w = &gfx.window;
+            if want && ask {
+                let ok = w.set_cursor_grab(CursorGrabMode::Locked).or_else(|_| w.set_cursor_grab(CursorGrabMode::Confined));
+                if ok.is_ok() {
+                    w.set_cursor_visible(false);
+                    self.play.grabbed = true;
                 }
+            } else if !want && self.play.grabbed {
+                let _ = w.set_cursor_grab(CursorGrabMode::None);
+                w.set_cursor_visible(true);
+                self.play.grabbed = false;
             }
         } else if self.play.grabbed {
             let _ = gfx.window.set_cursor_grab(CursorGrabMode::None);
@@ -2385,6 +2388,9 @@ impl ApplicationHandler for App {
             WindowEvent::MouseInput { state, button, .. } => {
                 #[cfg(target_arch = "wasm32")]
                 self.resume_audio();
+                if state == ElementState::Pressed {
+                    self.play.clicked = true;
+                }
                 if state == ElementState::Pressed && button == MouseButton::Left && !consumed {
                     self.latency.press();
                 }

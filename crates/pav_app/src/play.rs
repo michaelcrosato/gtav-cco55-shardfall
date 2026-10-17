@@ -28,6 +28,9 @@ pub struct PlayShell {
     started: bool,
     /// The pointer is held for mouse look.
     pub grabbed: bool,
+    /// A mouse button went down since the last frame: browsers lock the pointer only for a page
+    /// the player just clicked.
+    pub clicked: bool,
     /// Smoothed frame rate and frame time for the readout.
     pub fps: f32,
     pub frame_ms: f32,
@@ -50,6 +53,7 @@ impl Default for PlayShell {
             rumble_serial: 0,
             started: false,
             grabbed: false,
+            clicked: false,
             fps: 60.0,
             frame_ms: 16.7,
             master: -1.0,
