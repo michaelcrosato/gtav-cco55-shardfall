@@ -335,6 +335,11 @@ pub struct StaticChunk {
     /// Library assets baked in (level dressing).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub props: Vec<StaticProp>,
+    /// Static triangle meshes with exact colliders (a game city's roads, decks, terrain).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub meshes: Vec<Arc<TerrainPatch>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mesh_colliders: Vec<ColliderHandle>,
     /// Colours for the theme roles its props name (`$wall` → `#rrggbb`); others take
     /// `props::DEFAULT_ROLES`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -359,6 +364,7 @@ impl StaticChunk {
             && self.zones.is_empty()
             && self.labels.is_empty()
             && self.props.is_empty()
+            && self.meshes.is_empty()
         {
             self.min = min;
             self.max = max;
@@ -639,6 +645,9 @@ impl StaticWorld {
         if let Some(h) = chunk.terrain_collider.take() {
             physics.remove_collider(h);
         }
+        for h in chunk.mesh_colliders.drain(..) {
+            physics.remove_collider(h);
+        }
     }
 
     /// Makes a region dormant: colliders are removed, content is kept.
@@ -672,9 +681,26 @@ impl StaticWorld {
         if let Some(t) = &chunk.terrain {
             chunk.terrain_collider = Some(physics.insert_static(t.collider()));
         }
+        chunk.mesh_colliders = chunk.meshes.iter().map(|m| physics.insert_static(m.collider())).collect();
         chunk.version += 1;
         self.chunks.insert(key, arc);
         true
+    }
+
+    /// Makes sure an active region exists, even an empty one (a provided chunk with nothing in
+    /// it is still generated once).
+    pub fn touch(&mut self, key: RegionKey) {
+        self.chunk_mut(key);
+    }
+
+    /// Adds a static triangle mesh (with its collider) to an active region.
+    pub fn add_mesh(&mut self, physics: &mut PhysicsState, key: RegionKey, mesh: Arc<TerrainPatch>) {
+        let col = physics.insert_static(mesh.collider());
+        let chunk = self.chunk_mut(key);
+        chunk.grow(mesh.min, mesh.max);
+        chunk.meshes.push(mesh);
+        chunk.mesh_colliders.push(col);
+        chunk.version += 1;
     }
 
     /// Removes a region entirely (active or dormant).

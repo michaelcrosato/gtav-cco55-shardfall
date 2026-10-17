@@ -1,0 +1,75 @@
+# The engine's default sound bank (pav_audio::Bank). Every sound is synthesized: a cue is one
+# or more layers, each a patch (wave, frequency and its glide, envelope, volume, low-pass
+# cutoff and its sweep), started `delay` seconds after the cue. `pitch` and `volume` spread each
+# play a little; `voices` caps how many of one cue sound at once. A game adds or overrides cues
+# with its own file (Bank::merge).
+
+# --- Menus (10-foot UI): soft, short, never shrill ---------------------------------------------
+[cue."ui.move"]
+layers = [{ wave = "triangle", freq = 1320, decay = 0.045, volume = 0.05, cutoff = 6000 }]
+pitch = 0.02
+voices = 2
+
+[cue."ui.accept"]
+layers = [
+    { wave = "triangle", freq = 880, decay = 0.07, volume = 0.08 },
+    { wave = "triangle", freq = 1320, decay = 0.11, volume = 0.08, delay = 0.045 },
+]
+
+[cue."ui.back"]
+layers = [
+    { wave = "triangle", freq = 990, decay = 0.06, volume = 0.07 },
+    { wave = "triangle", freq = 660, decay = 0.09, volume = 0.07, delay = 0.04 },
+]
+
+[cue."ui.tab"]
+layers = [{ wave = "square", freq = 740, freq_end = 980, glide = 0.04, decay = 0.05, volume = 0.04, duty = 0.3, cutoff = 4000 }]
+
+[cue."ui.error"]
+layers = [{ wave = "square", freq = 220, freq_end = 160, glide = 0.12, decay = 0.16, volume = 0.08, duty = 0.4, cutoff = 1800 }]
+
+[cue."ui.toast"]
+layers = [
+    { wave = "sine", freq = 1568, decay = 0.12, volume = 0.06 },
+    { wave = "sine", freq = 2093, decay = 0.18, volume = 0.05, delay = 0.07 },
+]
+
+[cue."ui.banner"]
+layers = [
+    { wave = "triangle", freq = 392, decay = 0.4, volume = 0.12, sustain = 0.3, hold = 0.2, release = 0.4 },
+    { wave = "triangle", freq = 523.3, decay = 0.4, volume = 0.11, sustain = 0.3, hold = 0.2, release = 0.4, delay = 0.12 },
+    { wave = "triangle", freq = 659.3, decay = 0.6, volume = 0.11, sustain = 0.3, hold = 0.3, release = 0.6, delay = 0.24 },
+]
+
+[cue."ui.slowmo_in"]
+layers = [{ wave = "sine", freq = 420, freq_end = 120, glide = 0.25, attack = 0.02, decay = 0.3, volume = 0.12, cutoff = 900 }]
+
+[cue."ui.slowmo_out"]
+layers = [{ wave = "sine", freq = 120, freq_end = 420, glide = 0.2, attack = 0.01, decay = 0.22, volume = 0.1, cutoff = 900 }]
+
+# --- Generic world sounds ----------------------------------------------------------------------
+[cue."impact.light"]
+layers = [{ wave = "noise", freq = 1, decay = 0.06, volume = 0.18, cutoff = 2400, cutoff_end = 400 }]
+pitch = 0.1
+volume = 0.3
+
+[cue."impact.heavy"]
+layers = [
+    { wave = "noise", freq = 1, decay = 0.2, volume = 0.4, cutoff = 2000, cutoff_end = 150 },
+    { wave = "sine", freq = 90, freq_end = 40, glide = 0.15, decay = 0.25, volume = 0.45 },
+]
+pitch = 0.08
+
+[cue."glass"]
+layers = [
+    { wave = "noise", freq = 1, decay = 0.25, volume = 0.25, cutoff = 9000, cutoff_end = 3000 },
+    { wave = "triangle", freq = 3200, decay = 0.12, volume = 0.05, delay = 0.02 },
+    { wave = "triangle", freq = 4100, decay = 0.1, volume = 0.04, delay = 0.06 },
+]
+pitch = 0.15
+
+[cue."cash"]
+layers = [
+    { wave = "triangle", freq = 1975, decay = 0.07, volume = 0.08 },
+    { wave = "triangle", freq = 2637, decay = 0.12, volume = 0.08, delay = 0.06 },
+]

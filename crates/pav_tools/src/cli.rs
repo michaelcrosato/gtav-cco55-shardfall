@@ -79,8 +79,34 @@ fn parse_line(line: &str) -> Result<Option<(String, Args)>> {
         };
         return Ok(Some((name.to_string(), args)));
     }
-    let words: Vec<String> = line.split_whitespace().map(String::from).collect();
+    let words = split_words(line);
     Ok(Some((words[0].clone(), parse_args(&words[1..]))))
+}
+
+/// Splits a `tool key=value` line at spaces outside double quotes, so a value can hold spaces:
+/// `play cmd="ui.accept title"` (the quotes stay; the value reads as a JSON string).
+fn split_words(line: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut quoted = false;
+    for c in line.chars() {
+        match c {
+            '"' => {
+                quoted = !quoted;
+                word.push(c);
+            }
+            c if c.is_whitespace() && !quoted => {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+            }
+            c => word.push(c),
+        }
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words
 }
 
 fn print(out: Result<Output>) -> bool {
@@ -180,6 +206,15 @@ pub fn run(cli: &Cli) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn quoted_values_keep_their_spaces() {
+        let (name, args) = super::parse_line(r#"play cmd="ui.accept title" ticks=5"#).unwrap().unwrap();
+        assert_eq!(name, "play");
+        assert_eq!(args["cmd"], "ui.accept title");
+        assert_eq!(args["ticks"], 5);
+    }
+
     use super::*;
 
     #[test]

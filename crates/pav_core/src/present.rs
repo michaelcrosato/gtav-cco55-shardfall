@@ -897,7 +897,7 @@ pub struct FogIntent {
 }
 
 /// What should be sounding this tick besides one-shot events: engines, sirens, beds, music.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AudioScene {
     pub listener: Option<Listener>,
@@ -907,6 +907,15 @@ pub struct AudioScene {
     pub ducking: f32,
     /// 0..1: reverb amount (tunnels, interiors).
     pub reverb: f32,
+    /// The player's volumes (0..1): everything, and sound effects (one-shots and loops).
+    pub master: f32,
+    pub effects: f32,
+}
+
+impl Default for AudioScene {
+    fn default() -> Self {
+        Self { listener: None, loops: Vec::new(), music: None, ducking: 0.0, reverb: 0.0, master: 1.0, effects: 1.0 }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -971,8 +980,8 @@ pub struct AppRequests {
     pub settings: Option<SettingsRequest>,
     /// Leave the app (native builds).
     pub quit: bool,
-    /// Rumble: low and high motor strength (0..1) and seconds.
-    pub vibrate: Option<[f32; 3]>,
+    /// Rumble the controller (a new `serial` means a new request).
+    pub vibrate: Option<Rumble>,
     /// How the keyboard and mouse stand in for the controller now (None: [`KeyMap::standard`]).
     #[serde(skip)]
     pub keys: Option<Arc<KeyMap>>,
@@ -1015,8 +1024,9 @@ impl KeyMap {
         Self { name: name.into(), binds: binds.iter().map(|(k, t)| KeyBind { key: (*k).into(), to: *t }).collect() }
     }
 
-    /// A generic map: WASD the left stick, arrows the D-pad, Enter and Space ✕, Escape and
-    /// Backspace ○, Q and E the bumpers, the mouse buttons the triggers, Tab Options.
+    /// A generic map: WASD the left stick, arrows the D-pad, Enter and Space ✕, Escape ○, Q
+    /// and E the bumpers, the mouse buttons the triggers, Tab Options. (Backspace stays the
+    /// developer's rewind key.)
     pub fn standard() -> Self {
         use crate::input::pad;
         use PadTarget::*;
@@ -1034,7 +1044,6 @@ impl KeyMap {
                 ("Enter", Button(pad::SOUTH)),
                 ("Space", Button(pad::SOUTH)),
                 ("Escape", Button(pad::EAST)),
-                ("Backspace", Button(pad::EAST)),
                 ("KeyF", Button(pad::NORTH)),
                 ("KeyR", Button(pad::WEST)),
                 ("KeyQ", Button(pad::L1)),
@@ -1045,6 +1054,15 @@ impl KeyMap {
             ],
         )
     }
+}
+
+/// Controller rumble: the low (heavy) and high (light) motors' strength (0..1), for `secs`.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Rumble {
+    pub serial: u64,
+    pub low: f32,
+    pub high: f32,
+    pub secs: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

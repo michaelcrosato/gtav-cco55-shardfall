@@ -369,6 +369,28 @@ impl TerrainPatch {
         self.shape = self.make_shape();
     }
 
+    /// A static triangle mesh (world space, vertex colours) with an exact collider: a road on a
+    /// hill, a freeway deck, a channel wall. `chunk` is the region it belongs to.
+    pub fn from_mesh(
+        chunk: (i32, i32),
+        positions: Vec<[f32; 3]>,
+        normals: Vec<[f32; 3]>,
+        colors: Vec<[f32; 3]>,
+        indices: Vec<u32>,
+    ) -> Self {
+        let (mut min, mut max) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+        for p in &positions {
+            min = min.min(Vec3::from(*p));
+            max = max.max(Vec3::from(*p));
+        }
+        if positions.is_empty() {
+            (min, max) = (Vec3::ZERO, Vec3::ZERO);
+        }
+        let mut patch = Self { cx: chunk.0, cz: chunk.1, positions, normals, colors, indices, min, max, shape: None };
+        patch.build_shape();
+        patch
+    }
+
     fn make_shape(&self) -> Option<SharedShape> {
         if self.indices.is_empty() {
             return None;

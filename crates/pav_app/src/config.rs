@@ -25,12 +25,21 @@ pub struct AppConfig {
     pub touch: TouchMode,
     /// The engine's developer keys and menus (tuning panel, rooms, rewind, diagnostics).
     pub dev_keys: bool,
+    /// The game's sound cues (a `pav_audio::Bank` file) over the engine's.
+    pub sound_bank: Option<&'static str>,
 }
 
 impl AppConfig {
     /// The engine's own app: Shardfall, starting in its town.
     pub fn shardfall() -> Self {
-        Self { title: "Shardfall", stem: "shardfall", default_scene: "town", touch: TouchMode::Controls, dev_keys: true }
+        Self {
+            title: "Shardfall",
+            stem: "shardfall",
+            default_scene: "town",
+            touch: TouchMode::Controls,
+            dev_keys: true,
+            sound_bank: None,
+        }
     }
 
     /// A file next to the executable named for this app: `file("toml")` is `<stem>.toml`,

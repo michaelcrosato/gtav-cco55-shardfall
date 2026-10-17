@@ -316,6 +316,7 @@ pub static TOOLS: &[Tool] = &[
             arg("bot", "boolean", "its bot plays until won or lost"),
             arg("ticks", "integer", "bot run cap (3600)"),
             arg("seeds", "integer", "bot runs on seeds 1..N"),
+            arg("cmd", "string", "game command for one tick first"),
         ],
         run: crate::play_tools::t_play,
     },

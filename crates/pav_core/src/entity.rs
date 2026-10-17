@@ -344,6 +344,30 @@ pub struct Entity {
     /// Shootable: player shots wear it down (enemies, bosses, targets).
     #[serde(default)]
     pub health: Option<Box<Health>>,
+    /// What happens to it when its region unloads.
+    #[serde(default, skip_serializing_if = "Unload::is_auto")]
+    pub unload: Unload,
+}
+
+/// What happens to an entity when the region it is in unloads (streaming).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Unload {
+    /// Sleeps with the region, except characters a game drives without a brain (they stay).
+    #[default]
+    Auto,
+    /// Sleeps with the region and wakes with it (parked cars, props, NPCs).
+    Sleep,
+    /// Removed (ambient traffic and pedestrians: the game makes new ones).
+    Despawn,
+    /// Stays loaded wherever it is (mission actors).
+    Keep,
+}
+
+impl Unload {
+    pub fn is_auto(&self) -> bool {
+        *self == Unload::Auto
+    }
 }
 
 /// Room data for something the player can shoot down.

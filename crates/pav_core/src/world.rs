@@ -769,6 +769,11 @@ impl Sim {
     /// Loads/wakes regions near interest points and puts far ones to sleep. `budget` limits
     /// expensive operations (generation/activation) per call.
     pub fn update_streaming(&mut self, budget: usize) {
+        // A game's own world (`region`): no hub, rooms or wilderness.
+        if self.region_provider.is_some() {
+            self.stream_regions(budget);
+            return;
+        }
         if !self.state.world.enabled {
             return;
         }
@@ -954,25 +959,41 @@ impl Sim {
 
     /// Puts a region to sleep: statics go dormant, its entities are stored. For terrain chunks
     /// the entities inside `area` (any loose prop) are stored with it.
-    fn sleep_region(&mut self, key: RegionKey, area: Option<(Vec3, Vec3)>) {
+    pub(crate) fn sleep_region(&mut self, key: RegionKey, area: Option<(Vec3, Vec3)>) {
         let player = self.state.player;
+        let in_area = |e: &crate::entity::Entity| match area {
+            Some((lo, hi)) => {
+                let p = e.pos;
+                let inside = p.x >= lo.x && p.x < hi.x && p.z >= lo.z && p.z < hi.z;
+                inside && !matches!(e.region, Some(RegionKey::Room(_)) | Some(RegionKey::Hub))
+            }
+            None => e.region == Some(key),
+        };
+        // Entities that go away with their region instead of sleeping (ambient population).
+        let gone: Vec<EntityId> = self
+            .state
+            .entities
+            .iter()
+            .filter(|e| e.unload == crate::entity::Unload::Despawn && Some(e.id) != player && in_area(e))
+            .map(|e| e.id)
+            .collect();
+        for id in gone {
+            self.despawn(id);
+        }
         let ids: Vec<EntityId> = self
             .state
             .entities
             .iter()
-            .filter(|e| {
-                Some(e.id) != player && (e.character.is_none() || e.ai.is_some()) && e.bomb.is_none() && e.lifetime.is_none()
+            .filter(|e| match e.unload {
+                crate::entity::Unload::Keep | crate::entity::Unload::Despawn => false,
+                crate::entity::Unload::Sleep => true,
+                // Characters without a brain belong to a game that drives them (it decides).
+                crate::entity::Unload::Auto => e.character.is_none() || e.ai.is_some(),
             })
+            .filter(|e| Some(e.id) != player && e.bomb.is_none() && e.lifetime.is_none())
             // A vehicle someone is driving goes where its driver goes.
             .filter(|e| e.vehicle.as_ref().is_none_or(|v| v.driver.is_none()))
-            .filter(|e| match area {
-                Some((lo, hi)) => {
-                    let p = e.pos;
-                    let inside = p.x >= lo.x && p.x < hi.x && p.z >= lo.z && p.z < hi.z;
-                    inside && !matches!(e.region, Some(RegionKey::Room(_)) | Some(RegionKey::Hub))
-                }
-                None => e.region == Some(key),
-            })
+            .filter(|e| in_area(e))
             .map(|e| e.id)
             .collect();
         let mut stored = Vec::new();
@@ -1012,7 +1033,7 @@ impl Sim {
     }
 
     /// Restores a region's stored entities.
-    fn wake_entities(&mut self, key: RegionKey) {
+    pub(crate) fn wake_entities(&mut self, key: RegionKey) {
         let Some(list) = self.state.world.dormant_entities.remove(&key) else { return };
         let woken: Vec<EntityId> = list.iter().map(|d| d.entity.id).collect();
         for d in list {

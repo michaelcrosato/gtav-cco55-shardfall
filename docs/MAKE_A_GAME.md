@@ -180,13 +180,18 @@ crate calls `games::register(&ENTRY)` from its binaries and tests (`crates/gtf_g
   --out out/mygame.html`: about 10 MB, runs from `file://` in Chrome or Edge (WebGPU).
 
 ## Limits today
-- HUD: text lines only. Panels, bars or menus mean egui code in `pav_app` (`hud.rs`).
-- Drawing from game state without an entity (`pav_view::assets::emit_asset`) and new sounds
-  (`pav_audio`, a closed list) mean code outside `pav_core`.
-- Your game compiles into the engine crate (`pav_core/src/games/`), beside Shardfall.
-- The camera follows the player with the level's `[camera]` settings; there is no
-  per-game camera code. Keep levels about 20 m across, or raise `[camera] distance`.
-- The window's controls card lists the engine demo's keys (bombs, vehicles), not your game's.
+- `present` is how a bigger game shows itself (PLAN-style `PlayFrame`): its camera
+  (`CameraIntent`), a 10-foot UI (`UiModel`: HUD, menus, wheels, phone, banners, prompts; drawn by
+  `crates/pav_ui`, readable with `pav ui` and `capture hud=true`), things drawn from game state
+  (`DrawList`), the atmosphere (`ViewIntent`), loops and volumes (`AudioScene`), key maps and
+  saves (`AppRequests`). Without it, the HUD is `hud()`'s text lines and the camera follows the
+  player with the level's `[camera]` settings (keep levels about 20 m across).
+- Sounds: `SimEvent::Sound { cue, .. }` plays a cue from the sound bank (engine cues in
+  `crates/pav_audio/src/default_bank.toml`; a game's binary adds its own); the older events
+  (`Coin`, `Hit`...) still play their fixed sounds.
+- A game can live in its own crate (`crates/gtf_game`, `games::register`), or compile into
+  `pav_core/src/games/` beside Shardfall.
+- The window's controls card lists the engine demo's keys unless the game presents itself.
 
 ## Report back
 When you hand the game back, add a short **engine feedback** section, written for an engine

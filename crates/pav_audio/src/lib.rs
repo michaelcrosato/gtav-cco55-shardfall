@@ -2,10 +2,18 @@
 //! and a filter. The mixer runs in the audio callback (cpal) or offline (to .wav). The game
 //! runs fine without a sound device.
 
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use glam::Vec3;
 use pav_core::SimEvent;
+
+pub mod bank;
+pub mod fx;
+pub mod loops;
+
+pub use bank::Bank;
+pub use loops::{LoopKind, LoopTarget};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Wave {
@@ -69,6 +77,9 @@ struct Voice {
     noise: u32,
     gain_l: f32,
     gain_r: f32,
+    /// The bank cue it belongs to (0 = none) and which play of it, for per-cue voice caps.
+    group: u32,
+    inst: u32,
 }
 
 impl Voice {
@@ -132,28 +143,66 @@ impl Voice {
     }
 }
 
-/// Mixes voices into interleaved stereo.
+/// Mixes one-shot voices and loops into interleaved stereo, through the reverb send and the
+/// master limiter.
 pub struct Mixer {
     voices: Vec<Voice>,
+    loops: Vec<loops::LoopVoice>,
+    reverb: fx::Reverb,
+    /// Reverb send (0 = dry, which also skips its cost) and room size.
+    pub reverb_mix: f32,
+    pub room: f32,
+    /// 0..1: ambience beds duck under dialogue and menus.
+    pub duck: f32,
     pub sample_rate: f32,
     pub master: f32,
+    /// The cues `SimEvent::Sound` plays (offline renders; the live output resolves cues itself).
+    pub bank: Arc<Bank>,
     seed: u32,
+    next_inst: u32,
 }
 
 const MAX_VOICES: usize = 64;
+const MAX_LOOPS: usize = 24;
+
+/// A cue name's group number for voice caps.
+fn group_of(cue: &str) -> u32 {
+    cue.bytes().fold(0x811c_9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193)) | 1
+}
 
 impl Mixer {
     pub fn new(sample_rate: f32) -> Self {
-        Self { voices: Vec::new(), sample_rate, master: 0.8, seed: 0x9e37_79b9 }
+        Self {
+            voices: Vec::new(),
+            loops: Vec::new(),
+            reverb: fx::Reverb::new(sample_rate),
+            reverb_mix: 0.0,
+            room: 0.5,
+            duck: 0.0,
+            sample_rate,
+            master: 0.8,
+            bank: Arc::new(Bank::engine()),
+            seed: 0x9e37_79b9,
+            next_inst: 1,
+        }
+    }
+
+    fn roll(&mut self) -> u32 {
+        self.seed = self.seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        self.seed
     }
 
     /// pan -1 (left) .. 1 (right); delay in seconds.
     pub fn play(&mut self, p: Patch, pan: f32, gain: f32, delay: f32) {
+        self.play_grouped(p, pan, gain, delay, 0, 0);
+    }
+
+    fn play_grouped(&mut self, p: Patch, pan: f32, gain: f32, delay: f32, group: u32, inst: u32) {
         if self.voices.len() >= MAX_VOICES {
             // Drop the oldest.
             self.voices.remove(0);
         }
-        self.seed = self.seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        let noise = self.roll() | 1;
         let pan = pan.clamp(-1.0, 1.0);
         let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
         self.voices.push(Voice {
@@ -162,15 +211,66 @@ impl Mixer {
             delay,
             phase: 0.0,
             lp: 0.0,
-            noise: self.seed | 1,
+            noise,
             gain_l: a.cos() * gain,
             gain_r: a.sin() * gain,
+            group,
+            inst,
         });
+    }
+
+    /// Plays a resolved cue's layers as one instance; with `cap` > 0, the oldest instance of
+    /// the same cue stops when that many already sound.
+    pub fn play_cue(&mut self, layers: &[(Patch, f32)], pan: f32, gain: f32, group: u32, cap: u8) {
+        if cap > 0 && group != 0 {
+            let mut insts: Vec<u32> = self.voices.iter().filter(|v| v.group == group).map(|v| v.inst).collect();
+            insts.dedup();
+            if insts.len() >= cap as usize {
+                let oldest = insts[0];
+                self.voices.retain(|v| !(v.group == group && v.inst == oldest));
+            }
+        }
+        let inst = self.next_inst;
+        self.next_inst = self.next_inst.wrapping_add(1).max(1);
+        for (p, delay) in layers {
+            self.play_grouped(*p, pan, gain, *delay, group, inst);
+        }
+    }
+
+    /// Plays a bank cue (`ui.accept`) from this mixer's bank. False if the bank has no such cue.
+    pub fn play_named(&mut self, cue: &str, pan: f32, gain: f32, pitch: f32) -> bool {
+        let roll = (self.roll() >> 8) as f32 / (1u32 << 24) as f32;
+        let Some((layers, cap)) = self.bank.voice(cue, pitch, 1.0, roll) else { return false };
+        self.play_cue(&layers, pan, gain, group_of(cue), cap);
+        true
+    }
+
+    /// What should be looping now, matched by id: new loops fade in, missing ones fade out.
+    pub fn set_loops(&mut self, targets: &[LoopTarget]) {
+        for v in &mut self.loops {
+            match targets.iter().find(|t| t.id == v.target.id && t.kind == v.target.kind) {
+                Some(t) => {
+                    v.target = *t;
+                    v.leaving = false;
+                }
+                None => v.leaving = true,
+            }
+        }
+        for t in targets {
+            if self.loops.len() >= MAX_LOOPS {
+                break;
+            }
+            if !self.loops.iter().any(|v| v.target.id == t.id && v.target.kind == t.kind) {
+                let seed = self.roll();
+                self.loops.push(loops::LoopVoice::new(*t, seed));
+            }
+        }
     }
 
     /// Renders into an interleaved stereo buffer (overwrites).
     pub fn render(&mut self, out: &mut [f32]) {
         let dt = 1.0 / self.sample_rate;
+        let duck = 1.0 - self.duck.clamp(0.0, 1.0) * 0.7;
         for frame in out.chunks_mut(2) {
             let (mut l, mut r) = (0.0, 0.0);
             for v in &mut self.voices {
@@ -178,18 +278,34 @@ impl Mixer {
                 l += s * v.gain_l;
                 r += s * v.gain_r;
             }
-            // Soft clip.
+            for v in &mut self.loops {
+                let (a, b) = v.next(dt);
+                let k = if v.target.kind.is_bed() { duck } else { 1.0 };
+                l += a * k;
+                r += b * k;
+            }
+            if self.reverb_mix > 0.0 {
+                let (wl, wr) = self.reverb.next(l, r, self.room);
+                l += wl * self.reverb_mix;
+                r += wr * self.reverb_mix;
+            }
             let m = self.master;
-            frame[0] = (l * m).tanh();
+            frame[0] = fx::limit(l * m);
             if frame.len() > 1 {
-                frame[1] = (r * m).tanh();
+                frame[1] = fx::limit(r * m);
             }
         }
         self.voices.retain(|v| !v.done());
+        self.loops.retain(|v| !v.silent());
     }
 
     pub fn active(&self) -> usize {
         self.voices.len()
+    }
+
+    /// Loops sounding (fading ones included).
+    pub fn active_loops(&self) -> usize {
+        self.loops.len()
     }
 }
 
@@ -513,19 +629,42 @@ pub fn event_pos(ev: &SimEvent) -> Option<Vec3> {
     }
 }
 
-/// Plays an event's sounds with distance attenuation and panning.
-pub fn play_event(mixer: &mut Mixer, ev: &SimEvent, l: &Listener, sfx: f32) {
-    let (pan, gain) = match event_pos(ev) {
+/// Pan and distance gain of a sound at `pos` (None = not positional) for the listener.
+pub fn place(pos: Option<Vec3>, l: &Listener) -> (f32, f32) {
+    match pos {
         Some(p) => {
             let d = p - l.pos;
-            let dist = d.length();
-            ((d.dot(l.right) / 12.0).clamp(-0.85, 0.85), 1.0 / (1.0 + dist / 14.0))
+            ((d.dot(l.right) / 12.0).clamp(-0.85, 0.85), 1.0 / (1.0 + d.length() / 14.0))
         }
         None => (0.0, 1.0),
-    };
+    }
+}
+
+/// Plays an event's sounds with distance attenuation and panning (`SimEvent::Sound` from the
+/// mixer's bank).
+pub fn play_event(mixer: &mut Mixer, ev: &SimEvent, l: &Listener, sfx: f32) {
+    if let SimEvent::Sound { cue, pos, gain, pitch } = ev {
+        let (pan, g) = place(*pos, l);
+        if !mixer.play_named(cue, pan, g * gain * sfx, *pitch) {
+            log::warn!("no sound cue '{cue}'");
+        }
+        return;
+    }
+    let (pan, gain) = place(event_pos(ev), l);
     for (patch, delay) in sounds_for(ev) {
         mixer.play(patch, pan, gain * sfx, delay);
     }
+}
+
+/// The loops a game's audio scene asks for, placed for the listener (distance and pan).
+pub fn loop_targets(scene: &pav_core::present::AudioScene, l: &Listener) -> Vec<LoopTarget> {
+    let mut out = Vec::new();
+    for s in &scene.loops {
+        let Some(kind) = LoopKind::from_cue(&s.cue) else { continue };
+        let (pan, dist) = place(s.pos, l);
+        out.push(LoopTarget { id: s.id, kind, gain: s.gain.clamp(0.0, 2.0) * dist, pan, pitch: s.pitch, param: s.param });
+    }
+    out
 }
 
 /// Renders timed events offline: (time in seconds, event). Returns interleaved stereo.
@@ -579,6 +718,9 @@ pub fn write_wav(path: &std::path::Path, samples: &[f32], sample_rate: u32) -> s
 
 enum Cmd {
     Play(Patch, f32, f32, f32),
+    Cue(Vec<(Patch, f32)>, f32, f32, u32, u8),
+    Loops(Vec<LoopTarget>),
+    Bus { reverb: f32, room: f32, duck: f32 },
     Master(f32),
 }
 
@@ -588,6 +730,9 @@ pub struct AudioOut {
     tx: Sender<Cmd>,
     pub sample_rate: u32,
     pub device: String,
+    /// The cues `SimEvent::Sound` names (the engine's, plus a game's).
+    pub bank: Arc<Bank>,
+    roll: std::cell::Cell<u32>,
 }
 
 impl AudioOut {
@@ -609,20 +754,47 @@ impl AudioOut {
             other => anyhow::bail!("unsupported sample format {other:?}"),
         };
         stream.play()?;
-        Ok(Self { _stream: stream, tx, sample_rate: rate, device: name })
+        Ok(Self {
+            _stream: stream,
+            tx,
+            sample_rate: rate,
+            device: name,
+            bank: Arc::new(Bank::engine()),
+            roll: std::cell::Cell::new(0x2545_f491),
+        })
     }
 
     pub fn play_event(&self, ev: &SimEvent, l: &Listener, sfx: f32) {
-        let (pan, gain) = match event_pos(ev) {
-            Some(p) => {
-                let d = p - l.pos;
-                ((d.dot(l.right) / 12.0).clamp(-0.85, 0.85), 1.0 / (1.0 + d.length() / 14.0))
-            }
-            None => (0.0, 1.0),
-        };
+        if let SimEvent::Sound { cue, pos, gain, pitch } = ev {
+            self.play_cue(cue, *pos, l, gain * sfx, *pitch);
+            return;
+        }
+        let (pan, gain) = place(event_pos(ev), l);
         for (patch, delay) in sounds_for(ev) {
             let _ = self.tx.send(Cmd::Play(patch, pan, gain * sfx, delay));
         }
+    }
+
+    /// Plays a bank cue at `pos` (None = not positional).
+    pub fn play_cue(&self, cue: &str, pos: Option<Vec3>, l: &Listener, gain: f32, pitch: f32) {
+        let r = self.roll.get().wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        self.roll.set(r);
+        let Some((layers, cap)) = self.bank.voice(cue, pitch, 1.0, (r >> 8) as f32 / (1u32 << 24) as f32) else {
+            log::warn!("no sound cue '{cue}'");
+            return;
+        };
+        let (pan, g) = place(pos, l);
+        let _ = self.tx.send(Cmd::Cue(layers, pan, g * gain, group_of(cue), cap));
+    }
+
+    /// What should be looping now (from a game's audio scene: `loop_targets`).
+    pub fn set_loops(&self, targets: Vec<LoopTarget>) {
+        let _ = self.tx.send(Cmd::Loops(targets));
+    }
+
+    /// The effects bus: reverb send and room size, and how much the beds duck.
+    pub fn set_bus(&self, reverb: f32, room: f32, duck: f32) {
+        let _ = self.tx.send(Cmd::Bus { reverb, room, duck });
     }
 
     pub fn set_master(&self, v: f32) {
@@ -650,6 +822,13 @@ where
             while let Ok(c) = rx.try_recv() {
                 match c {
                     Cmd::Play(p, pan, gain, delay) => mixer.play(p, pan, gain, delay),
+                    Cmd::Cue(layers, pan, gain, group, cap) => mixer.play_cue(&layers, pan, gain, group, cap),
+                    Cmd::Loops(t) => mixer.set_loops(&t),
+                    Cmd::Bus { reverb, room, duck } => {
+                        mixer.reverb_mix = reverb;
+                        mixer.room = room;
+                        mixer.duck = duck;
+                    }
                     Cmd::Master(v) => mixer.master = v,
                 }
             }
@@ -671,6 +850,41 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sound_cues_play_from_the_bank_and_caps_hold() {
+        let mut m = Mixer::new(22050.0);
+        let l = Listener::default();
+        let ev = SimEvent::Sound { cue: "ui.accept".into(), pos: None, gain: 1.0, pitch: 1.0 };
+        play_event(&mut m, &ev, &l, 1.0);
+        assert_eq!(m.active(), 2, "two layers");
+        for _ in 0..5 {
+            m.play_named("ui.move", 0.0, 1.0, 1.0);
+        }
+        assert_eq!(m.active(), 2 + 2, "ui.move plays at most two at once");
+        let mut buf = vec![0.0; 4410];
+        m.render(&mut buf);
+        assert!(buf.iter().any(|s| s.abs() > 0.01));
+    }
+
+    #[test]
+    fn loops_fade_in_glide_and_fade_out() {
+        let mut m = Mixer::new(22050.0);
+        let t =
+            LoopTarget { id: 7, kind: LoopKind::from_cue("engine.sports").unwrap(), gain: 0.8, pan: 0.0, pitch: 1.0, param: 0.2 };
+        m.set_loops(&[t]);
+        let mut buf = vec![0.0; 22050 * 2];
+        m.render(&mut buf);
+        let idle = buf[22050..].iter().fold(0.0f32, |a, s| a.max(s.abs()));
+        assert!(idle > 0.02, "the engine is audible: {idle}");
+        m.set_loops(&[LoopTarget { pitch: 3.5, param: 1.0, ..t }]);
+        assert_eq!(m.active_loops(), 1, "same id: the same voice glides");
+        m.set_loops(&[]);
+        for _ in 0..4 {
+            m.render(&mut buf);
+        }
+        assert_eq!(m.active_loops(), 0, "faded out and gone");
+    }
 
     #[test]
     fn explosion_is_loud_then_silent() {

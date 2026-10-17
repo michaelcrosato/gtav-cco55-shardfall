@@ -171,6 +171,9 @@ pub struct Sim {
     replaying: bool,
     /// Shared copy of `config` for frames (refreshed when it changes).
     config_arc: std::sync::Arc<SimConfig>,
+    /// A game's world generator (`region`): set by its scene's `build`, outside the state.
+    pub(crate) region_provider: Option<std::sync::Arc<dyn crate::region::RegionProvider>>,
+    pub stream_settings: crate::region::StreamSettings,
 }
 
 const MAX_RECORDING_TICKS: u64 = 60 * 60 * 60;
@@ -215,6 +218,8 @@ impl Sim {
             events: Vec::new(),
             replaying: false,
             config_arc: std::sync::Arc::new(SimConfig::default()),
+            region_provider: None,
+            stream_settings: Default::default(),
         }
     }
 
@@ -332,6 +337,7 @@ impl Sim {
                 ai: None,
                 vehicle: None,
                 health: None,
+                unload: Default::default(),
             },
         );
         if self.state.entities.get(id).is_some_and(|e| e.prop.is_some()) {
@@ -372,6 +378,7 @@ impl Sim {
                 ai: None,
                 vehicle: None,
                 health: None,
+                unload: Default::default(),
             },
         );
         id

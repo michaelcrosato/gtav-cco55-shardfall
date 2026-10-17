@@ -7,7 +7,7 @@ use pav_core::games::{self, Outcome};
 use serde_json::json;
 
 use crate::session::Session;
-use crate::tools::{Args, Output, get_bool, get_u64};
+use crate::tools::{Args, Output, get_bool, get_str, get_u64};
 
 /// `play`: the running game's HUD, outcome and state; `bot=true` lets its bot play on;
 /// `seeds=N` plays fresh runs on seeds 1..N with the bot and leaves the session alone.
@@ -47,6 +47,12 @@ pub fn t_play(s: &mut Session, a: &Args) -> Result<Output> {
             "not_won": not_won,
         })));
     }
+    if let Some(c) = get_str(a, "cmd") {
+        let f = pav_core::InputFrame { cmds: vec![c.to_string()], activity: true, ..Default::default() };
+        s.sim.step(&f);
+        s.keep_events();
+        s.sync_camera();
+    }
     let mut played = None;
     if bot {
         let (_, t) = s.sim.run_bot(ticks);
@@ -55,14 +61,48 @@ pub fn t_play(s: &mut Session, a: &Args) -> Result<Output> {
         played = Some(round2(t as f64 / hz));
     }
     let g = s.sim.play().expect("the game is still running");
-    Ok(Output::Json(json!({
+    let mut out = json!({
         "game": key,
         "outcome": g.outcome(),
         "bot_seconds": played,
         "time": round2(s.sim.time()),
         "hud": g.hud(&s.sim),
         "status": g.status(&s.sim),
-    })))
+    });
+    if let Some(p) = s.sim.present() {
+        out["present"] = present_summary(&p);
+    }
+    Ok(Output::Json(out))
+}
+
+/// What a game shows, in a few words: the page and its focused element, the objective, the
+/// wheel, toasts, banners and where the camera is (`ui` has the whole model).
+fn present_summary(p: &pav_core::present::PlayFrame) -> serde_json::Value {
+    use pav_core::present::ScreenBody;
+    let ui = &p.ui;
+    let focus = ui.screen.as_ref().and_then(|s| {
+        let menu = match &s.body {
+            ScreenBody::Menu(m) => Some(m),
+            ScreenBody::Title(t) => t.menu.as_ref(),
+            _ => None,
+        };
+        match (&s.body, menu) {
+            (_, Some(m)) => m.items.get(m.focus).map(|i| i.label.clone()),
+            (ScreenBody::Cards(c), _) => c.cards.get(c.focus).map(|c| c.title.clone()),
+            _ => None,
+        }
+    });
+    let r3 = |v: glam::Vec3| [round2(v.x as f64), round2(v.y as f64), round2(v.z as f64)];
+    json!({
+        "screen": ui.screen.as_ref().map(|s| s.id.clone()),
+        "tab": ui.screen.as_ref().and_then(|s| s.tabs.get(s.tab).cloned()),
+        "focus": focus,
+        "objective": ui.hud.as_ref().and_then(|h| h.objective.clone()),
+        "wheel": ui.wheel.as_ref().map(|w| w.focus.and_then(|f| w.slots.get(f)).map(|s| s.label.clone())),
+        "toasts": ui.toasts.iter().map(|t| t.title.clone()).collect::<Vec<_>>(),
+        "banners": ui.banners.iter().map(|b| b.title.clone()).collect::<Vec<_>>(),
+        "camera": p.camera.map(|c| json!({ "eye": r3(c.eye), "target": r3(c.target), "fov": c.fov })),
+    })
 }
 
 fn round2(x: f64) -> f64 {

@@ -13,10 +13,10 @@ use pav_render::gpu::BackendChoice;
 use pav_render::scene::{MeshInstance, MeshKey, Style, flags as rflags};
 use pav_view::{CameraParams, CameraRig, ViewBuilder, ViewSettings};
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::window::{Fullscreen, Window, WindowId};
+use winit::window::{CursorGrabMode, Fullscreen, Window, WindowId};
 
 use crate::boot::{self, stage};
 use crate::edit::Editor;
@@ -207,6 +207,10 @@ pub struct App {
     audio_resumed: bool,
     init_started: bool,
     pub fatal: Option<String>,
+    /// A hook game that presents itself: its latest presentation and the host's side of it
+    /// (key map, mouse look, commands, saves, frame-time readout).
+    play_frame: Option<Arc<pav_core::present::PlayFrame>>,
+    play: crate::play::PlayShell,
 }
 
 impl App {
@@ -289,6 +293,8 @@ impl App {
             audio_resumed: false,
             init_started: false,
             fatal: None,
+            play_frame: None,
+            play: Default::default(),
             settings,
         };
         if touch_screen {
@@ -306,6 +312,16 @@ impl App {
         #[cfg(target_arch = "wasm32")]
         self.resume_audio();
         let Some(g) = &self.gfx else { return };
+        if self.play_frame.is_some() && crate::config::get().touch == crate::config::TouchMode::AttractOnly {
+            // Phones and tablets only watch: a touch is activity, and egui's (the gear button).
+            self.input.last_device = Device::Touch;
+            self.input.touched();
+            self.touch_screen = true;
+            if let Some(st) = &mut self.egui_state {
+                st.on_window_event(&g.window, event);
+            }
+            return;
+        }
         let ppp = self.egui_ctx.zoom_factor() * g.window.scale_factor() as f32;
         let pos = egui::pos2(t.location.x as f32 / ppp, t.location.y as f32 / ppp);
         self.input.last_device = Device::Touch;
@@ -400,8 +416,15 @@ impl App {
             Ok((st, String::new()))
         })?;
         self.audio = stage("audio", || match pav_audio::AudioOut::start() {
-            Ok(a) => {
+            Ok(mut a) => {
                 let d = format!("{} @ {} Hz", a.device, a.sample_rate);
+                // The game's cues over the engine's.
+                if let Some(text) = crate::config::get().sound_bank {
+                    match pav_audio::Bank::parse(text) {
+                        Ok(b) => std::sync::Arc::make_mut(&mut a.bank).merge(b),
+                        Err(e) => log::warn!("game sound bank: {e}"),
+                    }
+                }
                 Ok((Some(a), d))
             }
             Err(e) => Ok((None, format!("no sound ({e}); continuing silently"))),
@@ -831,6 +854,35 @@ impl App {
                 }
             }
         }
+        // A hook game owns Esc and the letters (through its key map); F1 opens the developer
+        // panel (the engine menu and tuning) in builds with developer keys.
+        if self.play_frame.is_some() && self.studio_mode == StudioMode::World {
+            let dev = crate::config::get().dev_keys;
+            match code {
+                KeyCode::F11 | KeyCode::F12 => {}
+                KeyCode::Escape | KeyCode::F1 if self.menu_open => {
+                    self.set_menu(false);
+                    self.panel.open = false;
+                    return;
+                }
+                KeyCode::F1 if dev => {
+                    self.set_menu(true);
+                    self.panel.open = true;
+                    return;
+                }
+                KeyCode::F2
+                | KeyCode::F3
+                | KeyCode::F4
+                | KeyCode::F5
+                | KeyCode::F6
+                | KeyCode::F7
+                | KeyCode::F8
+                | KeyCode::F9
+                | KeyCode::F10
+                    if dev => {}
+                _ => return,
+            }
+        }
         // Shardfall's menu keys.
         if self.input.game && !self.menu_open && self.studio_mode == StudioMode::World {
             let ui = &mut self.game_ui;
@@ -972,19 +1024,26 @@ impl App {
 
         // Devices.
         self.input.poll_gamepad();
-        if self.input.pad.start_pressed {
-            let open = !self.menu_open;
-            self.set_menu(open);
+        self.play.frame_time(dt);
+        if self.play_frame.is_some() {
+            // A hook game reads the whole pad itself (Options is its pause menu).
+            self.input.pad.taps.clear();
+            self.pad_cursor = None;
+        } else {
+            if self.input.pad.start_pressed {
+                let open = !self.menu_open;
+                self.set_menu(open);
+            }
+            if self.input.pad.map_pressed {
+                self.game_ui.map = !self.game_ui.map;
+            }
+            self.pad_menus(dt);
+            let pad = self.input.last_device == Device::Gamepad;
+            self.game_ui.pad = pad;
+            self.game_ui.tree.pad = pad;
+            self.rig.params.yaw = (self.rig.params.yaw + self.input.pad.rotate * 90.0 * dt + 540.0).rem_euclid(360.0) - 180.0;
+            self.rig.params.distance = (self.rig.params.distance * (1.0 + self.input.pad.zoom * dt)).clamp(2.0, 120.0);
         }
-        if self.input.pad.map_pressed {
-            self.game_ui.map = !self.game_ui.map;
-        }
-        self.pad_menus(dt);
-        let pad = self.input.last_device == Device::Gamepad;
-        self.game_ui.pad = pad;
-        self.game_ui.tree.pad = pad;
-        self.rig.params.yaw = (self.rig.params.yaw + self.input.pad.rotate * 90.0 * dt + 540.0).rem_euclid(360.0) - 180.0;
-        self.rig.params.distance = (self.rig.params.distance * (1.0 + self.input.pad.zoom * dt)).clamp(2.0, 120.0);
 
         let host = self.host.as_ref().unwrap();
         host.pump();
@@ -997,10 +1056,17 @@ impl App {
         }
         let ui_wants_keys = self.egui_ctx.egui_wants_keyboard_input();
         let game_input = !self.menu_open && !ui_wants_keys;
-        let rewinding = game_input && self.studio_mode == StudioMode::World && self.input.rewind_held();
+        // Hook games: only the developer's Backspace rewinds (holding Create is the game's).
+        let rewind_held = if self.play_frame.is_some() {
+            crate::config::get().dev_keys && self.input.keys.contains(&KeyCode::Backspace)
+        } else {
+            self.input.rewind_held()
+        };
+        let rewinding = game_input && self.studio_mode == StudioMode::World && rewind_held;
         host.set_control(|c| c.rewinding = rewinding);
 
         let (prev, curr, curr_at, tick_wall) = host.frames();
+        self.play_frame = curr.present.clone();
         let studio_mode = curr.studio_mode();
         let studio_active = curr.studio_active();
         self.studio_navigation |= studio_active;
@@ -1151,6 +1217,13 @@ impl App {
         if over_ui {
             self.input.mouse_taps.clear();
         }
+        // A hook game's controller: the pad and the keyboard through the game's key map (read
+        // before `buttons()` takes this frame's key taps).
+        let play_pad = self.play_frame.clone().map(|play| {
+            self.play.start(self.touch_screen);
+            let keys = self.play.keys(play.app.keys.as_ref()).to_vec();
+            crate::input::merge_pads(self.input.pad.state, self.input.keyboard_pad(&keys))
+        });
         let (mut held, mut pressed) = self.input.buttons();
         // Touch: the stick, the buttons and auto-attack.
         let touch_game = curr.game.as_deref().filter(|_| game_input).map(|g| (g, feet, facing));
@@ -1193,7 +1266,30 @@ impl App {
             }
             Device::Touch => intent.aim.or(Some(feet + Vec3::new(facing.sin(), 0.0, facing.cos()) * 4.0)),
         };
-        {
+        let (mouse_delta, wheel, activity) = self.input.take_motion();
+        if let Some(pad) = play_pad {
+            let mut i = host.shared.input.lock().unwrap();
+            // The engine demo's fields stay empty: the game reads `pad`.
+            i.move_dir = Vec2::ZERO;
+            i.held = 0;
+            i.aim = None;
+            if game_input {
+                i.pad.held = pad.held;
+                i.pad.pressed |= pad.pressed;
+                i.pad.stick_l = pad.stick_l;
+                i.pad.stick_r = pad.stick_r;
+                i.pad.l2 = pad.l2;
+                i.pad.r2 = pad.r2;
+                i.mouse_delta += mouse_delta;
+                i.wheel += wheel;
+            } else {
+                let pressed = i.pad.pressed;
+                i.pad = pav_core::input::PadState { pressed, ..Default::default() };
+            }
+            i.activity |= activity;
+            i.device = self.input.device_family();
+            i.cmds.extend(self.play.take_cmds());
+        } else {
             let mut i = host.shared.input.lock().unwrap();
             if game_input {
                 let axis = (self.input.move_axis() + intent.move_axis).clamp_length_max(1.0);
@@ -1226,12 +1322,40 @@ impl App {
         }
         if let Some(a) = &self.audio {
             let (_, right) = self.rig.ground_axes();
-            let l = pav_audio::Listener { pos: self.rig.target, right };
+            let mut l = pav_audio::Listener { pos: self.rig.target, right };
+            // A hook game hears from its own listener, else from where its camera looks.
+            if let Some(play) = &self.play_frame {
+                if let Some(c) = &play.camera {
+                    let fwd = (c.target - c.eye).normalize_or(Vec3::NEG_Z);
+                    l = pav_audio::Listener { pos: c.target, right: fwd.cross(c.up).normalize_or(Vec3::X) };
+                }
+                if let Some(o) = &play.audio.listener {
+                    l = pav_audio::Listener { pos: o.pos, right: o.forward.cross(Vec3::Y).normalize_or(Vec3::X) };
+                }
+            }
+            // A hook game's volumes and its loops (engines, sirens, beds) and effects bus.
+            let (sfx, scene) = match &self.play_frame {
+                Some(p) => (self.audio_settings.sfx * p.audio.effects, Some(&p.audio)),
+                None => (self.audio_settings.sfx, None),
+            };
             for e in &events {
                 if matches!(e, pav_core::SimEvent::Step { .. }) && !self.audio_settings.footsteps {
                     continue;
                 }
-                a.play_event(e, &l, self.audio_settings.sfx);
+                a.play_event(e, &l, sfx);
+            }
+            if let Some(scene) = scene {
+                let mut loops = pav_audio::loop_targets(scene, &l);
+                for t in &mut loops {
+                    t.gain *= scene.effects;
+                }
+                a.set_loops(loops);
+                a.set_bus(scene.reverb, 0.5, scene.ducking);
+                let master = self.audio_settings.master * scene.master;
+                if (master - self.play.master).abs() > 1e-3 {
+                    self.play.master = master;
+                    a.set_master(master);
+                }
             }
         }
         // The look layer (Look & Filters) over the scene's own settings.
@@ -1406,6 +1530,8 @@ impl App {
         let guide = &mut self.guide;
         let mut guide_out = Vec::new();
         let mut game_cmds = Vec::new();
+        let hook = self.play_frame.is_some();
+        let dev = crate::config::get().dev_keys;
         let out = self.egui_ctx.run_ui(raw, |ui| {
             let ctx = ui.ctx().clone();
             if let Some(c) = &info.crash {
@@ -1413,11 +1539,13 @@ impl App {
             }
             panel_actions = panel.ui(ui, &mut root, &mut ctl, &stats);
             let free = ui.available_rect_before_wrap();
-            ui::boot_panel(&ctx, &mut show_boot);
-            if show_stats {
+            if !hook || dev {
+                ui::boot_panel(&ctx, &mut show_boot);
+            }
+            if show_stats && (!hook || menu_open) {
                 ui::stats_panel(&ctx, &info, free, touch_ui);
             }
-            if guide_visible && !menu_open && !touch_ui {
+            if guide_visible && !menu_open && !touch_ui && !hook {
                 ui::guide_panel(&ctx, device, game_frame.is_some());
             }
             if let Some(g) = &game_frame {
@@ -1427,7 +1555,7 @@ impl App {
                     game_cmds = game_ui.ui(&ctx, g, &proj);
                 }
             }
-            if touch_ui {
+            if touch_ui && !hook {
                 let map_hidden = touch.swipes.is_gone(egui::Id::new("minimap"), 0);
                 let covered = menu_open || game_ui.any_open() || look_ui.open || guide.station || guide.field;
                 let points = game_frame.as_ref().and_then(|g| g.inv.as_ref()).map(|i| i.points).unwrap_or(0);
@@ -1436,14 +1564,16 @@ impl App {
                     ui::touch_tips(&ctx, game_frame.is_some(), &mut touch.swipes);
                 }
             }
-            if card_visible && !menu_open && hud.card(&ctx, device) {
+            if card_visible && !menu_open && !hook && hud.card(&ctx, device) {
                 guide.station = true;
             }
-            if !menu_open {
+            if !menu_open && !hook {
                 crate::guide_ui::pad_note(&ctx, hud_ctx.hud, hud_ctx.tick, hud_ctx.dt, touch_ui.then_some(&mut touch.swipes));
             }
-            crate::hud::course_hud(&ctx, &hud_ctx);
-            crate::hud::game_lines(&ctx, hud_ctx.hud);
+            if !hook {
+                crate::hud::course_hud(&ctx, &hud_ctx);
+                crate::hud::game_lines(&ctx, hud_ctx.hud);
+            }
             if let Some(p) = pad_cursor {
                 // The gamepad's menu cursor, above everything.
                 let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("pad_cursor")));
@@ -1532,7 +1662,7 @@ impl App {
                     ui::toast(&ctx, t);
                 }
             }
-            if !touch_ui {
+            if !touch_ui && (!hook || menu_open) {
                 const GAME_KEYS: &str =
                     "Esc menu · I inventory · P passives · C character · K skills · T town · G use · Space dodge · 1 potion";
                 ui::hint_bar(
@@ -1576,6 +1706,34 @@ impl App {
         self.look_ui.save_if_dirty(false);
         for c in game_cmds {
             host.shared.command(c);
+        }
+        // A hook game's requests: keep saves and settings, quit, hold the pointer for mouse look.
+        if let Some(play) = self.play_frame.clone() {
+            if self.play.requests(&play.app) && !cfg!(target_arch = "wasm32") {
+                self.quit = true;
+            }
+            if let Some((low, high, secs)) = self.play.rumble(&play.app) {
+                self.input.vibrate(low, high, secs);
+            }
+            let want = play.app.mouse_look && !self.menu_open && game_input;
+            if want != self.play.grabbed {
+                let w = &gfx.window;
+                if want {
+                    let ok = w.set_cursor_grab(CursorGrabMode::Locked).or_else(|_| w.set_cursor_grab(CursorGrabMode::Confined));
+                    if ok.is_ok() {
+                        w.set_cursor_visible(false);
+                        self.play.grabbed = true;
+                    }
+                } else {
+                    let _ = w.set_cursor_grab(CursorGrabMode::None);
+                    w.set_cursor_visible(true);
+                    self.play.grabbed = false;
+                }
+            }
+        } else if self.play.grabbed {
+            let _ = gfx.window.set_cursor_grab(CursorGrabMode::None);
+            gfx.window.set_cursor_visible(true);
+            self.play.grabbed = false;
         }
         if ctl.paused != ctl_before.paused
             || ctl.speed != ctl_before.speed
@@ -2195,7 +2353,11 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => y,
                     MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.0,
                 };
-                self.rig.params.distance = (self.rig.params.distance * 0.9f32.powf(lines)).clamp(2.0, 120.0);
+                if self.play_frame.is_some() {
+                    self.input.mouse_wheel(lines);
+                } else {
+                    self.rig.params.distance = (self.rig.params.distance * 0.9f32.powf(lines)).clamp(2.0, 120.0);
+                }
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 #[cfg(target_arch = "wasm32")]
@@ -2203,13 +2365,16 @@ impl ApplicationHandler for App {
                 if state == ElementState::Pressed && button == MouseButton::Left && !consumed {
                     self.latency.press();
                 }
-                // In the game the right button is a skill; the middle button turns the camera.
-                let turn = if self.input.game && self.studio_mode == StudioMode::World {
-                    MouseButton::Middle
+                // In the game the right button is a skill; the middle button turns the camera. A
+                // hook game gets every button (its key map binds them).
+                let turn = if self.play_frame.is_some() {
+                    None
+                } else if self.input.game && self.studio_mode == StudioMode::World {
+                    Some(MouseButton::Middle)
                 } else {
-                    MouseButton::Right
+                    Some(MouseButton::Right)
                 };
-                if button == turn {
+                if Some(button) == turn {
                     self.mouse.right_down = state == ElementState::Pressed && !consumed;
                 } else if !consumed || state == ElementState::Released {
                     self.input.mouse_button(button, state);
@@ -2224,11 +2389,21 @@ impl ApplicationHandler for App {
                 }
                 if (p - self.mouse.pos).length() > 2.0 {
                     self.input.last_device = Device::KeyboardMouse;
+                    self.input.mouse_motion(Vec2::ZERO);
                 }
                 self.mouse.pos = p;
                 self.input.cursor = p;
             }
             _ => {}
+        }
+    }
+
+    fn device_event(&mut self, _el: &ActiveEventLoop, _id: DeviceId, event: DeviceEvent) {
+        // Mouse look: raw movement while a hook game holds the pointer.
+        if let DeviceEvent::MouseMotion { delta } = event {
+            if self.play.grabbed {
+                self.input.mouse_motion(Vec2::new(delta.0 as f32, delta.1 as f32));
+            }
         }
     }
 

@@ -25,6 +25,7 @@ mod input;
 mod look_ui;
 mod panel;
 mod platform;
+mod play;
 mod quality;
 mod rooms;
 mod save;

@@ -2320,6 +2320,8 @@ dependencies = [
  "glam 0.33.11",
  "log",
  "pav_core",
+ "serde",
+ "toml",
 ]
 
 [[package]]

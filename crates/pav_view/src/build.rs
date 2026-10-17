@@ -618,7 +618,8 @@ struct RegionCache {
     meshes: Vec<MeshInstance>,
     sdfs: Vec<SdfInstance>,
     lights: Vec<rs::PointLight>,
-    terrain: Option<(MeshKey, Arc<MeshData>)>,
+    /// The terrain patch and the region's static meshes (a game city's roads and decks).
+    terrain: Vec<(MeshKey, Arc<MeshData>)>,
     /// Generated meshes its baked props draw (every scene carries them).
     custom: Vec<(u64, Arc<MeshData>)>,
     /// Its baked props' own lights, made each frame since they flicker and pulse: the light,
@@ -1279,13 +1280,19 @@ impl ViewBuilder {
                         _ => None,
                     })
                     .collect();
-                let terrain = chunk.terrain.as_ref().map(|t| {
-                    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-                    for x in [t.cx as i64 as u64, t.cz as i64 as u64, chunk.version] {
-                        h = (h ^ x).wrapping_mul(0x0100_0000_01b3);
-                    }
-                    (MeshKey::Custom(h), Arc::new(terrain_mesh(t)))
-                });
+                let terrain = chunk
+                    .terrain
+                    .iter()
+                    .chain(chunk.meshes.iter())
+                    .enumerate()
+                    .map(|(i, t)| {
+                        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+                        for x in [t.cx as i64 as u64, t.cz as i64 as u64, chunk.version, i as u64] {
+                            h = (h ^ x).wrapping_mul(0x0100_0000_01b3);
+                        }
+                        (MeshKey::Custom(h), Arc::new(terrain_mesh(t)))
+                    })
+                    .collect();
                 self.static_cache.insert(
                     *key,
                     RegionCache {
@@ -1337,7 +1344,7 @@ impl ViewBuilder {
             for (def, pos, phase) in &c.prop_lights {
                 scene.point_lights.push(crate::fx::light(def, *pos, time, *phase));
             }
-            if let Some((mk, data)) = &c.terrain {
+            for (mk, data) in &c.terrain {
                 scene.custom_meshes.push((*mk, data.clone()));
                 scene.meshes.push(MeshInstance {
                     mesh: *mk,
