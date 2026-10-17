@@ -1,6 +1,6 @@
 //! The game's own agent tools, registered into `gtf` beside every engine tool
 //! (`pav_tools::tools::register`). They need the game's data, so they live here rather than in
-//! `pav_tools` (PLAN.md §6.5 E12): `citymap` now; `perf`, `soak`, `traffic`, `peds`,
+//! `pav_tools` (PLAN.md §6.5 E12): `perf`, `citymap` and `lanes` now; `perf`, `soak`, `traffic`, `peds`,
 //! `vehicle_feel` arrive with the systems they measure.
 
 use std::path::PathBuf;
@@ -34,6 +34,16 @@ pub static TOOLS: &[Tool] = &[
             arg("out", "string", "PNG path (default out/citymap.png)"),
         ],
         run: t_citymap,
+    },
+    Tool {
+        name: "lanes",
+        help: "Paloma Bay's lane graph: totals by kind; at= the nearest lane (limit, links, junction, its light); at= and to= the route between two points.",
+        args: &[
+            arg("at", "array", "[x,z] (on the ground) or [x,y,z] world metres"),
+            arg("to", "array", "[x,z] or [x,y,z]: with at, the route (lanes, length, minutes at the limits)"),
+            arg("time", "number", "seconds on the signal clock for light states (default 0)"),
+        ],
+        run: t_lanes,
     },
 ];
 
@@ -313,4 +323,111 @@ fn t_citymap(_s: &mut Session, a: &Args) -> Result<Output> {
         "cover": city.cover.points.len(),
     });
     Ok(Output::Image { png: png_bytes, path: Some(path), meta })
+}
+
+/// A point argument: [x, z] on the ground, or [x, y, z].
+fn point(a: &Args, key: &str, city: &pav_world::City) -> Result<Option<Vec3>> {
+    match a.get(key) {
+        None => Ok(None),
+        Some(Value::Array(v)) if v.len() == 2 || v.len() == 3 => {
+            let f: Vec<f32> = v.iter().map(|x| x.as_f64().unwrap_or(0.0) as f32).collect();
+            Ok(Some(match f[..] {
+                [x, z] => Vec3::new(x, city.ground_y(Vec2::new(x, z)), z),
+                [x, y, z] => Vec3::new(x, y, z),
+                _ => unreachable!(),
+            }))
+        }
+        Some(_) => bail!("{key} is [x, z] or [x, y, z]"),
+    }
+}
+
+fn r1(x: f32) -> f32 {
+    (x * 10.0).round() / 10.0
+}
+
+fn xyz(p: Vec3) -> [f32; 3] {
+    [r1(p.x), r1(p.y), r1(p.z)]
+}
+
+fn lower(x: impl std::fmt::Debug) -> String {
+    format!("{x:?}").to_lowercase()
+}
+
+fn t_lanes(_s: &mut Session, a: &Args) -> Result<Output> {
+    let city = gtf_game::world::city()?;
+    let g = &city.lanes;
+    let t = a.get("time").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+    let lane = |i: u32| {
+        let l = &g.lanes[i as usize];
+        json!({
+            "lane": i,
+            "kind": lower(l.kind),
+            "limit_kmh": (l.speed * 3.6).round(),
+            "width": r1(l.width),
+            "length": r1(l.length),
+            "from": xyz(l.points[0]),
+            "to": xyz(*l.points.last().unwrap()),
+            "next": l.next,
+            "prev": l.prev,
+            "left": l.left,
+            "right": l.right,
+            "junction": l.junction,
+            "turn": lower(l.turn),
+            "light": g.light(i, t).map(lower),
+            "closed": l.closed,
+        })
+    };
+    let (at, to) = (point(a, "at", &city)?, point(a, "to", &city)?);
+    let out = match (at, to) {
+        (Some(from), Some(to)) => {
+            let route = g.route(from, to);
+            if route.is_empty() {
+                json!({ "route": null, "why": "no lane route between the points (closed lanes, or off the network)" })
+            } else {
+                let length: f32 = route.iter().map(|&i| g.lanes[i as usize].length).sum();
+                let secs: f32 = route.iter().map(|&i| g.lanes[i as usize].length / g.lanes[i as usize].speed.max(1.0)).sum();
+                // The route's legs: consecutive lanes of one kind, with their length.
+                let mut legs: Vec<(String, f32)> = Vec::new();
+                for &i in &route {
+                    let l = &g.lanes[i as usize];
+                    let kind = lower(l.kind);
+                    match legs.last_mut() {
+                        Some(leg) if leg.0 == kind => leg.1 += l.length,
+                        _ => legs.push((kind, l.length)),
+                    }
+                }
+                json!({
+                    "lanes": route.len(),
+                    "length": r1(length),
+                    "minutes_at_limits": r1(secs / 60.0),
+                    "legs": legs.iter().map(|(k, m)| format!("{k} {} m", m.round())).collect::<Vec<_>>(),
+                    "first": lane(route[0]),
+                    "last": lane(*route.last().unwrap()),
+                })
+            }
+        }
+        (Some(p), None) => match g.nearest(p, |_| true) {
+            Some((i, along, off)) => json!({ "along": r1(along), "off": r1(off), "nearest": lane(i) }),
+            None => json!({ "nearest": null }),
+        },
+        (None, Some(_)) => bail!("to needs at"),
+        (None, None) => {
+            let mut kinds: std::collections::BTreeMap<String, (usize, f32)> = Default::default();
+            for l in &g.lanes {
+                let e = kinds.entry(lower(l.kind)).or_default();
+                e.0 += 1;
+                e.1 += l.length;
+            }
+            json!({
+                "lanes": g.lanes.len(),
+                "km": r1(g.lanes.iter().map(|l| l.length).sum::<f32>() / 1000.0),
+                "by_kind": kinds.iter().map(|(k, (n, m))| (k.clone(), json!({ "lanes": n, "km": r1(m / 1000.0) }))).collect::<serde_json::Map<_, _>>(),
+                "closed": g.lanes.iter().filter(|l| l.closed).count(),
+                "junctions": g.junctions.len(),
+                "signals": g.junctions.iter().filter(|j| j.signal.is_some()).count(),
+                "parking": g.parking.len(),
+            })
+        }
+    };
+    Ok(Output::Json(out))
 }
