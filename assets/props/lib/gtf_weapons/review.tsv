@@ -1,0 +1,8 @@
+name	revision	review
+LIB/gtf_weapons/bat	prop2-c37ba69d68de13e8	ok: 84 cm aluminium bat: lathe body with knob, taper and barrel, black grip wrap and end cap; grip at the lower hand, grip2 above; reads as a bat at game distance; 3 parts
+LIB/gtf_weapons/breach_charge	prop2-9d9c4dce7fa43bb2	ok: 20x12x6 cm charge in olive tape with two darker bands, detonator box with red light and red/black wire loops on +z; back on z 0 with wall_mount, centred grip; 7 parts
+LIB/gtf_weapons/buzz_smg	prop2-0ce40c7d58492f15	ok: 38 cm compact SMG, stock collapsed (butt plate, side rods): receiver, rail and sights, stick mag ahead of the grip, flash hider; grip 4 cm under the bore, grip2 on the front, tip at muzzle
+LIB/gtf_weapons/c4r_carbine	prop2-b1904cd402e0b459	ok: 85 cm carbine: black receiver and rail, tan stock on a buffer tube, tan slotted handguard (grip2), curved tan mag, hollow red-dot optic; grip 5 cm under the bore, tip at muzzle
+LIB/gtf_weapons/grenade	prop2-8c7a442d2ccb5eca	ok: 9 cm frag grenade: olive egg body with seam band, steel fuze, spoon down +z, pull ring at -x; grip at the body centre, +y toward the fuze; 6 parts
+LIB/gtf_weapons/p9_pistol	prop2-98c6d6281b26679b	ok: 19 cm compact pistol, barrel +y, top +z: steel slide with serrations and +x port, polymer frame, raked grip to -z, trigger guard, mag plate; grip 4 cm under the bore, tip at muzzle
+LIB/gtf_weapons/pump_shotgun	prop2-1f83110ecda2f79a	ok: 1 m pump shotgun: blued receiver with port, barrel and mag tube, grooved walnut pump (grip2), walnut stock with grip wrist (grip 5 cm under the bore), rubber pad, tip at muzzle

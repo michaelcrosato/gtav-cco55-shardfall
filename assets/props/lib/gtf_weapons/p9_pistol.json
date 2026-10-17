@@ -1,0 +1,23 @@
+{"format":2,"name":"p9_pistol","unit":"cm","mat":"poly",
+"description":"A compact 9 mm pistol standing muzzle up (+y): dark steel slide on a black polymer frame, grip toward -z.",
+"tags":["pistol","handgun","gun","firearm","weapon"],
+"category":"weapon",
+"materials":{
+"poly":{"color":"#1c1d1f","roughness":0.9},
+"steel":{"color":"#3d4148","roughness":0.35,"metallic":0.7}},
+"parts":{
+"barrel":{"type":"tube","radius":0.75,"thickness":0.3,"from":[0,17.2,0],"to":[0,19.4,0],"mat":"steel"},
+"bore":{"type":"cylinder","radius":0.44,"from":[0,16.6,0],"to":[0,19.2,0],"color":"#0a0a0b"},
+"frame":{"type":"rounded_box","size":[2.9,15.6,1.5],"radius":0.3,"pos":[0,9.4,-2.05]},
+"fsight":{"type":"box","size":[0.5,2.2,0.45],"pos":[0,17.7,1.825]},
+"grip":{"type":"rounded_box","size":[2.9,5],"radius":0.6,"from":[0,5.2,-2.2],"to":[0,2.7,-10.6]},
+"guard":{"type":"torus","radius":2.1,"minor_radius":0.35,"arc":180,"facing":"-z","pos":[0,9.8,-2.8],"axis":"x"},
+"mag":{"type":"rounded_box","size":[3.3,5],"radius":0.3,"from":[0,2.79,-10.31],"to":[0,2.41,-11.56],"mat":"steel"},
+"port":{"type":"box","size":[0.45,3.4,1.4],"pos":[1.225,12,0.8],"color":"#0a0a0b"},
+"rsight":{"type":"box","size":[2.2,0.8,0.55],"pos":[0,2,1.875]},
+"serr":{"type":"box","size":[0.3,0.3,2.2],"pos":[1.25,3.5,0.15],"mirror":"x","array":{"count":6,"step":[0,0.6,0]}},
+"slide":{"type":"rounded_box","size":[2.5,18,2.9],"radius":0.4,"pos":[0,10,0.15],"mat":"steel"},
+"trigger":{"type":"box","size":[0.6,0.6],"from":[0,9.6,-1.9],"to":[0,9,-4.3],"mat":"steel"}},
+"sockets":{
+"grip":{"pos":[0,4.7,-4]},
+"tip":{"pos":[0,19.4,0]}}}
