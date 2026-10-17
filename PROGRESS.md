@@ -117,6 +117,14 @@ resumed or compacted session reads first.
 - 2026-10-17 — **Game cameras get no cutaway** (walls are not cut or faded when a hook game
   supplies `PlayFrame.camera`).
 
+- 2026-10-17 — **Vehicle feel targets (E9 design):** vehicles slower than 100 km/h (bus, armoured
+  truck, utility truck, courier van) use 0 → 80% of top speed instead of 0–100 km/h; the tight
+  ranges (0.9–1.1 g, 25–45° slide, climbing 15% at ≥ 60% of top speed) apply to cars, vehicles of
+  2.5 t or more must still climb the grade with a looser grip range; "left" in vehicle data is the
+  car's own left (driver's side, +x); the feel harness builds its own long strip, 15% slope and
+  kicker (the dev district is too short for top speed); rapier keeps wheel raycasts and suspension
+  while the engine applies its own tyre, brake, engine, drag and stabilising forces.
+
 ## Open issues
 - None yet. (Planning-time unknowns to verify early: rapier body-type switching for vehicle LOD in
   M4; egui-wgpu offscreen rendering for `capture hud=true` in M1; DualSense button mapping through
