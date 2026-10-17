@@ -200,14 +200,16 @@ impl WalkMap {
     }
 
     /// A* over walkable tiles (8 neighbours, no corner cutting), at most `budget` tiles opened:
-    /// the tile centres from `from` to `to`, or empty.
+    /// the tile centres from `from` to `to`, or empty. Costs live in flat arrays reused from
+    /// search to search (stamped per search, so nothing is cleared), so a crowd choosing routes
+    /// costs little.
     pub fn path(&self, from: Vec2, to: Vec2, budget: usize) -> Vec<Vec2> {
         let (a, b) = (self.tile_of(from), self.tile_of(to));
         if !self.walkable(a) || !self.walkable(b) {
             return Vec::new();
         }
         #[derive(PartialEq)]
-        struct Node(f32, i32, i32);
+        struct Node(f32, u32);
         impl Eq for Node {}
         impl PartialOrd for Node {
             fn partial_cmp(&self, o: &Self) -> Option<std::cmp::Ordering> {
@@ -216,61 +218,93 @@ impl WalkMap {
         }
         impl Ord for Node {
             fn cmp(&self, o: &Self) -> std::cmp::Ordering {
-                o.0.total_cmp(&self.0).then((o.1, o.2).cmp(&(self.1, self.2)))
+                o.0.total_cmp(&self.0).then(o.1.cmp(&self.1))
             }
         }
-        let h = |t: IVec2| (t - b).as_vec2().length();
-        let mut cost: BTreeMap<(i32, i32), f32> = BTreeMap::new();
-        let mut came: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
-        let mut heap = BinaryHeap::new();
-        cost.insert((a.x, a.y), 0.0);
-        heap.push(Node(h(a), a.x, a.y));
-        let mut opened = 0;
-        while let Some(Node(_, x, z)) = heap.pop() {
-            let t = IVec2::new(x, z);
-            if t == b {
-                let mut out = vec![self.centre(b)];
-                let mut cur = (b.x, b.y);
-                while let Some(&p) = came.get(&cur) {
-                    out.push(self.centre(IVec2::new(p.0, p.1)));
-                    cur = p;
-                }
-                out.reverse();
-                return out;
-            }
-            opened += 1;
-            if opened > budget {
-                break;
-            }
-            let c0 = cost[&(x, z)];
-            for dz in -1..=1 {
-                for dx in -1..=1 {
-                    if dx == 0 && dz == 0 {
-                        continue;
-                    }
-                    let n = t + IVec2::new(dx, dz);
-                    if !self.walkable(n)
-                        || (dx != 0
-                            && dz != 0
-                            && (!self.walkable(t + IVec2::new(dx, 0)) || !self.walkable(t + IVec2::new(0, dz))))
-                    {
-                        continue;
-                    }
-                    // Prefer sidewalks and crossings over open ground.
-                    let step = if dx != 0 && dz != 0 { 1.414 } else { 1.0 };
-                    let k = match self.get(n) {
-                        Walk::Open => 1.4,
-                        _ => 1.0,
-                    };
-                    let c = c0 + step * k;
-                    if cost.get(&(n.x, n.y)).is_none_or(|&old| c < old) {
-                        cost.insert((n.x, n.y), c);
-                        came.insert((n.x, n.y), (x, z));
-                        heap.push(Node(c + h(n), n.x, n.y));
-                    }
-                }
-            }
+        thread_local! {
+            static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::new(Scratch::default());
         }
-        Vec::new()
+        let w = self.w;
+        let index = |t: IVec2| (t.y * w + t.x) as u32;
+        let tile = |i: u32| IVec2::new(i as i32 % w, i as i32 / w);
+        SCRATCH.with(|scratch| {
+            let mut sc = scratch.borrow_mut();
+            let n = (self.w * self.h) as usize;
+            if sc.stamp.len() != n {
+                *sc = Scratch { stamp: vec![0; n], cost: vec![0.0; n], came: vec![u32::MAX; n], search: 0 };
+            }
+            sc.search = sc.search.wrapping_add(1);
+            if sc.search == 0 {
+                sc.stamp.iter_mut().for_each(|s| *s = 0);
+                sc.search = 1;
+            }
+            let search = sc.search;
+            let h = |t: IVec2| (t - b).as_vec2().length();
+            let mut heap = BinaryHeap::new();
+            let ia = index(a);
+            sc.stamp[ia as usize] = search;
+            sc.cost[ia as usize] = 0.0;
+            sc.came[ia as usize] = u32::MAX;
+            heap.push(Node(h(a), ia));
+            let mut opened = 0;
+            while let Some(Node(_, i)) = heap.pop() {
+                let t = tile(i);
+                if t == b {
+                    let mut out = vec![self.centre(b)];
+                    let mut cur = i;
+                    while sc.came[cur as usize] != u32::MAX {
+                        cur = sc.came[cur as usize];
+                        out.push(self.centre(tile(cur)));
+                    }
+                    out.reverse();
+                    return out;
+                }
+                opened += 1;
+                if opened > budget {
+                    break;
+                }
+                let c0 = sc.cost[i as usize];
+                for dz in -1..=1 {
+                    for dx in -1..=1 {
+                        if dx == 0 && dz == 0 {
+                            continue;
+                        }
+                        let nt = t + IVec2::new(dx, dz);
+                        if !self.walkable(nt)
+                            || (dx != 0
+                                && dz != 0
+                                && (!self.walkable(t + IVec2::new(dx, 0)) || !self.walkable(t + IVec2::new(0, dz))))
+                        {
+                            continue;
+                        }
+                        // Prefer sidewalks and crossings over open ground.
+                        let step = if dx != 0 && dz != 0 { 1.414 } else { 1.0 };
+                        let k = match self.get(nt) {
+                            Walk::Open => 1.4,
+                            _ => 1.0,
+                        };
+                        let c = c0 + step * k;
+                        let j = index(nt) as usize;
+                        if sc.stamp[j] != search || c < sc.cost[j] {
+                            sc.stamp[j] = search;
+                            sc.cost[j] = c;
+                            sc.came[j] = i;
+                            heap.push(Node(c + h(nt), j as u32));
+                        }
+                    }
+                }
+            }
+            Vec::new()
+        })
     }
+}
+
+/// A* bookkeeping reused between searches: per tile, the search that last touched it, its cost
+/// so far and where it was reached from.
+#[derive(Default)]
+struct Scratch {
+    stamp: Vec<u32>,
+    cost: Vec<f32>,
+    came: Vec<u32>,
+    search: u32,
 }

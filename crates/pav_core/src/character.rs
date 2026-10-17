@@ -368,6 +368,11 @@ pub struct Character {
     pub slow: f32,
     #[serde(default)]
     pub haste: f32,
+    /// Low detail (E11): no character controller and no pushing — the character walks along the
+    /// ground under it (one ray a tick) at its input's pace. For distant crowds; the game turns it
+    /// on and off (with some hysteresis) by distance.
+    #[serde(default)]
+    pub lod: bool,
     #[serde(default)]
     pub face: Option<f32>,
     #[serde(default)]
@@ -412,6 +417,33 @@ pub enum Action {
         knockback: f32,
         respawn: bool,
     },
+}
+
+/// A low-detail character's move (E11): across as asked, then onto the ground found by one ray
+/// from above the capsule's centre (fixed geometry only: no other characters, no props), down a
+/// step of up to 0.6 m; with no ground under it, it falls as asked.
+fn lod_move(
+    st: &SimState,
+    filter: QueryFilter,
+    center: Vec3,
+    desired: Vec3,
+    height: f32,
+) -> rapier::control::EffectiveCharacterMovement {
+    let half = height * 0.5;
+    let to = center + Vec3::new(desired.x, 0.0, desired.z);
+    let ray = Ray::new(to + Vec3::Y * 0.4, Vec3::NEG_Y);
+    let mut filter = filter;
+    filter.flags |= QueryFilterFlags::EXCLUDE_KINEMATIC | QueryFilterFlags::EXCLUDE_DYNAMIC;
+    let qp = st.physics.query_filtered(filter);
+    let (dy, grounded) = match qp.cast_ray(&ray, (half + 1.0) as Real, true) {
+        Some((_, toi)) => (to.y + 0.4 - toi as f32 + half + 0.02 - center.y, true),
+        None => (desired.y, false),
+    };
+    rapier::control::EffectiveCharacterMovement {
+        translation: Vec3::new(desired.x, dy, desired.z),
+        grounded,
+        is_sliding_down_slope: false,
+    }
 }
 
 fn yaw_of(d: Vec3) -> f32 {
@@ -993,7 +1025,9 @@ pub fn tick(
         desired.y -= 1e-3;
     }
     let mut collisions: Vec<CharacterCollision> = Vec::new();
-    let mut mv = {
+    let mut mv = if ch.lod && !climbing && !hanging && !ch.swimming {
+        lod_move(st, filter, center, desired, height)
+    } else {
         let qp = st.physics.query_filtered(filter);
         kcc.move_shape(dt as Real, &qp, shape.as_ref(), &Pose::from_translation(center), desired, |c| collisions.push(c))
     };
@@ -1018,7 +1052,7 @@ pub fn tick(
         mv = kcc.move_shape(dt as Real, &qp, shape.as_ref(), &at, down, |c| collisions.push(c));
         mv.translation += a.translation;
     }
-    {
+    if !collisions.is_empty() {
         let ph = &mut st.physics;
         let mut qpm =
             ph.broad_phase.as_query_pipeline_mut(ph.narrow_phase.query_dispatcher(), &mut ph.bodies, &mut ph.colliders, filter);

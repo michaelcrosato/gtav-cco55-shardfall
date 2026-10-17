@@ -1199,6 +1199,17 @@ pub struct RayHit {
 }
 
 impl Sim {
+    /// Casts a ray against the fixed world only: no characters, no movable props, no sensors
+    /// (a camera keeping out of walls, a line of sight across a street).
+    pub fn raycast_static(&self, origin: Vec3, dir: Vec3, max: f32) -> Option<RayHit> {
+        let mut filter = QueryFilter::default().exclude_sensors();
+        filter.flags |= QueryFilterFlags::EXCLUDE_KINEMATIC | QueryFilterFlags::EXCLUDE_DYNAMIC;
+        let ray = Ray::new(origin, dir.normalize_or(Vec3::NEG_Y));
+        let (h, hit) = self.state.physics.query_filtered(filter).cast_ray_and_get_normal(&ray, max as Real, true)?;
+        let entity = self.state.physics.colliders.get(h).and_then(|c| crate::physics::entity_from_tag(c.user_data)).map(EntityId);
+        Some(RayHit { point: origin + dir.normalize_or(Vec3::NEG_Y) * hit.time_of_impact as f32, normal: hit.normal, entity })
+    }
+
     /// Casts a ray against everything except the player (and `exclude`).
     pub fn raycast(&self, origin: Vec3, dir: Vec3, max: f32, exclude: Option<EntityId>) -> Option<RayHit> {
         let mut filter = QueryFilter::default().exclude_sensors();

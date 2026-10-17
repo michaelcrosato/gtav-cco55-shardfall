@@ -26,6 +26,7 @@ pub mod gallery;
 pub mod gps;
 pub mod hud;
 pub mod pad;
+pub mod peds;
 pub mod player;
 pub mod protagonists;
 pub mod radio;
@@ -95,6 +96,9 @@ pub struct Freeway {
     pub sky: daytime::Sky,
     /// Sprint stamina and crouch.
     pub foot: player::Foot,
+    /// People on foot around the player.
+    #[serde(default)]
+    pub peds: peds::Peds,
     /// The car radio (stations are live on the game clock).
     #[serde(default)]
     pub radio: radio::Radio,
@@ -175,6 +179,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         sky,
         foot: player::Foot::default(),
         radio: radio::Radio::default(),
+        peds: peds::Peds::default(),
         tour: (mode_is_tour).then(|| Arc::new(tour::Tour::new(&city))),
         gps: gps::Gps::default(),
         city: Some(city),
@@ -418,7 +423,8 @@ impl Game for Freeway {
             }
             let look = self.look();
             // Walls pull the camera in: the distance to the first surface along a ray.
-            let hit = |o: Vec3, d: Vec3, max: f32| sim.raycast(o, d, max, None).map(|h| h.point.distance(o));
+            // (The fixed world only: people and props walking past do not shove the camera.)
+            let hit = |o: Vec3, d: Vec3, max: f32| sim.raycast_static(o, d, max).map(|h| h.point.distance(o));
             if self.wheel_open() {
                 self.cam.update(&InputFrame::default(), feet, look, camera::Moving::default(), real, &hit);
             } else {
@@ -437,6 +443,16 @@ impl Game for Freeway {
                     out.insert(id, frame);
                 }
             }
+            // The people around the player (not on the streaming tour's flight).
+            if let (Some(city), false) = (self.city.clone(), self.mode == "tour") {
+                // A reference view's crowd stands around its camera, not its target.
+                let player = match &self.view {
+                    Some(v) => Vec3::new(v.eye.x, 0.0, v.eye.z),
+                    None => sim.state.player.and_then(|id| sim.feet(id)).unwrap_or(feet),
+                };
+                let m = peds::Moment { city: &city, player, camera: self.camera(), time: self.time, hour: self.sky.hour, dt };
+                self.peds.tick(sim, &m, &mut out);
+            }
         } else {
             self.wheel = None;
         }
@@ -453,6 +469,8 @@ impl Game for Freeway {
     }
 
     fn status(&self, sim: &Sim) -> serde_json::Value {
+        let (walking, waiting, lingering) = self.peds.counts();
+        let peds = json!({ "out": self.peds.list.len(), "walking": walking, "waiting": waiting, "lingering": lingering, "spawned": self.peds.spawned, "stuck": self.peds.stuck });
         let player = sim.state.player.and_then(|id| sim.feet(id)).map(|p| [round(p.x), round(p.z)]);
         json!({
             "mode": self.mode,
@@ -467,6 +485,7 @@ impl Game for Freeway {
             "camera_yaw": round(self.cam.yaw.to_degrees()),
             "clock": daytime::format_time(self.sky.hour),
             "weather": self.sky.weather,
+            "peds": peds,
             "radio": radio::def().ok().and_then(|d| self.radio.card(&d, self.time as f64)).map(|(head, line)| format!("{head}: {line}")),
             "web": self.web,
             "touch": self.touch,
