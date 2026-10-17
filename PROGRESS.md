@@ -5,18 +5,14 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase:** M0 in progress (2026-10-17). Done: engine vendored (`689142b`); E1 code written —
-  `pav_core::games::{register, all, find}`, `pav_tools::tools::{register, all}` + `pav_tools::cli`
-  (`Cli`, `run`), `pav_app` split into a library (`main_with(AppConfig)`, `config.rs`) with a thin
-  `shardfall` binary, crates `gtf_game` (placeholder lot `content/freeway/m0_lot.toml`, tests in
-  `tests/bootstrap.rs`) and `gtf_app` (bins `grand_theft_freeway`, `gtf`), `scripts/build-web.sh
-  --package/--bin`, `scripts/build-gtf-web.sh`, Windows build, session hook, `CLAUDE.md` import.
-  **Next:** build (Cargo.lock gains the two new crates — first build without `--locked`), fix
-  compile errors, run the engine baseline + new tests, native smoke, web boot check, commit.
+- **Phase:** M0 done (2026-10-17); **M1 Platform in progress.** M1 order: E2 input v2 → E3 hook
+  v2 + E4 presentation data (`crates/pav_core/src/present.rs` drafted, not yet wired) → E5
+  `pav_ui` + `capture hud=true` → E6 camera intent + draw list → E13 app shell → E8 part 1 →
+  `gtf_game` frontend skeleton, UI gallery, FPS readout.
 - **Branch / PR:** the session's designated branch; the draft PR opened with the plan.
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)
-- [ ] **M0 Bootstrap** — engine vendored; baseline tests; E1 registry, `pav_tools::cli`, `pav_app`
+- [x] **M0 Bootstrap** — engine vendored; baseline tests; E1 registry, `pav_tools::cli`, `pav_app`
       lib split, `gtf_game` + `gtf_app`; `freeway` scene in every target; web boot check.
 - [ ] **M1 Platform** — E2 input v2, E3 hook v2, E4 presentation data, E5 `pav_ui` + headless HUD
       capture, E6 camera intent + draw list, E13 app shell, E8 part 1 (bank + loops), UI gallery,
@@ -104,3 +100,13 @@ resumed or compacted session reads first.
   pass in the vendored tree). PLAN.md written.
 - 2026-10-17 — Independent plan review (27 findings) verified and applied; `scripts/web-check.mjs`
   gained ordered `until:TEXT:TIMEOUT` steps (tested: a pass and a timeout failure).
+- 2026-10-17 — **M0 done.** Engine vendored at `0098196` (`689142b`); engine baseline
+  `cargo test --workspace`: 66 suites, 455 passed, 0 failed, 2 ignored. E1 (`9bd019a`): game and
+  tool registries, `pav_tools::cli::{Cli, run}`, `pav_app::main_with(AppConfig)`. `gtf_game` +
+  `gtf_app` (`2bf7495`): `cargo test -p gtf_game` 2/2 (every `freeway*` scene builds and steps;
+  snapshot/rewind/replay exact). `gtf capture` of the lot looked at (`out/m0_lot.png`). Native
+  window under Xvfb + lavapipe (`scripts/smoke-gtf.sh 15`): boot complete in 4.2 s, sim 60 tps,
+  egui HUD and the lot visible (`out/smoke-gtf/screen.png`). Single-file web build
+  (`scripts/build-gtf-web.sh`, 3 min 37 s): `dist/GrandTheftFreeway-BX.html` 11.2 MB (wasm 27.9 MB,
+  8.3 MB gzipped); headless Chromium (`web-check.mjs --expect "boot complete" --expect "scene
+  'freeway'"`): boots in 0.6 s, scene `freeway`, HUD visible (`out/web-m0/start.png`).
