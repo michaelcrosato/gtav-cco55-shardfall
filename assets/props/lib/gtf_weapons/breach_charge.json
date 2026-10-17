@@ -1,0 +1,16 @@
+{"format":2,"name":"breach_charge","unit":"cm","mat":"tape",
+"description":"A 20x12x6 cm demolition charge in olive tape, back on z 0: detonator box, red light and two wires on the front (+z).",
+"tags":["explosive","charge","c4","heist","demolition","weapon"],
+"category":"weapon",
+"materials":{
+"tape":{"color":"#5b5e33","roughness":0.85}},
+"parts":{
+"band":{"type":"box","size":[12.4,2.6,6.4],"pos":[0,10,3.2],"color":"#454824","array":{"count":2,"step":[0,11,0]}},
+"block":{"type":"box","size":[12,20,6],"pos":[0,10,3.2]},
+"det":{"type":"box","size":[5,4.4,2],"pos":[0,10,7.2],"color":"#2b2d30"},
+"led":{"type":"box","size":[2.2,0.6,0.3],"pos":[0,11.4,8.35],"color":"#ff2a1a","emissive":0.5},
+"wire_a":{"type":"torus","radius":1.2,"minor_radius":0.25,"arc":180,"facing":"z","pos":[-1,13.4,6.2],"axis":"x","color":"#c4161c"},
+"wire_b":{"type":"torus","radius":1.2,"minor_radius":0.25,"arc":180,"facing":"z","pos":[1,13.4,6.2],"axis":"x","color":"#1d1e20"}},
+"sockets":{
+"grip":{"pos":[0,10,3.2]},
+"wall_mount":{"pos":[0,10,0],"axis":"-z"}}}
