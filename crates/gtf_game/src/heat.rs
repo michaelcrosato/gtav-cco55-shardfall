@@ -2,8 +2,8 @@
 //! stars at once, civilians who see it (in sight, within 30 m) run and phone it in 4–8 s later
 //! unless they are aimed at, killed or out of range when the call ends. Unreported crimes add no
 //! heat. While an officer sees the player the stars are solid and the last known position
-//! follows the player; two seconds unseen and the stars flash: a search zone opens there (its
-//! radius by level). Leaving the zone and staying unseen for 5 + 5 × stars seconds clears the
+//! follows the player (sightings are shared by radio); two seconds unseen and the stars flash: a
+//! search zone opens on the last sighting (its radius by level). Leaving the zone and staying unseen for 5 + 5 × stars seconds clears the
 //! heat — staying hidden inside it, twice that. Missions may floor or cap the level and switch
 //! dispatch off.
 
@@ -142,8 +142,9 @@ impl Heat {
     /// the `witnesses` (civilians in sight) start their calls.
     pub fn crime(&mut self, sim: &mut Sim, crime: Crime, at: Vec3, police: bool, witnesses: &[EntityId]) {
         if police {
-            // Already wanted: crimes in front of the police escalate a level.
-            let s = if self.stars > 0 && crime.stars() <= self.stars { (self.stars + 1).min(5) } else { crime.stars() };
+            // Already wanted: a crime as serious as the level, in front of the police, escalates
+            // it (running someone over at 1★ makes 2★; at 3★ it takes attacking an officer).
+            let s = if self.stars > 0 && crime.stars() == self.stars { (self.stars + 1).min(5) } else { crime.stars() };
             self.raise(s, at);
             self.unseen = 0.0;
             self.searching = false;
@@ -225,8 +226,7 @@ impl Heat {
             self.searching = true;
         }
         if !self.searching {
-            // Recently seen: they still follow the player.
-            self.last_known = player;
+            // Recently seen: not searching yet (the last sighting stands).
             return false;
         }
         let r = ZONE[self.stars as usize];

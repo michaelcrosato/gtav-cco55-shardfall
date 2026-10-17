@@ -153,6 +153,9 @@ pub struct Agent {
     /// removed, its input handed to the player's controls.
     #[serde(default)]
     pub pilot: bool,
+    /// A fleeing car overtaking: seconds left out in the next lane over (oncoming traffic too).
+    #[serde(default)]
+    pub passing: f32,
 }
 
 /// The cars driving around the player, the parked ones and their counters (part of the game's
@@ -179,6 +182,12 @@ pub struct Traffic {
     pub nan: u32,
     /// The autopilot's input for the player's car this tick.
     pub pilot_input: Option<VehicleInput>,
+    /// The autopilot is running from this point (the police): it ignores the lights, drives
+    /// hard and turns away from it at every junction.
+    pub escape: Option<Vec3>,
+    /// Fleeing cars bearing down on people this tick (they honk; the people jump clear).
+    #[serde(skip)]
+    pub honks: Vec<Vec3>,
     /// The bus loop (derived from the city and the data).
     #[serde(skip)]
     pub bus_loop: Option<Arc<BusLoop>>,
@@ -392,6 +401,7 @@ impl Traffic {
             held: false,
             bus: None,
             pilot: true,
+            passing: 0.0,
         };
         self.extend(&mut a, g, &mut sim.state.rng);
         self.cars.push(a);
@@ -693,6 +703,7 @@ impl Traffic {
                 held: false,
                 bus: None,
                 pilot: false,
+                passing: 0.0,
             };
             self.extend(&mut agent, g, &mut sim.state.rng);
             if pos.distance(player) > d.density.full {
@@ -760,6 +771,7 @@ impl Traffic {
                 held: false,
                 bus: Some(BusState { stop, dwell: 0.0 }),
                 pilot: false,
+                passing: 0.0,
             };
             if dist > d.density.full {
                 sim.set_vehicle_kinematic(car, true);
@@ -786,7 +798,33 @@ impl Traffic {
         }
         while a.route.len() < 4 {
             let last = *a.route.last().unwrap_or(&a.lane);
-            match pick_next(g, last, rng) {
+            let next = match (a.pilot, self.escape) {
+                // Running: the turn whose road leads farthest from the chasers.
+                (true, Some(from)) => g.lanes[last as usize]
+                    .next
+                    .iter()
+                    .copied()
+                    .filter(|&n| {
+                        let l = &g.lanes[n as usize];
+                        !l.closed && drivable(l.kind) && l.turn != Turn::UTurn
+                    })
+                    .max_by(|&x, &y| {
+                        let reach = |n: u32| {
+                            // Two lanes on: where this choice leads.
+                            let l = &g.lanes[n as usize];
+                            let after = l
+                                .next
+                                .first()
+                                .map(|&m| *g.lanes[m as usize].points.last().unwrap())
+                                .unwrap_or(*l.points.last().unwrap());
+                            after.distance(from)
+                        };
+                        reach(x).total_cmp(&reach(y)).then(y.cmp(&x))
+                    })
+                    .or_else(|| pick_next(g, last, rng)),
+                _ => pick_next(g, last, rng),
+            };
+            match next {
                 Some(n) => a.route.push(n),
                 None => break,
             }
@@ -795,6 +833,7 @@ impl Traffic {
 
     /// Every car's driving this tick.
     fn drive(&mut self, sim: &mut Sim, m: &Moment, d: &TrafficDef, out: &mut BTreeMap<EntityId, VehicleInput>) {
+        self.honks.clear();
         let g = &m.city.lanes;
         let dt = m.dt;
         if dt <= 0.0 {
@@ -822,9 +861,18 @@ impl Traffic {
             {
                 occ.entry(lane).or_default().push((along, c.speed().max(0.0), c.half.z, e.id));
             }
+            cars.insert(e.id, c);
         }
         for list in occ.values_mut() {
             list.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.3.cmp(&b.3)));
+        }
+        // Parked cars too, for drivers on the run to keep clear of.
+        if self.cars.iter().any(|a| a.mood == Mood::Flee) {
+            for &id in &parked {
+                if let Some(c) = Car::read(sim, id).filter(|c| c.center.distance(m.player) < 200.0) {
+                    cars.insert(id, c);
+                }
+            }
         }
         // Junction boxes: which approaches have cars on their connectors.
         let mut boxes: BTreeMap<u32, Vec<(u8, EntityId)>> = BTreeMap::new();
@@ -895,7 +943,11 @@ impl Traffic {
             }
             self.extend(&mut a, g, &mut rng);
             let lane = &g.lanes[a.lane as usize];
-            // Moods.
+            // Moods (the autopilot on the run drives like a fleeing driver).
+            if a.pilot {
+                a.mood = if self.escape.is_some() { Mood::Flee } else { Mood::Cruise };
+                a.mood_t = 1.0;
+            }
             a.mood_t -= dt;
             a.honk -= dt;
             a.change_t -= dt;
@@ -947,14 +999,23 @@ impl Traffic {
                     dist += g.lanes[n as usize].length;
                 }
             }
-            let mut v0 = limit * a.desire * if a.mood == Mood::Flee { 1.35 } else { 1.0 };
+            // Fleeing drivers push on; the autopilot on the run drives like a getaway driver.
+            let haste = match (a.mood, a.pilot) {
+                (Mood::Flee, true) => 1.6,
+                (Mood::Flee, false) => 1.25,
+                _ => 1.0,
+            };
+            let mut v0 = limit * a.desire * haste;
             // Obstacles: the nearest car ahead, a light, a junction box, people on the road.
             let mut obstacle: Option<(f32, f32)> = None;
             let mut held = false;
-            let mut consider = |gap: f32, speed: f32, excuse: bool| {
+            // (`car`: the nearest obstacle is another vehicle — a fleeing driver goes round it.)
+            let mut car_ahead = false;
+            let mut consider = |gap: f32, speed: f32, excuse: bool, car: bool| {
                 if obstacle.is_none_or(|o| gap < o.0) {
                     obstacle = Some((gap, speed));
                     held = excuse;
+                    car_ahead = car;
                 }
             };
             let mut offset = -a.along;
@@ -970,7 +1031,7 @@ impl Traffic {
                         }
                         let gap = offset + along - my_half - half;
                         if offset + along > 0.1 && gap < look {
-                            consider(gap.max(0.0), speed, held_before.contains(&id));
+                            consider(gap.max(0.0), speed, held_before.contains(&id), true);
                         }
                     }
                 }
@@ -980,9 +1041,9 @@ impl Traffic {
                 let before = to_line > -0.5 || (to_line > -3.0 && a.speed < 3.0);
                 if ln.kind != LaneKind::Connector && before && to_line < look && a.mood != Mood::Flee {
                     match g.light(lane_id, m.time) {
-                        Some(Light::Red) => consider(to_line.max(0.0), 0.0, true),
+                        Some(Light::Red) => consider(to_line.max(0.0), 0.0, true, false),
                         Some(Light::Amber) if to_line > a.speed * a.speed / (2.0 * d.drive.decel) * 0.8 => {
-                            consider(to_line.max(0.0), 0.0, true)
+                            consider(to_line.max(0.0), 0.0, true, false)
                         }
                         _ => {}
                     }
@@ -1009,7 +1070,7 @@ impl Traffic {
                                         && o.speed > 1.5
                                 }));
                         if (!signalled && busy) || oncoming {
-                            consider(to_line.max(0.0), 0.0, true);
+                            consider(to_line.max(0.0), 0.0, true, false);
                         }
                     }
                 }
@@ -1032,10 +1093,43 @@ impl Traffic {
                         let (pt, _) = ahead(g, a.lane, a.along, &a.route, s);
                         for p in &near {
                             if Vec2::new(p.x - pt.x, p.z - pt.z).length() < reach && (p.y - pt.y).abs() < 2.5 {
-                                consider((s - c.half.z - 2.0).max(0.0), 0.0, true);
+                                if a.mood == Mood::Flee && s > c.half.z + 6.0 {
+                                    // A fleeing driver leans on the horn instead of stopping.
+                                    self.honks.push(pt);
+                                } else {
+                                    consider((s - c.half.z - 2.0).max(0.0), 0.0, true, false);
+                                }
                                 break 'path;
                             }
                         }
+                    }
+                }
+            }
+            // On the run (through red lights, round cars): anything about to cross the car's path
+            // — nearest approach within 2.5 s closer than the two bodies — is braked for.
+            if a.mood == Mood::Flee && a.tier == Tier::Full {
+                let fwd = c.forward();
+                let flat = |v: Vec3| Vec2::new(v.x, v.z);
+                for (&id, o) in cars.range(..) {
+                    if id == a.car || o.center.distance(c.center) > 45.0 || (o.center.y - c.center.y).abs() > 3.0 {
+                        continue;
+                    }
+                    let p = flat(o.center - c.center);
+                    let v = flat(o.vel - c.vel);
+                    let t = (-p.dot(v) / v.length_squared().max(1e-3)).clamp(0.0, 2.5);
+                    if t < 0.1 {
+                        continue;
+                    }
+                    let crossing = o.forward().dot(fwd).abs() < 0.6;
+                    let reach = c.half.x + if crossing { o.half.z * 0.9 } else { o.half.x } + 0.6;
+                    let meet = p + v * t;
+                    let ahead_of_me = meet.dot(flat(fwd)) > c.half.z * 0.5;
+                    if meet.length() < reach && ahead_of_me {
+                        // Where the other will be, along this car's way.
+                        let there = p + flat(o.vel) * t;
+                        let gap = there.dot(flat(fwd)) - c.half.z - if crossing { o.half.x } else { o.half.z };
+                        // (Not a car to pass: it is still in the way.)
+                        consider(gap.max(0.0), o.vel.dot(fwd).max(0.0), false, false);
                     }
                 }
             }
@@ -1047,7 +1141,7 @@ impl Traffic {
                 let z = to.dot(c.forward());
                 if bs.dwell > 0.0 {
                     bs.dwell -= dt;
-                    consider(0.0, 0.0, true);
+                    consider(0.0, 0.0, true, false);
                     if bs.dwell <= 0.0 {
                         bs.stop = (bs.stop + 1) % bl.stops.len();
                     }
@@ -1056,7 +1150,7 @@ impl Traffic {
                     if z < 8.0 && a.speed.abs() < 0.8 {
                         bs.dwell = d.bus.dwell;
                     }
-                    consider(z.max(0.0), 0.0, true);
+                    consider(z.max(0.0), 0.0, true, false);
                 } else if z < -3.0 && to.length() < 12.0 {
                     // Went past it (pushed, rerouted): on to the next.
                     bs.stop = (bs.stop + 1) % bl.stops.len();
@@ -1090,9 +1184,43 @@ impl Traffic {
                     }
                 }
             }
+            // Fleeing: out past a slower car ahead rather than queueing behind it.
+            a.passing -= dt;
+            if a.mood == Mood::Flee
+                && a.tier == Tier::Full
+                && car_ahead
+                && obstacle.is_some_and(|(gap, sp)| gap < 22.0 && sp < a.speed.max(4.0))
+            {
+                // Only when the oncoming lane beside it is clear for a good way ahead.
+                let fwd = c.forward();
+                let beside = c.feet() + c.left() * lane.width;
+                let keep = |l: &pav_world::lanes::Lane| !l.closed && drivable(l.kind);
+                let clear = match g.nearest(beside, keep) {
+                    Some((ol, oal, off)) if off < 2.5 => {
+                        let opposite = g.lanes[ol as usize].at(oal).1.dot(fwd) < -0.5;
+                        let busy = occ.get(&ol).is_some_and(|v| {
+                            v.iter().any(|(al, _, _, id)| {
+                                *id != a.car
+                                    && if opposite { *al < oal + 6.0 && *al > oal - 40.0 } else { (*al - oal).abs() < 25.0 }
+                            })
+                        });
+                        !busy
+                    }
+                    _ => false,
+                };
+                if clear {
+                    a.passing = 2.5;
+                }
+            }
+            if a.passing > 0.0 && car_ahead {
+                obstacle = None;
+                held = false;
+            }
             let accel = idm(a.speed.max(0.0), v0, obstacle, &d.drive);
-            // Stuck: stopped with nothing that excuses it.
-            let stopped = a.speed.abs() < 0.5 && v0 > 0.5;
+            // Stuck: stopped with nothing that excuses it (on the run, crawling counts: pushing
+            // against a car it is wedged against).
+            let crawl = if a.mood == Mood::Flee { 1.5 } else { 0.5 };
+            let stopped = a.speed.abs() < crawl && v0 > 0.5;
             if stopped && !held {
                 a.blocked += dt;
             } else if a.speed.abs() > 2.0 {
@@ -1103,15 +1231,20 @@ impl Traffic {
             if horn {
                 a.honk = 4.0;
             }
-            if a.blocked > d.drive.reverse_after && a.reverse <= 0.0 && a.tier == Tier::Full {
+            // Turned across its lane (spun, wedged) it backs up sooner: a three-point turn.
+            let askew = g.lanes[a.lane as usize].at(a.along).1.dot(c.forward()) < 0.6;
+            // A fleeing driver does not sit and wait.
+            let wait = if askew || a.mood == Mood::Flee { 1.5 } else { d.drive.reverse_after };
+            if a.blocked > wait && a.reverse <= 0.0 && a.tier == Tier::Full {
                 // Back up only into clear road (nothing within 9 m behind on this lane).
                 let clear = occ.get(&a.lane).is_none_or(|v| {
                     v.iter().all(|(al, _, half, id)| *id == a.car || *al > a.along || a.along - al - half - c.half.z > 9.0)
                 });
-                if clear {
-                    a.reverse = 1.6;
+                let hurry = askew || a.mood == Mood::Flee;
+                if clear || hurry {
+                    a.reverse = if hurry { 2.2 } else { 1.6 };
                 }
-                a.blocked = d.drive.honk_after;
+                a.blocked = if hurry { 0.0 } else { d.drive.honk_after };
             }
             match a.tier {
                 Tier::Rail => {
@@ -1130,11 +1263,20 @@ impl Traffic {
                         // Back up, wheels turned away from where it was going.
                         let (target, _) = ahead(g, a.lane, a.along, &a.route, 8.0);
                         let side = (target - c.feet()).dot(c.left());
-                        // Gently (the brake pedal reverses), no faster than 2.5 m/s.
-                        let pedal = if c.speed() > -2.5 { 0.35 } else { 0.0 };
+                        // Gently (the brake pedal reverses), no faster than 2.5 m/s; on the run,
+                        // hard (shoving what is behind).
+                        let (pedal, top) = if a.mood == Mood::Flee { (0.9, -5.0) } else { (0.35, -2.5) };
+                        let pedal = if c.speed() > top { pedal } else { 0.0 };
                         VehicleInput { brake: pedal, steer: if side > 0.0 { 1.0 } else { -1.0 }, horn, ..Default::default() }
                     } else {
-                        let pull = if a.mood == Mood::PullOver { lane.width * 0.45 } else { 0.0 };
+                        let pull = if a.mood == Mood::PullOver {
+                            lane.width * 0.45
+                        } else if a.passing > 0.0 {
+                            // Over the centre line to pass.
+                            -lane.width * 0.9
+                        } else {
+                            0.0
+                        };
                         steer_along(g, &a, &c, accel, v0, pull, horn)
                     };
                     if a.pilot {
@@ -1163,12 +1305,12 @@ fn turn_speed(l: &pav_world::lanes::Lane) -> f32 {
 /// Pure pursuit toward a point ahead on the route, and the pedals for `accel`.
 fn steer_along(g: &LaneGraph, a: &Agent, c: &Car, accel: f32, v0: f32, pull: f32, horn: bool) -> VehicleInput {
     let v = c.speed();
-    let look = (3.5 + v.max(0.0) * 0.5).clamp(4.0, 20.0);
+    // Look further ahead at speed (a short look swings a fast car across its lane).
+    let look = (3.5 + v.max(0.0) * 0.5 + (v - 10.0).max(0.0) * 0.6).clamp(4.0, 28.0);
     let (mut target, dir) = ahead(g, a.lane, a.along, &a.route, look);
-    if pull > 0.0 {
-        // Toward the curb: the lane's right side.
-        target += Vec3::new(-dir.z, 0.0, dir.x) * pull;
-    }
+    // `pull` metres off the lane's line: to its right (the curb), or negative to its left (out
+    // past a car).
+    target += Vec3::new(-dir.z, 0.0, dir.x) * pull;
     let to = target - c.center;
     let x = to.dot(c.left());
     let z = to.dot(c.forward()).max(0.5);
@@ -1180,10 +1322,12 @@ fn steer_along(g: &LaneGraph, a: &Agent, c: &Car, accel: f32, v0: f32, pull: f32
     let angle = (curvature * wheelbase).atan();
     let lock = 34f32.to_radians();
     let share = 1.0 - 0.65 * ((v - 8.0) / 24.0).clamp(0.0, 1.0);
-    // Plus a pull back onto the lane's centre line (pure pursuit alone cuts corners).
+    // Plus a pull back onto the lane's centre line at turning speeds (pure pursuit alone cuts
+    // corners); none at cruising speed, where it would swing the car across the road.
     let (p, d) = g.lanes[a.lane as usize].at(a.along);
-    let off = (c.feet() - p).dot(Vec3::new(d.z, 0.0, -d.x)) - pull;
-    let steer = (-angle / (lock * share) + (off * 0.3).clamp(-0.35, 0.35)).clamp(-1.0, 1.0);
+    let off = (c.feet() - p).dot(Vec3::new(d.z, 0.0, -d.x)) + pull;
+    let calm = ((12.0 - v) / 6.0).clamp(0.0, 1.0);
+    let steer = (-angle / (lock * share) + (off * 0.3 * calm).clamp(-0.35 * calm, 0.35 * calm)).clamp(-1.0, 1.0);
     // The engine's brake reverses below 1 m/s: slow and stopped, the handbrake holds instead.
     if (v0 < 0.3 || accel < 0.0) && v < 1.2 {
         return VehicleInput { steer, handbrake: true, horn, ..Default::default() };

@@ -20,6 +20,7 @@ use serde_json::json;
 pub mod about;
 pub mod ambience;
 pub mod audio;
+pub mod bot;
 pub mod camera;
 pub mod combat;
 pub mod content;
@@ -168,6 +169,9 @@ pub struct Freeway {
     pub scanner: f32,
     #[serde(default)]
     pub cuffed: f32,
+    /// The player bot (`autopilot escape`: the heat-evasion bot).
+    #[serde(default)]
+    pub bot: bot::Bot,
     /// Crimes typed as commands (`crime assault`: tests, bots), judged next tick.
     #[serde(default)]
     pub typed_crimes: Vec<heat::Crime>,
@@ -267,6 +271,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         scanner: 0.0,
         cuffed: 0.0,
         typed_crimes: Vec::new(),
+        bot: bot::Bot::default(),
         ai_inputs: BTreeMap::new(),
         chase: camera::ChaseCam::default(),
         peds: peds::Peds::default(),
@@ -366,7 +371,11 @@ impl Freeway {
                     Err(_) => log::warn!("wanted: '{n}' is not 0-5"),
                 },
                 (Some("autopilot"), Some(arg)) => {
+                    // `on`, `escape` (run from the police: the bot leaves wrecked or boxed-in
+                    // cars and takes others), `off`.
                     let car = if arg == "off" { None } else { self.drive.vehicle() };
+                    self.bot.stop();
+                    self.bot.escape = arg == "escape";
                     if let Some(city) = self.city.clone() {
                         self.traffic.autopilot(sim, &city, car);
                     }
@@ -470,6 +479,12 @@ impl Freeway {
             match *d {
                 Deed::Entered { car } => {
                     self.traffic.unpark(car);
+                    // The bot on the run drives off at once.
+                    if self.bot.escape
+                        && let Some(city) = self.city.clone()
+                    {
+                        self.traffic.autopilot(sim, &city, Some(car));
+                    }
                     if let Some(c) = drive::Car::read(sim, car) {
                         self.chase.place_behind(c.yaw);
                         if c.radio {
@@ -750,16 +765,32 @@ impl Game for Freeway {
                 self.combat.hurt_player(blast.player_hurt);
             }
         }
-        // A police vehicle blowing up near the player is on the player.
+        // Ramming a police vehicle (driving into it, not being rammed) puts its wreck on the player.
+        let mine = self.drive.vehicle().and_then(|c| drive::Car::read(sim, c));
+        for ev in events.iter() {
+            let SimEvent::Crash { vehicle, other: Some(other), impulse, .. } = *ev else { continue };
+            let Some(me) = mine.as_ref() else { break };
+            let them = if vehicle == me.id {
+                other
+            } else if other == me.id {
+                vehicle
+            } else {
+                continue;
+            };
+            let toward = sim.state.entities.get(them).map(|e| (e.pos - me.center).normalize_or(Vec3::ZERO).dot(me.vel));
+            if impulse >= 800.0 && toward.is_some_and(|v| v > 2.0) {
+                self.police.harmed(them);
+            }
+        }
+        // A police vehicle the player harmed blowing up is on the player.
         for ev in events.iter() {
             if let SimEvent::Explosion { pos, .. } = ev {
-                let theirs = self
-                    .police
-                    .units
+                let theirs = sim
+                    .state
+                    .entities
                     .iter()
-                    .any(|u| sim.state.entities.get(u.vehicle).is_some_and(|e| e.pos.distance(*pos) < 1.5));
-                let near = sim.state.player.and_then(|id| sim.feet(id)).is_some_and(|f| f.distance(*pos) < 60.0);
-                if theirs && near {
+                    .any(|e| e.vehicle.is_some() && e.pos.distance(*pos) < 1.5 && self.police.blamed(e.id));
+                if theirs {
                     self.heat.crime(sim, heat::Crime::DestroyPolice, *pos, true, &[]);
                 }
             }
@@ -822,6 +853,7 @@ impl Game for Freeway {
                 f.pad.held |= pav_core::input::pad::R1;
             }
         }
+        self.bot.frame(&mut f);
         f
     }
 

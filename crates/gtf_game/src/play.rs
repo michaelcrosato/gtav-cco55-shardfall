@@ -162,6 +162,19 @@ impl Freeway {
             self.peds.scare(sim, &city.walk, at, 45.0);
             self.peds.incident(sim, at, 60.0);
             crimes.push((Crime::Shooting, at));
+            let near: Vec<EntityId> = sim
+                .state
+                .entities
+                .iter()
+                .filter(|e| e.vehicle.is_some() && e.pos.distance(at) < combat::BLAST)
+                .map(|e| e.id)
+                .collect();
+            for id in near {
+                self.police.harmed(id);
+            }
+        }
+        for &id in &res.vehicles {
+            self.police.harmed(id);
         }
         if self.mode == "tour" {
             return out;
@@ -276,8 +289,23 @@ impl Freeway {
             people: walkers,
             gunfire: res.gunfire,
         };
+        // The evasion bot runs from the nearest police unit, or out of the search zone.
+        self.traffic.escape = (self.bot.escape && self.heat.stars > 0).then(|| match self.heat.zone() {
+            Some((centre, _)) => centre,
+            None => self
+                .police
+                .units
+                .iter()
+                .filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos))
+                .min_by(|a, b| a.distance(player).total_cmp(&b.distance(player)))
+                .unwrap_or(self.heat.last_known),
+        });
         let mut inputs = BTreeMap::new();
         self.traffic.tick(sim, &tm, &mut inputs, &mut self.drive.locked);
+        // People in front of a fleeing car jump clear.
+        for at in std::mem::take(&mut self.traffic.honks) {
+            self.peds.scare(sim, &city.walk, at, 9.0);
+        }
         // The law: brandishing at the police, then each crime's witnesses, the police, the heat.
         if self.view.is_none() {
             if gun_out && pid.is_some() {
@@ -293,6 +321,30 @@ impl Freeway {
             self.law(sim, &city, player, crimes, &mut inputs, &mut out, events, real, dt);
         }
         self.ai_inputs = inputs;
+        // The bot's next presses (tests, soaks, attract).
+        if self.bot.escape && self.fate.alive() {
+            let feet = pid.and_then(|id| sim.feet(id)).unwrap_or(player);
+            let mut police: Vec<EntityId> = self.police.units.iter().map(|u| u.vehicle).collect();
+            police.extend(self.police.blocks.iter().flat_map(|b| b.cars.iter().copied()));
+            let threat = self
+                .police
+                .officers
+                .iter()
+                .filter_map(|o| sim.feet(o.id))
+                .chain(self.police.units.iter().filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos)))
+                .min_by(|a, b| a.distance(feet).total_cmp(&b.distance(feet)));
+            let bm = crate::bot::Moment {
+                city: &city,
+                feet,
+                car: self.drive.vehicle(),
+                busy: self.drive.busy() || matches!(self.drive.phase, drive::Phase::Stopping { .. }),
+                threat,
+                police: &police,
+                wanted: self.heat.stars > 0,
+                dt,
+            };
+            self.bot.update(sim, &bm);
+        }
         // Death.
         if self.fate.alive() && self.combat.health <= 0.0 && pid.is_some() {
             self.go(sim, Fate::Wasted { t: 0.0 }, events);

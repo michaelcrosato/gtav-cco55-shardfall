@@ -75,6 +75,9 @@ pub struct Unit {
     /// Moved along its path kinematically while far away (the ground there may not be loaded).
     #[serde(default)]
     pub rails: bool,
+    /// Seconds before it may try another PIT (it backs off after one).
+    #[serde(default)]
+    pub ram_t: f32,
 }
 
 /// Units farther than this from the player drive on rails, nearer on their wheels (m).
@@ -95,6 +98,11 @@ fn route_from(city: &City, from: Vec3, to: Vec3) -> Vec<Vec3> {
     }
     pts.push(to);
     pts
+}
+
+/// Whether something fixed stands between `from` and `to` (a roadblock out of sight).
+fn sight_blocked(sim: &Sim, from: Vec3, to: Vec3) -> bool {
+    !sight(sim, from, to)
 }
 
 /// Whether the ground at `p` is loaded (its streaming chunk is active).
@@ -139,7 +147,44 @@ pub struct Police {
     pub hits: u32,
     /// Seconds to the next dispatch check.
     pub pass: f32,
+    /// Roadblocks across the player's way (3 stars and up), spike strips before them (4+), and
+    /// seconds until the next may be set.
+    pub blocks: Vec<Roadblock>,
+    pub spikes: Vec<Spike>,
+    pub block_t: f32,
+    /// Police vehicles the player harmed lately (shot, blew up near, rammed) and seconds left:
+    /// one of these blowing up is on the player; any other wreck is the police's own doing.
+    pub blame: Vec<(EntityId, f32)>,
+    /// Seconds the player has been all but still (in a car stopped this long, units pull up and
+    /// their crews get out).
+    pub still: f32,
 }
+
+/// A car stopped this long (s) brings the crews out.
+const STILL_HALT: f32 = 2.0;
+
+/// How long harming a police vehicle stays on the player (s).
+const BLAME: f32 = 15.0;
+
+/// Cars parked across a road, their crews out beside them.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Roadblock {
+    pub at: Vec3,
+    pub cars: Vec<EntityId>,
+}
+
+/// A spike strip across a lane: tyres that roll over it burst.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct Spike {
+    pub at: Vec3,
+    /// Along the road (the strip lies across it), and its half length.
+    pub dir: Vec3,
+    pub half: f32,
+}
+
+/// Seconds between roadblocks, and how far ahead of the player they are set (m).
+const BLOCK_EVERY: f32 = 25.0;
+const BLOCK_AHEAD: [f32; 2] = [110.0, 200.0];
 
 /// What the police need to know this tick.
 pub struct Moment<'a> {
@@ -200,9 +245,26 @@ impl Police {
         self.officers.iter().any(|o| o.id == id)
     }
 
-    /// Whether `id` is a police vehicle.
+    /// Whether `id` is a police vehicle (a unit's, or parked across a road).
     pub fn is_unit(&self, id: EntityId) -> bool {
-        self.units.iter().any(|u| u.vehicle == id)
+        self.units.iter().any(|u| u.vehicle == id) || self.blocks.iter().any(|b| b.cars.contains(&id))
+    }
+
+    /// The player harmed vehicle `id`: if it is the police's, its wreck is on the player for a
+    /// while.
+    pub fn harmed(&mut self, id: EntityId) {
+        if !self.is_unit(id) {
+            return;
+        }
+        match self.blame.iter_mut().find(|b| b.0 == id) {
+            Some(b) => b.1 = BLAME,
+            None => self.blame.push((id, BLAME)),
+        }
+    }
+
+    /// Whether the player is to blame for what happens to police vehicle `id`.
+    pub fn blamed(&self, id: EntityId) -> bool {
+        self.blame.iter().any(|b| b.0 == id)
     }
 
     /// The heat is over: every unit drives away.
@@ -220,6 +282,13 @@ impl Police {
         for u in self.units.drain(..) {
             sim.despawn(u.vehicle);
         }
+        for b in self.blocks.drain(..) {
+            for c in b.cars {
+                sim.despawn(c);
+            }
+        }
+        self.spikes.clear();
+        self.blame.clear();
     }
 
     /// One tick: dispatch by level, drive the units, move and fire the officers. Vehicle inputs
@@ -232,6 +301,11 @@ impl Police {
         moves: &mut BTreeMap<EntityId, InputFrame>,
     ) -> Report {
         let mut rep = Report::default();
+        self.still = if m.player_vel.length() < 1.0 { self.still + m.dt } else { 0.0 };
+        for b in &mut self.blame {
+            b.1 -= m.dt;
+        }
+        self.blame.retain(|b| b.1 > 0.0);
         // Gone, wrecked or emptied units leave the roster; dead officers too.
         self.officers.retain(|o| sim.state.entities.get(o.id).is_some_and(|e| !e.name.starts_with("dead:")));
         let officers = &self.officers;
@@ -244,14 +318,27 @@ impl Police {
             self.pass = 1.0;
             self.dispatch(sim, m);
         }
+        // One car at a time tries a PIT (3 stars and up): the nearest that may.
+        let rammer = if m.stars >= 3 && m.player_car.is_some() {
+            self.units
+                .iter()
+                .filter(|u| u.kind != Kind::Air && u.mode == Mode::Pursue && u.ram_t <= 0.0 && !u.rails)
+                .filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| (u.vehicle, e.pos.distance(m.player))))
+                .filter(|(_, d)| *d < 18.0)
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .map(|(id, _)| id)
+        } else {
+            None
+        };
         for i in 0..self.units.len() {
             let mut u = self.units[i].clone();
-            if let Some(input) = self.drive(sim, m, &mut u, &mut rep) {
+            if let Some(input) = self.drive(sim, m, &mut u, rammer, &mut rep) {
                 vin.insert(u.vehicle, input);
             }
             self.units[i] = u;
         }
         self.officers_tick(sim, m, moves, &mut rep);
+        self.roadblocks(sim, m);
         // Leaving units go once far and out of view (with their crews).
         let mut gone = Vec::new();
         for u in &self.units {
@@ -364,6 +451,7 @@ impl Police {
                 light: m.player,
                 unseen: 0.0,
                 rails,
+                ram_t: 0.0,
             });
             self.spawned += 1;
             return;
@@ -386,7 +474,14 @@ impl Police {
     }
 
     /// One unit's driving this tick (None: no input, e.g. a stopped unit with its crew out).
-    fn drive(&mut self, sim: &mut Sim, m: &Moment, u: &mut Unit, rep: &mut Report) -> Option<VehicleInput> {
+    fn drive(
+        &mut self,
+        sim: &mut Sim,
+        m: &Moment,
+        u: &mut Unit,
+        rammer: Option<EntityId>,
+        rep: &mut Report,
+    ) -> Option<VehicleInput> {
         let c = Car::read(sim, u.vehicle)?;
         let dt = m.dt;
         let crew_in = u.crew.iter().any(|id| {
@@ -394,7 +489,7 @@ impl Police {
         });
         // Sight: cars look ahead, helicopters all round (at night only inside their light).
         let seen = if u.kind == Kind::Air {
-            let range = if m.hidden { 45.0 } else { 80.0 };
+            let range = if m.hidden { 35.0 } else { 60.0 };
             let lit = !m.night || u.light.distance(m.player) < 9.0;
             lit && Self::can_see(sim, c.center - Vec3::Y * 1.5, Vec3::ZERO, range, std::f32::consts::PI, m.player)
         } else {
@@ -413,7 +508,9 @@ impl Police {
         // The mode for this tick.
         if u.mode != Mode::Leave && u.kind != Kind::Air {
             let near = c.center.distance(m.player);
-            u.mode = if m.player_car.is_none() && near < 24.0 && (seen || u.unseen < 4.0) {
+            // On foot, or stopped in a car a moment: pull up and get out.
+            let stopped = m.player_car.is_none() || self.still > STILL_HALT;
+            u.mode = if stopped && near < 24.0 && (seen || u.unseen < 4.0) {
                 Mode::Halt
             } else if u.mode == Mode::Halt && !crew_in {
                 // Crew still out: wait for them.
@@ -486,17 +583,32 @@ impl Police {
                 });
             }
             Mode::Pursue => {
-                let lead = m.player + m.player_vel * 0.7;
-                let close = c.center.distance(m.player) < 18.0;
-                let ram = m.stars >= 3 && close && m.player_car.is_some();
+                // Where it sees the player going; out of sight, the last sighting (by radio).
+                let lead = if seen { m.player + m.player_vel * 0.7 } else { m.last_known };
+                u.ram_t -= dt;
+                let ram = rammer == Some(u.vehicle) && seen;
+                // Bumper to bumper (or alongside) — contact, or as good as: back off a while.
+                if ram && c.center.distance(m.player) < c.half.z * 2.0 + 1.4 {
+                    u.ram_t = sim.state.rng.range(4.0, 7.0);
+                }
                 let target = if ram {
-                    // The rear quarter: a PIT.
+                    // A PIT: the nose into the rear quarter, from the side it is already on.
                     let back = -m.player_vel.normalize_or(Vec3::Z);
-                    m.player + back * 2.0 + Vec3::new(back.z, 0.0, -back.x) * 0.9
+                    let side = Vec3::new(back.z, 0.0, -back.x);
+                    let s = if (c.center - m.player).dot(side) >= 0.0 { 1.0 } else { -1.0 };
+                    m.player + back * 1.6 + side * s * 2.0
                 } else {
                     lead
                 };
-                let pace = (m.player_vel.length() + 7.0).clamp(14.0, 42.0);
+                // Closing fast from afar; a PIT itself is a nudge (a few m/s faster), not a crash.
+                let pv = m.player_vel.length();
+                let pace = if ram {
+                    (pv + 3.0).clamp(4.0, 40.0)
+                } else if c.center.distance(m.player) < 30.0 {
+                    (pv + 4.0).clamp(8.0, 40.0)
+                } else {
+                    (pv + 7.0).clamp(14.0, 42.0)
+                };
                 (target, pace, ram)
             }
             Mode::Respond | Mode::Search | Mode::Leave => {
@@ -538,7 +650,22 @@ impl Police {
         let angle = x.atan2(z.max(0.3));
         let mut steer = (-angle * 1.6).clamp(-1.0, 1.0);
         let reach = to.length();
-        let want = if u.mode == Mode::Pursue && !ram && reach < 12.0 { want.min(m.player_vel.length()) } else { want };
+        // Not ramming: close in, then hang back at the player's pace.
+        let want = if u.mode == Mode::Pursue && !ram && reach < 14.0 { want.min(m.player_vel.length() * 0.95) } else { want };
+        // And off the bumper of the police car ahead (they do not shunt each other along).
+        let mut want = want;
+        for o in &self.units {
+            if o.vehicle == u.vehicle || o.kind == Kind::Air {
+                continue;
+            }
+            let Some(oc) = sim.state.entities.get(o.vehicle).map(|e| e.pos) else { continue };
+            let d = oc - c.center;
+            let z = d.dot(c.forward());
+            if z > 0.0 && z < 14.0 && d.dot(c.left()).abs() < 2.4 && d.y.abs() < 3.0 {
+                let ahead_speed = sim.vehicle_status(o.vehicle).map(|s| s.kmh / 3.6).unwrap_or(0.0).max(0.0);
+                want = want.min((ahead_speed + (z - 7.0) * 0.8).max(0.0));
+            }
+        }
         // Slow for sharp turns.
         let want = want * (1.0 - (angle.abs() / 1.6).clamp(0.0, 0.6));
         let mut throttle = ((want - speed) * 0.4).clamp(0.0, 1.0);
@@ -664,7 +791,9 @@ impl Police {
                             * (1.0 - dist / 45.0).clamp(0.15, 1.0)
                             * if speed > 5.0 { 0.55 } else { 1.0 }
                             * if m.hidden { 0.5 } else { 1.0 }
-                            * if m.covered { 0.25 } else { 1.0 };
+                            * if m.covered { 0.25 } else { 1.0 }
+                            // The car's body takes most rounds meant for its driver.
+                            * if m.player_car.is_some() { 0.5 } else { 1.0 };
                         let hit = sim.state.rng.f32() < chance;
                         let muzzle = feet + Vec3::Y * 1.35 + fwd * 0.4;
                         let miss = Vec3::new(
@@ -689,6 +818,126 @@ impl Police {
             moves.insert(o.id, frame);
             self.officers[i] = o;
         }
+    }
+
+    /// Roadblocks: from 3 stars, while the player drives, now and then two cars across the road
+    /// ahead (round a corner, out of sight) with their crews out, and from 4 stars a spike strip
+    /// before them. Tyres that roll over a strip burst; roadblocks far behind are cleared.
+    fn roadblocks(&mut self, sim: &mut Sim, m: &Moment) {
+        // Spikes burst the tyres of whatever rolls over them.
+        for sp in &self.spikes {
+            let across = Vec3::new(-sp.dir.z, 0.0, sp.dir.x);
+            let hits: Vec<EntityId> = sim
+                .state
+                .entities
+                .iter()
+                .filter(|e| e.vehicle.is_some() && !self.units.iter().any(|u| u.vehicle == e.id))
+                .filter(|e| {
+                    let d = e.pos - sp.at;
+                    d.dot(sp.dir).abs() < 1.2 && d.dot(across).abs() < sp.half + 0.8 && d.y.abs() < 2.0
+                })
+                .map(|e| e.id)
+                .collect();
+            for id in hits {
+                for w in 0..4 {
+                    sim.burst_tyre(id, w);
+                }
+            }
+        }
+        // Old roadblocks go once far and out of sight.
+        let cam = m.camera;
+        let mut keep = Vec::new();
+        for b in std::mem::take(&mut self.blocks) {
+            if b.at.distance(m.player) > 260.0 && !crate::traffic::seen(&cam, b.at) {
+                for c in &b.cars {
+                    let crew: Vec<EntityId> = self.officers.iter().filter(|o| o.vehicle == *c).map(|o| o.id).collect();
+                    self.officers.retain(|o| o.vehicle != *c);
+                    for id in crew {
+                        sim.despawn(id);
+                    }
+                    sim.despawn(*c);
+                }
+                self.spikes.retain(|s| s.at.distance(b.at) > 30.0);
+            } else {
+                keep.push(b);
+            }
+        }
+        self.blocks = keep;
+        self.block_t -= m.dt;
+        if m.stars < 3 || m.player_car.is_none() || self.block_t > 0.0 || !m.dispatch {
+            return;
+        }
+        self.block_t = BLOCK_EVERY;
+        // Follow the road the player drives along, ahead, for a spot hidden from the camera.
+        let g = &m.city.lanes;
+        let fwd = m.player_vel.normalize_or(Vec3::ZERO);
+        if fwd == Vec3::ZERO {
+            return;
+        }
+        let keep = |l: &pav_world::lanes::Lane| !l.closed && l.kind != LaneKind::Channel;
+        let Some((mut lane, mut along, _)) = g.nearest(m.player, keep) else { return };
+        if g.lanes[lane as usize].at(along).1.dot(fwd) < 0.3 {
+            return;
+        }
+        let mut gone = 0.0;
+        for _ in 0..40 {
+            let l = &g.lanes[lane as usize];
+            let left = l.length - along;
+            if gone + left >= BLOCK_AHEAD[0] && l.kind != LaneKind::Connector {
+                let d = (BLOCK_AHEAD[0] - gone).max(0.0) + 5.0;
+                let (at, dir) = l.at(along + d.min(left));
+                let hidden = sight_blocked(sim, cam.eye, at + Vec3::Y);
+                if (hidden || gone + d > BLOCK_AHEAD[1]) && at.distance(m.player) > 90.0 {
+                    self.set_block(sim, m, at, dir);
+                    return;
+                }
+            }
+            gone += left;
+            if gone > BLOCK_AHEAD[1] {
+                return;
+            }
+            // Straight on where possible.
+            let next = l.next.iter().copied().filter(|&n| !g.lanes[n as usize].closed).max_by(|&a, &b| {
+                let da = g.lanes[a as usize].at(1.0).1.dot(fwd);
+                let db = g.lanes[b as usize].at(1.0).1.dot(fwd);
+                da.total_cmp(&db)
+            });
+            let Some(n) = next else { return };
+            lane = n;
+            along = 0.0;
+        }
+    }
+
+    /// Two cars across the road at `at` (the road running along `dir`), crews out; a spike
+    /// strip 12 m before them from 4 stars.
+    fn set_block(&mut self, sim: &mut Sim, m: &Moment, at: Vec3, dir: Vec3) {
+        let across = Vec3::new(-dir.z, 0.0, dir.x);
+        let yaw = across.x.atan2(across.z);
+        let mut cars = Vec::new();
+        for side in [-1.0f32, 1.0] {
+            let pos = at + across * side * 2.6;
+            let Ok(car) = crate::vehicles::spawn(
+                sim,
+                "sppd_interceptor",
+                pos + Vec3::Y * 0.05,
+                yaw + if side > 0.0 { std::f32::consts::PI } else { 0.0 },
+                None,
+            ) else {
+                continue;
+            };
+            for seat in 0..2 {
+                let look = uniform(sim);
+                let stand = pos - dir * 2.5 + across * (seat as f32 - 0.5) * 1.6;
+                let id = sim.spawn_npc("cop:officer", stand, dir.x.atan2(dir.z) + std::f32::consts::PI, look, None, None);
+                self.officers.push(Officer { id, vehicle: car, seat, duty: Duty::Chase, cooldown: 1.5 });
+            }
+            sim.set_vehicle_lights(car, true);
+            cars.push(car);
+        }
+        if m.stars >= 4 {
+            self.spikes.push(Spike { at: at - dir * 12.0, dir, half: 4.0 });
+        }
+        self.blocks.push(Roadblock { at, cars });
     }
 
     /// The units on the radar: police blips (flickering red and blue at `t`).
@@ -754,8 +1003,21 @@ impl Police {
         out
     }
 
-    /// Searchlights at night.
+    /// Spike strips, and searchlights at night.
     pub fn draw(&self, sim: &Sim, night: bool, draw: &mut DrawList) {
+        for sp in &self.spikes {
+            let across = Vec3::new(-sp.dir.z, 0.0, sp.dir.x);
+            draw.prims.push(pav_core::present::PrimDraw {
+                shape: pav_core::shape::Shape::Box { half: Vec3::new(sp.half, 0.04, 0.25) },
+                pos: sp.at + Vec3::Y * 0.04,
+                rot: glam::Quat::from_rotation_y(across.x.atan2(across.z) - std::f32::consts::FRAC_PI_2),
+                color: Color::hex("#22252a"),
+                emissive: 0.0,
+                look: pav_core::shape::Look::Lit,
+                shadow: false,
+                glow: Default::default(),
+            });
+        }
         if !night {
             return;
         }

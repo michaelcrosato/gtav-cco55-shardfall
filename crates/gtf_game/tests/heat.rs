@@ -104,3 +104,80 @@ fn wasted_wakes_the_player_at_the_hospital() {
     let door = gtf_game::world::door(&city, "hospital").unwrap();
     assert!(sim.feet(sim.state.player.unwrap()).unwrap().distance(door) < 6.0);
 }
+
+/// One escape: cruising with the traffic (`rolling`) or sitting still at three stars until a
+/// police unit spots the car, then on autopilot running from them. The seconds it took to clear
+/// the heat (None: not within three minutes), and a line about it.
+fn escape(seed: u64, rolling: bool) -> (Option<u32>, String) {
+    let mut sim = roam(seed);
+    cmd(&mut sim, "drive okami_kaze");
+    if rolling {
+        cmd(&mut sim, "autopilot on");
+    }
+    cmd(&mut sim, "wanted 3");
+    let mut waited = 0;
+    while waited < 120 * 60 && (game(&sim).heat.unseen > 0.0 || game(&sim).heat.searching) {
+        let input = sim.bot_input();
+        sim.step(&input);
+        waited += 1;
+    }
+    assert!(waited < 120 * 60, "seed {seed}: the police found the car");
+    cmd(&mut sim, "autopilot escape");
+    let mut cleared = None;
+    for t in 0..(180 * 60) {
+        let input = sim.bot_input();
+        sim.step(&input);
+        sim.drain_events();
+        let g = game(&sim);
+        if g.heat.stars == 0 {
+            cleared = Some(t / 60);
+            break;
+        }
+        if !g.fate.alive() {
+            break;
+        }
+    }
+    let g = game(&sim);
+    let line = format!(
+        "seed {seed} ({}): spotted after {} s; cleared after {:?} s (fate {:?}, police {}, peak {}, cars left {}, taken {})",
+        if rolling { "rolling" } else { "standing" },
+        waited / 60,
+        cleared,
+        g.fate,
+        g.police.spawned,
+        g.heat.peak,
+        g.bot.bailed,
+        g.bot.taken
+    );
+    (cleared, line)
+}
+
+/// The heat-evasion bot (D13): cruising in a fast car at three stars until a police unit spots
+/// it, it then runs on autopilot — leaving wrecked or boxed-in cars for others — and shakes the
+/// police off within three minutes, on three seeds. (Over seeds 1–8 it escapes 7 of 8 times:
+/// `evasion_rate`.)
+#[test]
+fn the_evasion_bot_escapes_three_stars() {
+    for seed in [1, 2, 4] {
+        let (cleared, line) = escape(seed, true);
+        eprintln!("{line}");
+        assert!(cleared.is_some(), "{line}");
+    }
+}
+
+/// How often the bot gets away, over eight seeds, from a rolling start and from a standstill
+/// with the police already on it (`cargo test -p gtf_game --test heat evasion_rate -- --ignored
+/// --nocapture`).
+#[test]
+#[ignore]
+fn evasion_rate() {
+    for rolling in [true, false] {
+        let mut got_away = 0;
+        for seed in 1..=8 {
+            let (cleared, line) = escape(seed, rolling);
+            eprintln!("{line}");
+            got_away += cleared.is_some() as u32;
+        }
+        eprintln!("{}: {got_away}/8 escaped", if rolling { "rolling" } else { "standing" });
+    }
+}

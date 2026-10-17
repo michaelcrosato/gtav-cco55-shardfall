@@ -259,6 +259,8 @@ pub struct Outcome {
     /// People hurt and killed, and where.
     pub hurt: Vec<(EntityId, Vec3)>,
     pub killed: Vec<(EntityId, Vec3)>,
+    /// Vehicles the shots struck.
+    pub vehicles: Vec<EntityId>,
 }
 
 /// A random direction within `spread` degrees of `dir`.
@@ -428,6 +430,13 @@ impl Combat {
                 let head = point.y - feet.y > 1.45;
                 let amount = w.damage * if head { w.head } else { 1.0 };
                 self.damage(sim, id, point, (point - muzzle).normalize_or(body), amount, w.knockback, events, out);
+            } else if let Some(id) = entity.filter(|&id| sim.state.entities.get(id).is_some_and(|e| e.vehicle.is_some())) {
+                // Cars soak up rounds (four or five dozen from a pistol) until they catch fire.
+                sim.damage_vehicle(id, w.damage * 1.5);
+                events.push(sound("bullet.wall", point, 0.7));
+                if !out.vehicles.contains(&id) {
+                    out.vehicles.push(id);
+                }
             } else if hit.is_some() {
                 events.push(sound("bullet.wall", point, 0.6));
             }
