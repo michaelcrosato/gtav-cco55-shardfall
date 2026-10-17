@@ -6,6 +6,8 @@
 //! it (a snapshot carries each placed definition). A build with no asset files (the browser, a
 //! lone exe) pages through the rows it carries: the embedded tier and the shipped packs.
 
+use std::ops::Range;
+
 use glam::{Quat, Vec3};
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +32,11 @@ pub struct CatalogueDef {
     /// Rows a page shows, and how many stand side by side before the next line.
     pub per_page: u32,
     pub columns: u32,
+    /// The floor a page may cover (m, across and along its growth; 0: no limit): a line ends
+    /// early rather than grow wider than `width`, and a page still wider or deeper than this
+    /// shows its biggest props scaled down (their signs say so) until it fits.
+    pub width: f32,
+    pub depth: f32,
     /// Which way a page grows from the object: 1 toward +z (its first line at the object), -1
     /// toward -z with its first line still at the object (put the object by the pads, and the
     /// page starts where the player stands). Props face +z either way.
@@ -47,6 +54,8 @@ impl Default for CatalogueDef {
             back: "back".into(),
             per_page: 20,
             columns: 5,
+            width: 0.0,
+            depth: 0.0,
             toward: 1,
             page: -1,
             spawned: Vec::new(),
@@ -136,24 +145,83 @@ pub struct Spot {
     pub sign: Vec3,
 }
 
-/// Lays out props of these sizes (m) in lines of `columns`, each line centred on x = 0 and the
-/// first starting at z = 0: each cell as wide as its prop and figure (at least a sign's width),
-/// each line as deep as its deepest prop plus its signs.
-pub fn layout(sizes: &[Vec3], columns: usize) -> Vec<Spot> {
+/// How wide a row's cell is: its prop and figure, at least a sign's width.
+fn cell(size: Vec3) -> f32 {
+    (size.x + 2.0 * FIGURE_RADIUS + 0.35).max(SIGN_WIDTH)
+}
+
+/// Splits a page of props of these sizes (m) into lines of at most `columns`, ending a line
+/// early (when `width` > 0) rather than let it grow wider than `width`.
+pub fn lines(sizes: &[Vec3], columns: usize, width: f32) -> Vec<Range<usize>> {
+    let mut out = Vec::new();
+    let (mut start, mut wide) = (0, 0.0);
+    for (i, size) in sizes.iter().enumerate() {
+        let grown = wide + GAP + cell(*size);
+        if i > start && (i - start >= columns.max(1) || (width > 0.0 && grown > width)) {
+            out.push(start..i);
+            (start, wide) = (i, cell(*size));
+        } else {
+            wide = if i == start { cell(*size) } else { grown };
+        }
+    }
+    if start < sizes.len() {
+        out.push(start..sizes.len());
+    }
+    out
+}
+
+/// How wide and deep a page of props of these sizes lays out.
+fn extent(sizes: &[Vec3], columns: usize, width: f32) -> (f32, f32) {
+    let (mut wide, mut deep) = (0.0f32, -GAP);
+    for range in lines(sizes, columns, width) {
+        let line = &sizes[range];
+        wide = wide.max(line.iter().map(|s| cell(*s) + GAP).sum::<f32>() - GAP);
+        deep += line.iter().map(|s| s.z).fold(0.0, f32::max) + SIGN_DEPTH + GAP;
+    }
+    (wide, deep.max(0.0))
+}
+
+/// The scale each prop is shown at so that the page fits `width` × `depth` (0: no limit): 1
+/// where it fits at real size, else the biggest props shrink to a common largest side, step by
+/// step, until it does.
+pub fn fit(sizes: &[Vec3], columns: usize, width: f32, depth: f32) -> Vec<f32> {
+    let side = |s: &Vec3| s.x.max(s.z).max(1e-3);
+    let mut cap = sizes.iter().map(side).fold(0.0, f32::max);
+    loop {
+        let scales: Vec<f32> = sizes.iter().map(|s| (cap / side(s)).clamp(0.01, 1.0)).collect();
+        let shown: Vec<Vec3> = sizes.iter().zip(&scales).map(|(s, k)| *s * *k).collect();
+        let (wide, deep) = extent(&shown, columns, width);
+        if cap < 0.5 || ((width <= 0.0 || wide <= width) && (depth <= 0.0 || deep <= depth)) {
+            return scales;
+        }
+        cap *= 0.9;
+    }
+}
+
+/// A shrunken prop's scale as its sign gives it ("1:2.5", "1:13").
+pub fn scale_note(scale: f32) -> String {
+    let n = 1.0 / scale;
+    if n < 9.95 { format!("1:{n:.1}") } else { format!("1:{n:.0}") }
+}
+
+/// Lays out props of these sizes (m) in `lines`, each line centred on x = 0 and the first
+/// starting at z = 0: each cell as wide as its prop and figure (at least a sign's width), each
+/// line as deep as its deepest prop plus its signs.
+pub fn layout(sizes: &[Vec3], columns: usize, width: f32) -> Vec<Spot> {
     let mut spots = Vec::with_capacity(sizes.len());
     let mut z = 0.0;
-    let cell = |size: &Vec3| (size.x + 2.0 * FIGURE_RADIUS + 0.35).max(SIGN_WIDTH);
-    for line in sizes.chunks(columns.max(1)) {
+    for range in lines(sizes, columns, width) {
+        let line = &sizes[range];
         let deep = line.iter().map(|s| s.z).fold(0.0, f32::max);
-        let wide: f32 = line.iter().map(|size| cell(size) + GAP).sum::<f32>() - GAP;
+        let wide: f32 = line.iter().map(|size| cell(*size) + GAP).sum::<f32>() - GAP;
         let mut x = -wide * 0.5;
         for size in line {
             spots.push(Spot {
                 prop: Vec3::new(x + size.x * 0.5, 0.0, z + deep - size.z * 0.5),
                 figure: Vec3::new(x + size.x + 0.35 + FIGURE_RADIUS, 0.0, z + deep - size.z + FIGURE_RADIUS),
-                sign: Vec3::new(x + cell(size) * 0.5, 0.03, z + deep + SIGN_DEPTH * 0.5),
+                sign: Vec3::new(x + cell(*size) * 0.5, 0.03, z + deep + SIGN_DEPTH * 0.5),
             });
-            x += cell(size) + GAP;
+            x += cell(*size) + GAP;
         }
         z += deep + SIGN_DEPTH + GAP;
     }
@@ -163,14 +231,14 @@ pub fn layout(sizes: &[Vec3], columns: usize) -> Vec<Spot> {
 /// `layout`'s spots for a page that grows toward -z with its first line at z = 0: each line
 /// keeps its own arrangement (props behind, signs toward +z) and moves back past the lines
 /// before it.
-pub fn toward_back(spots: Vec<Spot>, sizes: &[Vec3], columns: usize) -> Vec<Spot> {
+pub fn toward_back(spots: Vec<Spot>, sizes: &[Vec3], columns: usize, width: f32) -> Vec<Spot> {
     let mut out = Vec::with_capacity(spots.len());
     let mut start = 0.0;
-    for (line, sizes) in spots.chunks(columns.max(1)).zip(sizes.chunks(columns.max(1))) {
-        let span = sizes.iter().map(|s| s.z).fold(0.0, f32::max) + SIGN_DEPTH + GAP;
+    for range in lines(sizes, columns, width) {
+        let span = sizes[range.clone()].iter().map(|s| s.z).fold(0.0, f32::max) + SIGN_DEPTH + GAP;
         // This line occupied [start, start + span]; it moves to [-(start + span), -start].
         let shift = Vec3::new(0.0, 0.0, -(2.0 * start + span));
-        out.extend(line.iter().map(|s| Spot { prop: s.prop + shift, figure: s.figure + shift, sign: s.sign + shift }));
+        out.extend(spots[range].iter().map(|s| Spot { prop: s.prop + shift, figure: s.figure + shift, sign: s.sign + shift }));
         start += span;
     }
     out
@@ -219,15 +287,22 @@ impl Sim {
             let header = format!("PAGE {} / {pages} · ROWS {}-{} OF {}", cat.page + 1, first + 1, first + page.len(), rows.len());
             let toward = if cat.toward < 0 { -1.0 } else { 1.0 };
             signs.push(label(header, at(Vec3::new(0.0, 0.03, -toward)), 0.36));
-            let spots = layout(&sizes, cat.columns as usize);
-            let spots = if toward < 0.0 { toward_back(spots, &sizes, cat.columns as usize) } else { spots };
-            for ((row, def), spot) in page.iter().zip(&defs).zip(spots) {
+            let columns = cat.columns as usize;
+            let scales = fit(&sizes, columns, cat.width, cat.depth);
+            let shown: Vec<Vec3> = sizes.iter().zip(&scales).map(|(size, k)| *size * *k).collect();
+            let spots = layout(&shown, columns, cat.width);
+            let spots = if toward < 0.0 { toward_back(spots, &shown, columns, cat.width) } else { spots };
+            for (((row, def), spot), k) in page.iter().zip(&defs).zip(spots).zip(scales) {
                 let found = def.as_ref().ok().map(|def| findings(def));
-                signs.push(label(sign(row, found), at(spot.sign), 0.16));
+                let mut text = sign(row, found);
+                if k < 1.0 {
+                    text.push_str(&format!("\nshown at {}", scale_note(k)));
+                }
+                signs.push(label(text, at(spot.sign), 0.16));
                 if let Ok(def) = def {
-                    let centre = def.compiled.bounds.center();
+                    let centre = def.compiled.bounds.center() * k;
                     let pos = at(spot.prop - Vec3::new(centre.x, 0.0, centre.z));
-                    let copy = PropInstance::new(&row.name, def.clone(), 1.0, false);
+                    let copy = PropInstance::new(&row.name, def.clone(), k, false);
                     if let Ok(id) = copy.and_then(|copy| self.place_prop(copy, pos, rot, region)) {
                         // `~` keeps it out of a saved room (edit mode).
                         self.state.entities.get_mut(id).unwrap().name = format!("~{}", row.name);
@@ -261,5 +336,34 @@ impl Sim {
             spawn.region = region;
             self.spawn(spawn)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_page_fits_its_floor() {
+        // Twenty 1 m props fit 23 × 20 m at real size, in four lines of five.
+        let small = vec![Vec3::splat(1.0); 20];
+        assert!(fit(&small, 5, 23.0, 20.0).iter().all(|k| *k == 1.0));
+        assert_eq!(lines(&small, 5, 23.0).len(), 4);
+        // A 12 m billboard and an 80 m crane: lines end early and the crane shrinks until the
+        // page fits, while the small props keep their real size.
+        let mut big = small.clone();
+        big[2] = Vec3::new(12.4, 2.0, 1.8);
+        big[7] = Vec3::new(19.6, 44.0, 80.0);
+        let scales = fit(&big, 5, 23.0, 20.0);
+        let shown: Vec<Vec3> = big.iter().zip(&scales).map(|(s, k)| *s * *k).collect();
+        let (wide, deep) = extent(&shown, 5, 23.0);
+        assert!(wide <= 23.0 && deep <= 20.0, "{wide} x {deep}");
+        assert!(scales[7] < 0.25 && scales.iter().enumerate().all(|(i, k)| i == 2 || i == 7 || *k == 1.0), "{scales:?}");
+        assert!(lines(&shown, 5, 23.0).iter().all(|line| line.len() <= 5));
+        for spot in layout(&shown, 5, 23.0) {
+            assert!(spot.prop.x.abs() <= 11.5 && (0.0..=20.0).contains(&spot.prop.z), "{spot:?}");
+        }
+        assert_eq!(scale_note(0.4), "1:2.5");
+        assert_eq!(scale_note(1.0 / 13.3), "1:13");
     }
 }

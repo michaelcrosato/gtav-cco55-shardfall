@@ -245,7 +245,8 @@ fn limits_signs_tell_the_truth() {
             continue;
         }
         let text = std::fs::read_to_string(pack.path().join("index.tsv")).unwrap();
-        imports.extend(index::parse(&text, props::Tier::Disk).unwrap());
+        // Authored packs (a game's own kit) are committed beside the imports but are not imports.
+        imports.extend(index::parse(&text, props::Tier::Disk).unwrap().into_iter().filter(|row| row.method == "imported"));
     }
     let over = imports.iter().filter(|row| catalogue::mesh_share(row) > 30).count();
     let sign = &def.labels.iter().find(|l| l.text.contains("imports are over 30% mesh")).expect("the imports sign").text;

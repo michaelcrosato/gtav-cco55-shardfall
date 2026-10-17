@@ -66,9 +66,9 @@ file = "crates/pav_core/src/catalogue.rs"
 lang = "rust"
 src = '''
 if let Ok(def) = def {
-    let centre = def.compiled.bounds.center();
+    let centre = def.compiled.bounds.center() * k;
     let pos = at(spot.prop - Vec3::new(centre.x, 0.0, centre.z));
-    let copy = PropInstance::new(&row.name, def.clone(), 1.0, false);
+    let copy = PropInstance::new(&row.name, def.clone(), k, false);
     if let Ok(id) = copy.and_then(|copy| self.place_prop(copy, pos, rot, region)) {
         // `~` keeps it out of a saved room (edit mode).
         self.state.entities.get_mut(id).unwrap().name = format!("~{}", row.name);
@@ -141,4 +141,4 @@ shape = { type = "sphere", radius = 0.05 }
 pos = [13.0, 0.0, 21.2]
 color = "#3d4256"
 body = "none"
-behavior = { type = "catalogue", signal = "next", back = "back", per_page = 20, columns = 5, toward = -1 }
+behavior = { type = "catalogue", signal = "next", back = "back", per_page = 20, columns = 5, width = 23.0, depth = 20.0, toward = -1 }

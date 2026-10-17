@@ -163,8 +163,10 @@ body = "dynamic"                # dynamic | fixed | kinematic | none
 # The store's catalogue (rooms/catalogue.toml; body = "none"): a pad's signal lays out the next
 # page of the store's object rows (embedded, then the committed packs on disk, then the shipped
 # packs the disk lacks), each beside a 1.8 m figure with its row; `back` pages back; toward = -1
-# grows the page toward -z with its first line at the object (put it by the pads):
-#   behavior = { type = "catalogue", signal = "next", back = "back", per_page = 20, columns = 5 }
+# grows the page toward -z with its first line at the object (put it by the pads); width and depth
+# (m) keep a page on the floor it has: lines end early, and the biggest props shrink (signed) to fit:
+#   behavior = { type = "catalogue", signal = "next", back = "back", per_page = 20, columns = 5,
+#                width = 23.0, depth = 20.0 }
 # The clip browser (rooms/clip_browser.toml; body = "none"): every [[npc]] whose name starts with
 # `cast` plays the same clip; pads step through the library, jump to a set's first clip or toggle
 # auto-play, and the clip's card lies on the floor at the object:
