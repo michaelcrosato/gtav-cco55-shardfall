@@ -108,9 +108,12 @@ pub static TOOLS: &[Tool] = &[
         help: "Drive the player: hold a move direction/buttons for N ticks (press = only on the first tick).",
         args: &[
             arg("move", "array", "[x, z] world direction, e.g. [1, 0] = east, [0, -1] = north"),
-            arg("hold", "string", "held buttons, comma separated: jump,crouch,crawl,use,focus,interact,sprint,primary"),
+            arg("hold", "string", "held buttons: jump,crouch,use,interact... or pad south,l1,start..."),
             arg("press", "string", "buttons pressed on the first tick"),
             arg("aim", "array", "[x, y, z] aim point (bomb throws)"),
+            arg("stick", "array", "[lx, ly, rx, ry] controller sticks, y forward"),
+            arg("triggers", "array", "[l2, r2] 0..1"),
+            arg("cmd", "string", "game command, first tick"),
             arg("ticks", "integer", "ticks to run (default 1)"),
         ],
         run: t_input,
@@ -504,7 +507,7 @@ pub static TOOLS: &[Tool] = &[
     },
     Tool {
         name: "clips",
-        help: "The motion clip library (anim/*.json: animation translated from open libraries, as readable key poses): no args lists the sets; find=WORDS searches names, tags and descriptions; name=SET/Clip shows one clip as readable text with its source and license; set=NAME lists a set; load=FOLDER adds an on-disk library (cmu: every CMU take; 100style: its runs and idle loops; local: your translations that may not be shared). Play one with animsheet clip=.",
+        help: "Motion clip library (anim/*.json): no args lists the sets; find=WORDS searches; name=SET/Clip shows a clip with its source and license; set=NAME lists a set; load=FOLDER adds a library (cmu, 100style, local). Play one with animsheet clip=.",
         args: &[
             arg("find", "string", "words to search for"),
             arg("name", "string", "SET/Clip (or Clip) to show"),
@@ -516,7 +519,7 @@ pub static TOOLS: &[Tool] = &[
     },
     Tool {
         name: "clip_import",
-        help: "Translate an animation library into a clip set (anim/<set>.json: key poses, credits). from= .glb (Rigify/Unreal/Mixamo rigs; sources= ids), .fbx (each stack a clip), .bvh (at=FROM-TO, loop=true: best cycle, way=), set files or a folder. catalog= (anim/catalogs/*.json) tags and credits; with \"$pick\" and no from= it cuts CMU, 100STYLE, Bandai Namco or LaFAN1 moments (the last two to anim/local). list=true: a file's rig and clips.",
+        help: "Translate an animation library into a clip set (anim/<set>.json). from= .glb (sources= ids), .fbx, .bvh (at=FROM-TO, loop=true, way=), set files or a folder. catalog= tags and credits; with \"$pick\" and no from= it cuts CMU, 100STYLE, Bandai Namco or LaFAN1 moments. list=true: a file's rig and clips.",
         args: &[
             arg("from", "string", "files (comma separated) or a folder of sets"),
             arg("catalog", "string", "catalog JSON (tags, descriptions, sources, skips, picks)"),
@@ -599,7 +602,7 @@ pub static TOOLS: &[Tool] = &[
     },
     Tool {
         name: "anim_edit",
-        help: "Create, copy, inspect, and edit readable animation clips. Edits are validated, saved to WORKSHOP (WORKSHOP_LOCAL for local sources) and shown in the live preview; sources and credits are kept. Inspect first, then pass its if_revision. key changes only the given pose channels. Undo/redo keep 32 changes.",
+        help: "Create, copy, inspect and edit readable animation clips, validated, saved to WORKSHOP (WORKSHOP_LOCAL for local sources) and shown live; credits kept. Inspect first, then pass its if_revision. Undo/redo keep 32 changes.",
         args: &[
             arg("action", "string", "create | copy | inspect | key | delete_key | replace | retime | mirror | undo | redo"),
             arg("name", "string", "clip name, or WORKSHOP/Name (inspect also accepts any SET/Clip)"),
@@ -617,7 +620,7 @@ pub static TOOLS: &[Tool] = &[
     },
     Tool {
         name: "anim_preview",
-        help: "View an animation in an isolated studio with the game's renderer; the game resumes when it closes. clip=SET/Clip or move=NAME; play, pause, time, frame steps, speed, repeat, mirror, upper body, travel. Same-name edits keep the clock and camera. No args: preview state; action=pose: the sampled pose. capture/filmstrip show the studio.",
+        help: "View an animation in an isolated studio (the game resumes when it closes). clip=SET/Clip or move=NAME; play, pause, time, frame steps, speed, repeat, mirror, upper body, travel. No args: preview state; action=pose: the sampled pose.",
         args: &[
             arg("clip", "string", "SET/Clip to view"),
             arg("move", "string", "procedural move to view"),
@@ -722,7 +725,7 @@ pub static TOOLS: &[Tool] = &[
     },
     Tool {
         name: "creature_edit",
-        help: "Create and revise procedural rigged creatures: create (bundled template, blueprint or seeded theme), patch (atomic named-path SpawnForge ops), surface (skin), copy, inspect, replace, undo, redo, rebuild. Pass if_revision from inspect or the last job. Builds are asynchronous: poll creature_status until published or failed before judging a capture; a failed or superseded job keeps the last good stage. The CLI waits.",
+        help: "Create and revise procedural rigged creatures: create (template, blueprint or seeded theme), patch (SpawnForge ops), surface, copy, inspect, replace, undo, redo, rebuild. Pass if_revision from inspect or the last job. Builds are asynchronous: poll creature_status until published or failed; the CLI waits.",
         args: &[
             arg("action", "string", "create | copy | inspect | patch | surface | replace | undo | redo | rebuild"),
             arg("name", "string", "lowercase leaf or CREATURE/name"),
@@ -867,7 +870,7 @@ pub static TOOLS: &[Tool] = &[
     },
     Tool {
         name: "look",
-        help: "Looks and filter presets (the Look & Filters menu): name= a whole look, section= with preset= / on= (all, objects = characters and objects, environment) / enabled=, reset=true, compare=0.5 (filters on the right only). bench=all or a list of looks renders this moment in each. No args lists them.",
+        help: "Looks and filter presets: name= a whole look, section= with preset= / on= (all, objects, environment) / enabled=, reset=true, compare=0.5. bench=all or a list of looks renders this moment in each. No args lists them.",
         args: &[
             arg("name", "string", "a whole look (e.g. Pixel heroes, HD-2D, Game Boy world)"),
             arg("section", "string", "pixel, shading, outlines, palette, grading, scanlines, grain, screen, glow"),
@@ -1324,13 +1327,29 @@ pub(crate) fn vec_arg(a: &Args, k: &str) -> Result<Option<Vec<f32>>> {
     }
 }
 
-fn buttons_arg(a: &Args, k: &str) -> Result<u32> {
-    let Some(t) = get_str(a, k) else { return Ok(0) };
-    let mut b = 0;
+/// Comma-separated button names: the engine demo's actions (`jump`, `use`...) and controller
+/// buttons (`south`, `cross`, `a`, `l1`, `start`...; the two sets share no names). Returns the
+/// action bits and the controller bits.
+fn buttons_arg(a: &Args, k: &str) -> Result<(u32, u32)> {
+    let Some(t) = get_str(a, k) else { return Ok((0, 0)) };
+    let (mut b, mut p) = (0, 0);
     for name in t.split(',').map(str::trim).filter(|n| !n.is_empty()) {
-        b |= pav_core::input::buttons::from_name(name).ok_or_else(|| anyhow!("unknown button '{name}'"))?;
+        if let Some(bit) = pav_core::input::buttons::from_name(name) {
+            b |= bit;
+        } else {
+            p |= pav_core::input::pad::from_name(name).ok_or_else(|| anyhow!("unknown button '{name}'"))?;
+        }
     }
-    Ok(b)
+    Ok((b, p))
+}
+
+/// Controller buttons held for a run of ticks, `press` only on the first.
+fn pad_buttons(held: u32, press: u32, first: bool) -> pav_core::input::PadState {
+    pav_core::input::PadState {
+        held: held | if first { press } else { 0 },
+        pressed: if first { press } else { 0 },
+        ..Default::default()
+    }
 }
 
 pub fn player_json(s: &Session) -> Value {
@@ -1377,18 +1396,39 @@ fn t_player(s: &mut Session, _: &Args) -> Result<Output> {
 fn t_input(s: &mut Session, a: &Args) -> Result<Output> {
     let mv = vec_arg(a, "move")?.unwrap_or_default();
     let dir = glam::Vec2::new(mv.first().copied().unwrap_or(0.0), mv.get(1).copied().unwrap_or(0.0));
-    let held = buttons_arg(a, "hold")?;
-    let press = buttons_arg(a, "press")?;
+    let (held, pad_held) = buttons_arg(a, "hold")?;
+    let (press, pad_press) = buttons_arg(a, "press")?;
     let aim = vec_arg(a, "aim")?.filter(|v| v.len() == 3).map(|v| glam::Vec3::new(v[0], v[1], v[2]));
+    let stick = vec_arg(a, "stick")?.unwrap_or_default();
+    let st = |i: usize| stick.get(i).copied().unwrap_or(0.0);
+    let triggers = vec_arg(a, "triggers")?.unwrap_or_default();
+    let trig = |i: usize| triggers.get(i).copied().unwrap_or(0.0).clamp(0.0, 1.0);
+    let cmd = get_str(a, "cmd");
     let n = get_u64(a, "ticks", 1)?.max(1);
     for i in 0..n {
+        let first = i == 0;
+        let mut pad = pav_core::input::PadState {
+            stick_l: glam::Vec2::new(st(0), st(1)).clamp_length_max(1.0),
+            stick_r: glam::Vec2::new(st(2), st(3)).clamp_length_max(1.0),
+            l2: trig(0),
+            r2: trig(1),
+            ..pad_buttons(pad_held, pad_press, first)
+        };
+        // A pulled trigger is also its button, as on a real controller.
+        for (v, bit) in [(pad.l2, pav_core::input::pad::L2), (pad.r2, pav_core::input::pad::R2)] {
+            if v > 0.35 {
+                pad.held |= bit;
+            }
+        }
         let f = pav_core::InputFrame {
             move_dir: dir.clamp_length_max(1.0),
-            vertical: 0.0,
             aim,
-            held: held | if i == 0 { press } else { 0 },
-            pressed: if i == 0 { press } else { 0 },
-            cmd: None,
+            held: held | if first { press } else { 0 },
+            pressed: if first { press } else { 0 },
+            pad,
+            activity: true,
+            cmds: cmd.filter(|_| first).map(|c| vec![c.to_string()]).unwrap_or_default(),
+            ..Default::default()
         };
         s.sim.step(&f);
         s.sync_camera();
@@ -1693,8 +1733,8 @@ fn t_filmstrip(s: &mut Session, a: &Args) -> Result<Output> {
     let h = get_u64(a, "height", 180)? as u32;
     let mv = vec_arg(a, "move")?.unwrap_or_default();
     let dir = glam::Vec2::new(mv.first().copied().unwrap_or(0.0), mv.get(1).copied().unwrap_or(0.0));
-    let held = buttons_arg(a, "hold")?;
-    let press = buttons_arg(a, "press")?;
+    let (held, pad_held) = buttons_arg(a, "hold")?;
+    let (press, pad_press) = buttons_arg(a, "press")?;
     let mut shots = Vec::with_capacity(frames);
     for i in 0..frames {
         shots.push(s.render(w, h)?);
@@ -1705,6 +1745,7 @@ fn t_filmstrip(s: &mut Session, a: &Args) -> Result<Output> {
                     move_dir: dir.clamp_length_max(1.0),
                     held: held | if first { press } else { 0 },
                     pressed: if first { press } else { 0 },
+                    pad: pad_buttons(pad_held, pad_press, first),
                     ..Default::default()
                 };
                 s.sim.step(&f);
@@ -1728,8 +1769,8 @@ fn t_audio_capture(s: &mut Session, a: &Args) -> Result<Output> {
     let n = get_u64(a, "ticks", 180)?.max(1);
     let mv = vec_arg(a, "move")?.unwrap_or_default();
     let dir = glam::Vec2::new(mv.first().copied().unwrap_or(0.0), mv.get(1).copied().unwrap_or(0.0));
-    let held = buttons_arg(a, "hold")?;
-    let press = buttons_arg(a, "press")?;
+    let (held, pad_held) = buttons_arg(a, "hold")?;
+    let (press, pad_press) = buttons_arg(a, "press")?;
     let aim = vec_arg(a, "aim")?.filter(|v| v.len() == 3).map(|v| glam::Vec3::new(v[0], v[1], v[2]));
     s.keep_events();
     let dt = s.sim.dt();
@@ -1740,6 +1781,7 @@ fn t_audio_capture(s: &mut Session, a: &Args) -> Result<Output> {
             aim,
             held: held | if i == 0 { press } else { 0 },
             pressed: if i == 0 { press } else { 0 },
+            pad: pad_buttons(pad_held, pad_press, i == 0),
             ..Default::default()
         };
         s.sim.step(&f);

@@ -298,6 +298,7 @@ impl PropPreviewState {
             prop_preview: Some(info),
             creature_preview: None,
             creature: None,
+            present: None,
         }
     }
 }

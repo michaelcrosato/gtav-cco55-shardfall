@@ -835,7 +835,7 @@ impl Game {
                 ch.face = if channeling { None } else { a.cast.as_ref().map(|c| yaw_of(c.dir)) };
             }
         }
-        let mut movement = if frozen { InputFrame::default() } else { *input };
+        let mut movement = if frozen { InputFrame::default() } else { input.clone() };
         // The primary skill already consumed this attack; the character controller must
         // not also throw a demo bomb or fire its blaster.
         movement.held &= !buttons::PRIMARY;

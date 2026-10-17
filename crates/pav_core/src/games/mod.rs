@@ -17,7 +17,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::entity::EntityId;
 use crate::frame::SimEvent;
 use crate::input::InputFrame;
+use crate::present::PlayFrame;
 use crate::sim::Sim;
+use crate::vehicle::VehicleInput;
 
 pub mod starter;
 
@@ -79,6 +81,46 @@ pub trait Game: Clone + Serialize + DeserializeOwned + Send + Sync + 'static {
     /// player with it; teach it every new rule, and keep a test that it wins.
     fn bot(&self, _sim: &Sim) -> InputFrame {
         InputFrame::default()
+    }
+
+    /// How fast the world runs (1 = normal; a weapon wheel's slow motion is 0.25). Physics,
+    /// characters, behaviours and the `dt` given to `pre` and `post` all scale; `sim.dt()` stays
+    /// the real tick.
+    fn time_scale(&self) -> f32 {
+        1.0
+    }
+
+    /// The world stands still (title, pause menu, loading): only `pre` and `post` run, with
+    /// `dt` = 0, and ticks still count.
+    fn world_paused(&self) -> bool {
+        false
+    }
+
+    /// Driving for vehicles this tick (after characters move, before physics): the player's car
+    /// from the controller, traffic from its drivers. A vehicle left out idles, unless
+    /// `legacy_controls` lets the player drive it the engine demo's way.
+    fn vehicles(&mut self, _sim: &mut Sim, _dt: f32) -> BTreeMap<EntityId, VehicleInput> {
+        BTreeMap::new()
+    }
+
+    /// The game's camera, UI, drawing, atmosphere, audio and host requests for this tick
+    /// (`crate::present`), or None to leave all of it to the engine. Called once per published
+    /// frame, after the tick.
+    fn present(&self, _sim: &Sim) -> Option<PlayFrame> {
+        None
+    }
+
+    /// The rewind window in seconds (0 = off), or None for the engine's setting.
+    fn history_seconds(&self) -> Option<f32> {
+        None
+    }
+
+    /// The engine demo's own player controls: interact gets in and out of vehicles, use and
+    /// primary throw bombs, crawl toggles, and the raw input moves the player and steers its car.
+    /// A game with its own controls returns false: then only `pre` (characters) and `vehicles`
+    /// decide, and the host stops filling the demo's button bits.
+    fn legacy_controls(&self) -> bool {
+        true
     }
 }
 
@@ -177,6 +219,26 @@ impl GameBox {
     pub fn bot(&self, sim: &Sim) -> InputFrame {
         self.0.bot(sim)
     }
+
+    pub fn time_scale(&self) -> f32 {
+        self.0.time_scale()
+    }
+
+    pub fn world_paused(&self) -> bool {
+        self.0.world_paused()
+    }
+
+    pub fn present(&self, sim: &Sim) -> Option<PlayFrame> {
+        self.0.present(sim)
+    }
+
+    pub fn history_seconds(&self) -> Option<f32> {
+        self.0.history_seconds()
+    }
+
+    pub fn legacy_controls(&self) -> bool {
+        self.0.legacy_controls()
+    }
 }
 
 impl Clone for GameBox {
@@ -220,6 +282,12 @@ trait DynGame: Send + Sync {
     fn status(&self, sim: &Sim) -> serde_json::Value;
     fn outcome(&self) -> Outcome;
     fn bot(&self, sim: &Sim) -> InputFrame;
+    fn time_scale(&self) -> f32;
+    fn world_paused(&self) -> bool;
+    fn vehicles(&mut self, sim: &mut Sim, dt: f32) -> BTreeMap<EntityId, VehicleInput>;
+    fn present(&self, sim: &Sim) -> Option<PlayFrame>;
+    fn history_seconds(&self) -> Option<f32>;
+    fn legacy_controls(&self) -> bool;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
@@ -251,6 +319,24 @@ impl<G: Game> DynGame for G {
     }
     fn bot(&self, sim: &Sim) -> InputFrame {
         Game::bot(self, sim)
+    }
+    fn time_scale(&self) -> f32 {
+        Game::time_scale(self)
+    }
+    fn world_paused(&self) -> bool {
+        Game::world_paused(self)
+    }
+    fn vehicles(&mut self, sim: &mut Sim, dt: f32) -> BTreeMap<EntityId, VehicleInput> {
+        Game::vehicles(self, sim, dt)
+    }
+    fn present(&self, sim: &Sim) -> Option<PlayFrame> {
+        Game::present(self, sim)
+    }
+    fn history_seconds(&self) -> Option<f32> {
+        Game::history_seconds(self)
+    }
+    fn legacy_controls(&self) -> bool {
+        Game::legacy_controls(self)
     }
     fn as_any(&self) -> &dyn Any {
         self
@@ -291,6 +377,33 @@ impl Sim {
 
     pub(crate) fn play_hud(&self) -> Vec<String> {
         self.play().map(|g| g.hud(self)).unwrap_or_default()
+    }
+
+    pub(crate) fn play_vehicles(&mut self, dt: f32) -> BTreeMap<EntityId, VehicleInput> {
+        let Some(mut g) = self.state.play.take() else { return BTreeMap::new() };
+        let out = g.0.vehicles(self, dt);
+        self.state.play = Some(g);
+        out
+    }
+
+    /// The running game's time scale (1 without a game).
+    pub fn play_time_scale(&self) -> f32 {
+        self.play().map(|g| g.time_scale()).unwrap_or(1.0).max(0.0)
+    }
+
+    /// True while the running game holds the world still.
+    pub fn world_paused(&self) -> bool {
+        self.play().is_some_and(|g| g.world_paused())
+    }
+
+    /// False when the running game has its own controls (`Game::legacy_controls`).
+    pub fn legacy_controls(&self) -> bool {
+        self.play().is_none_or(|g| g.legacy_controls())
+    }
+
+    /// The running game's presentation for this tick (`Game::present`).
+    pub fn present(&self) -> Option<PlayFrame> {
+        self.play().and_then(|g| g.present(self))
     }
 
     /// Plays the running game with its bot until it is won or lost, or `ticks` pass.

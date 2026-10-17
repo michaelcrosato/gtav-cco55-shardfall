@@ -39,7 +39,7 @@ impl History {
         if self.snapshots.back().is_none_or(|s| state.tick >= s.tick + self.interval) {
             self.snapshots.push_back(state.clone());
         }
-        self.inputs.push_back((state.tick, *input));
+        self.inputs.push_back((state.tick, input.clone()));
         while self.snapshots.len() > 1 && self.snapshots[1].tick + self.window <= state.tick {
             self.snapshots.pop_front();
         }
@@ -60,7 +60,7 @@ impl History {
     pub fn input_at(&self, tick: u64) -> Option<InputFrame> {
         let front = self.inputs.front()?.0;
         let i = tick.checked_sub(front)? as usize;
-        self.inputs.get(i).filter(|(t, _)| *t == tick).map(|(_, f)| *f)
+        self.inputs.get(i).filter(|(t, _)| *t == tick).map(|(_, f)| f.clone())
     }
 
     /// Forgets everything after `tick` (acting after a rewind starts a new timeline).
@@ -97,7 +97,7 @@ impl Replay {
     pub fn push(&mut self, input: &InputFrame) {
         match self.inputs.last_mut() {
             Some((n, last)) if last == input && *n < u32::MAX => *n += 1,
-            _ => self.inputs.push((1, *input)),
+            _ => self.inputs.push((1, input.clone())),
         }
     }
     pub fn ticks(&self) -> u64 {

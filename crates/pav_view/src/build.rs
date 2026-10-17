@@ -572,7 +572,7 @@ fn v3(c: Color) -> Vec3 {
     Vec3::from(c.0)
 }
 
-fn style_of(look: Look, ov: StyleOverride) -> Style {
+pub(crate) fn style_of(look: Look, ov: StyleOverride) -> Style {
     match ov {
         StyleOverride::Flat => return Style::Flat,
         StyleOverride::Cel => return Style::Cel,
@@ -653,6 +653,8 @@ pub struct ViewBuilder {
     /// Procedural materials in this view: stable rows, attached to every built scene. Shared
     /// while a frame is built, so assets drawn from game code (`assets::emit_asset`) use it too.
     materials: Arc<Mutex<MaterialTable>>,
+    /// Problems in a hook game's draw list already reported (each is printed once).
+    draw_errors: HashSet<String>,
 }
 
 /// Shortest-arc interpolation of object poses between two frames (both sorted by id).
@@ -991,7 +993,19 @@ impl ViewBuilder {
             if prev.live_edit_ticket != curr.live_edit_ticket || prev.studio_mode() != curr.studio_mode() { 1.0 } else { alpha };
         // Interpolated simulation time: animations and particles move smoothly between ticks.
         let time = (prev.time + (curr.time - prev.time) * alpha as f64) as f32;
-        let mut scene = Scene { camera: rig.data(aspect), time, ..Default::default() };
+        // A hook game's camera (`PlayFrame.camera`) replaces the rig's.
+        let play = curr.present.as_deref();
+        let intent = play.and_then(|p| p.camera.as_ref());
+        let camera = match intent {
+            Some(c) => {
+                let before = prev.present.as_deref().and_then(|p| p.camera.as_ref());
+                crate::play::camera(before, c, alpha, aspect, time)
+            }
+            None => rig.data(aspect),
+        };
+        // Shadows and fog centre where the camera looks.
+        let center = intent.map(|c| c.target).unwrap_or(rig.target);
+        let mut scene = Scene { camera, time, ..Default::default() };
         let _frame = crate::assets::FrameScope::new(settings.style, self.materials.clone());
         // Screen shake (the game's big hits).
         if let Some(g) = &curr.game {
@@ -1078,7 +1092,7 @@ impl ViewBuilder {
         scene.sun.color = Vec3::new(1.0, 0.95, 0.86) * l.sun_intensity;
         scene.sun.shadows = l.shadows;
         scene.sun.shadow_radius = l.shadow_radius;
-        scene.sun.shadow_center = rig.target;
+        scene.sun.shadow_center = center;
         scene.ambient.sky *= l.ambient;
         scene.ambient.ground *= l.ambient;
         scene.clear_color = v3(Color::try_hex(&settings.sky).unwrap_or(Color::hex("#8fb8d8")));
@@ -1342,13 +1356,11 @@ impl ViewBuilder {
         self.water_surfaces(&mut scene, curr, settings, since.min(0.5), to_sun);
         // Everything so far is the environment; objects come next.
         let env_end = (scene.meshes.len(), scene.sdfs.len(), scene.dynamic.len());
-        scene.fog = rs::Fog {
-            enabled: settings.fog,
-            center: rig.target,
-            start: settings.fog_start,
-            end: settings.fog_end,
-            color: scene.clear_color,
-        };
+        scene.fog =
+            rs::Fog { enabled: settings.fog, center, start: settings.fog_start, end: settings.fog_end, color: scene.clear_color };
+        if let Some(v) = play.and_then(|p| p.view.as_ref()) {
+            crate::play::apply_view(&mut scene, v, center);
+        }
 
         // Dynamic objects.
         let cam_fwd = scene.camera.forward;
@@ -1433,6 +1445,14 @@ impl ViewBuilder {
         self.emit_carry.retain(|(id, _), _| live.contains(id));
         if let Some(g) = &curr.game {
             self.arpg.emit(&mut scene, curr, g, alpha, time, dt, settings.particles, cam_fwd);
+        }
+        if let Some(p) = play {
+            let cam = scene.camera;
+            for e in crate::play::emit_draw(&mut scene, &p.draw, &cam, settings.style) {
+                if self.draw_errors.insert(e.clone()) {
+                    eprintln!("game draw list: {e}");
+                }
+            }
         }
         // Projectiles: drawn where they are between ticks (they move in straight lines).
         let back = (1.0 - alpha) * curr.dt;

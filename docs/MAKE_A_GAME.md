@@ -109,6 +109,13 @@ impl Game for MyGame {
     fn status(&self, sim: &Sim) -> serde_json::Value; // your state for tools and tests
     fn outcome(&self) -> Outcome;                   // Playing | Won | Lost
     fn bot(&self, sim: &Sim) -> InputFrame;         // what a good player would press now
+    // Bigger games:
+    fn time_scale(&self) -> f32;                    // slow motion (0.25 = a quarter speed)
+    fn world_paused(&self) -> bool;                 // menus: only pre/post run, with dt = 0
+    fn vehicles(&mut self, sim: &mut Sim, dt: f32) -> BTreeMap<EntityId, VehicleInput>;
+    fn present(&self, sim: &Sim) -> Option<PlayFrame>; // camera, UI, drawing, sky, audio as data
+    fn history_seconds(&self) -> Option<f32>;       // rewind window (0 = off)
+    fn legacy_controls(&self) -> bool;              // false: the demo's player actions are off
 }
 pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()>; // the scene; sets sim.state.play
 ```
@@ -120,6 +127,11 @@ already holds this tick's events: read them to react (`Hit { target, .. }` names
 character a shot struck: it is stunned, knocked back and safe from shots for 0.6 s), and push
 your own. From outside, `sim.play()?.get::<MyGame>()` reads your game; in a test,
 `sim.state.play.as_mut().unwrap().get_mut::<MyGame>().unwrap()` changes it.
+
+Input: `InputFrame.pad` describes every device as a controller (`input::pad` bits, sticks,
+analog triggers; the keyboard maps onto it through the game's `KeyMap`), with `mouse_delta`,
+`activity`, `device` (glyphs) and `cmds` (menu picks, recorded like keys). A game in its own
+crate calls `games::register(&ENTRY)` from its binaries and tests (`crates/gtf_game`).
 
 ## Building blocks
 | You need | Use |

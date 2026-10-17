@@ -148,7 +148,7 @@ impl Bot {
         // Crumbling floor: don't stop to fight, keep running.
         let target = target.filter(|_| !lv.is_some_and(|l| l.on_crumble(me)));
         let Some((t, h, r)) = target else {
-            if let Some(f) = self.fetch_loot(sim, g, me, f) {
+            if let Some(f) = self.fetch_loot(sim, g, me, f.clone()) {
                 return f;
             }
             if let Some(lv) = lv {

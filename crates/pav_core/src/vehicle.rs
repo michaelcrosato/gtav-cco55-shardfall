@@ -152,6 +152,24 @@ pub struct Vehicle {
     pub yaw: f32,
 }
 
+/// One tick of driving for any vehicle, from a game (`Game::vehicles`): the player's car from
+/// the controller, traffic and police from their drivers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct VehicleInput {
+    /// Accelerate, 0..1 (R2).
+    pub throttle: f32,
+    /// Brake, 0..1 (L2); reverses once (nearly) stopped.
+    pub brake: f32,
+    /// -1 full left .. 1 full right (helicopter: turn).
+    pub steer: f32,
+    /// Helicopter: -1 back .. 1 forward.
+    #[serde(default)]
+    pub pitch: f32,
+    /// Locks the rear wheels (cars slide).
+    #[serde(default)]
+    pub handbrake: bool,
+}
+
 /// What the view needs to draw a vehicle.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VehicleView {
@@ -374,17 +392,26 @@ impl Sim {
         self.set_position(who, Vec3::new(out.x, out.y.max(pos.y - half.y - 1.0), out.z));
     }
 
-    /// Drives every vehicle one tick (before the physics step).
-    pub(crate) fn drive_vehicles(&mut self, input: &InputFrame, dt: f32) {
+    /// Drives every vehicle one tick (before the physics step): from the game's `given` inputs
+    /// first, else the player's car from the raw input (`legacy`: the engine demo's
+    /// steer-toward-the-stick), else idle.
+    pub(crate) fn drive_vehicles(
+        &mut self,
+        input: &InputFrame,
+        given: &std::collections::BTreeMap<EntityId, VehicleInput>,
+        legacy: bool,
+        dt: f32,
+    ) {
         let ids: Vec<EntityId> = self.state.entities.iter().filter(|e| e.vehicle.is_some()).map(|e| e.id).collect();
         let player = self.state.player;
         let gravity = self.config.gravity;
         for id in ids {
             let Some(e) = self.state.entities.map.get_mut(&id) else { continue };
             let (Some(body), Some(mut v)) = (e.body, e.vehicle.take()) else { continue };
-            let driven = v.driver.is_some() && v.driver == player;
+            let driven = v.driver.is_some() && v.driver == player && legacy;
+            let explicit = given.get(&id).copied();
             let idle = InputFrame::default();
-            let inp = if driven { input } else { &idle };
+            let inp = if driven && explicit.is_none() { input } else { &idle };
             let ph = &mut self.state.physics;
             match v.def.kind {
                 VehicleKind::Car => {
@@ -399,7 +426,25 @@ impl Sim {
                     let wish = Vec2::new(inp.move_dir.x, inp.move_dir.y);
                     let mut throttle = 0.0;
                     let mut steer = 0.0;
-                    if wish.length() > 0.1 {
+                    let mut brake_force = 0.0;
+                    if let Some(vi) = explicit {
+                        throttle = vi.throttle.clamp(0.0, 1.0);
+                        let b = vi.brake.clamp(0.0, 1.0);
+                        if b > 0.0 {
+                            if speed > 1.0 {
+                                brake_force = b * 40.0;
+                            } else {
+                                throttle = -0.6 * b;
+                            }
+                        }
+                        if vi.throttle > 0.0 && speed < -1.0 {
+                            // Rolling back: the throttle brakes first.
+                            brake_force = vi.throttle.clamp(0.0, 1.0) * 40.0;
+                            throttle = 0.0;
+                        }
+                        // Positive wheel angles turn toward +yaw, which is left.
+                        steer = -vi.steer.clamp(-1.0, 1.0);
+                    } else if wish.length() > 0.1 {
                         // Steer toward the stick direction; pull back to reverse.
                         let yaw = fwd.x.atan2(fwd.z);
                         let want = wish.x.atan2(wish.y);
@@ -414,8 +459,10 @@ impl Sim {
                     }
                     v.throttle += (throttle - v.throttle) * (1.0 - (-10.0 * dt).exp());
                     v.steer += (steer - v.steer) * (1.0 - (-12.0 * dt).exp());
-                    let handbrake = inp.down(buttons::JUMP);
-                    let brake = inp.down(buttons::CROUCH);
+                    let handbrake = explicit.map(|vi| vi.handbrake).unwrap_or(inp.down(buttons::JUMP));
+                    if explicit.is_none() && inp.down(buttons::CROUCH) {
+                        brake_force = 40.0;
+                    }
                     let lock = v.def.steer.to_radians();
                     if let Some(c) = &mut v.car {
                         let over = speed.abs() > v.def.max_speed && speed.signum() == v.throttle.signum();
@@ -423,8 +470,8 @@ impl Sim {
                             let front = i < 2;
                             w.steering = if front { (v.steer * lock) as Real } else { 0.0 };
                             w.engine_force = if front || over { 0.0 } else { (v.throttle * v.def.power) as Real };
-                            w.brake = if brake {
-                                40.0
+                            w.brake = if brake_force > 0.0 {
+                                brake_force as Real
                             } else if handbrake && !front {
                                 12.0
                             } else if throttle == 0.0 {
@@ -456,23 +503,29 @@ impl Sim {
                     b.set_gravity_scale(if flying { 0.0 } else { 1.0 }, true);
                     if flying {
                         let vel = b.linvel();
-                        let wish = Vec3::new(inp.move_dir.x, 0.0, inp.move_dir.y).clamp_length_max(1.0) * v.def.max_speed;
+                        let wish = match explicit {
+                            // Turn with steer, fly along the heading with pitch.
+                            Some(vi) => {
+                                v.yaw -= vi.steer.clamp(-1.0, 1.0) * 1.6 * dt;
+                                Vec3::new(v.yaw.sin(), 0.0, v.yaw.cos()) * vi.pitch.clamp(-1.0, 1.0)
+                            }
+                            None => Vec3::new(inp.move_dir.x, 0.0, inp.move_dir.y),
+                        };
+                        let wish = wish.clamp_length_max(1.0) * v.def.max_speed;
                         let dvh = (wish - Vec3::new(vel.x, 0.0, vel.z)).clamp_length_max(v.def.power * dt);
                         // Climbing eases off toward the ceiling.
                         let room = v.ground + v.def.ceiling - (b.translation().y - v.base);
-                        let climb = if inp.down(buttons::JUMP) {
-                            v.def.climb * room.clamp(0.0, 1.0)
-                        } else if inp.down(buttons::CROUCH) {
-                            -v.def.climb
-                        } else {
-                            0.0
+                        let up = match explicit {
+                            Some(vi) => (vi.throttle - vi.brake).clamp(-1.0, 1.0),
+                            None => inp.down(buttons::JUMP) as i32 as f32 - inp.down(buttons::CROUCH) as i32 as f32,
                         };
+                        let climb = if up > 0.0 { v.def.climb * room.clamp(0.0, 1.0) * up } else { v.def.climb * up };
                         let vy = vel.y + (climb - vel.y) * (1.0 - (-4.0 * dt).exp());
                         let nv = Vec3::new(vel.x + dvh.x, vy, vel.z + dvh.z);
                         b.set_linvel(nv, true);
                         // Lean into the motion, turn toward where it is going.
                         let h = Vec2::new(nv.x, nv.z);
-                        if h.length() > 1.0 {
+                        if h.length() > 1.0 && explicit.is_none() {
                             let want = h.x.atan2(h.y);
                             v.yaw += wrap(want - v.yaw) * (1.0 - (-2.5 * dt).exp());
                         }

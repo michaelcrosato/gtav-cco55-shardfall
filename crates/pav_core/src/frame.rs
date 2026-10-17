@@ -208,6 +208,37 @@ pub enum SimEvent {
     Travel {
         place: u32,
     },
+    /// A sound-bank cue (`ui.accept`, `gun.pistol`), at a place or (None) not positional.
+    Sound {
+        cue: String,
+        #[serde(default)]
+        pos: Option<Vec3>,
+        #[serde(default = "one")]
+        gain: f32,
+        #[serde(default = "one")]
+        pitch: f32,
+    },
+    /// A particle and light preset (`fx.muzzle`, `fx.sparks`), pointing along `dir`.
+    Fx {
+        preset: String,
+        pos: Vec3,
+        #[serde(default)]
+        dir: Vec3,
+        #[serde(default = "one")]
+        scale: f32,
+    },
+    /// A vehicle hit something (another entity, or None for the world) this hard (N·s).
+    Crash {
+        vehicle: EntityId,
+        #[serde(default)]
+        other: Option<EntityId>,
+        impulse: f32,
+        pos: Vec3,
+    },
+}
+
+fn one() -> f32 {
+    1.0
 }
 
 /// The room the player is in, for the HUD (info card, control guide, camera defaults).
@@ -299,4 +330,6 @@ pub struct RenderFrame {
     pub creature_preview: Option<crate::creature_preview::CreaturePreviewInfo>,
     /// The generated native stage subject, separate from simulation entity geometry.
     pub creature: Option<crate::creature_preview::CreatureFrame>,
+    /// A hook game's camera, UI, drawing, atmosphere and audio (`Game::present`).
+    pub present: Option<std::sync::Arc<crate::present::PlayFrame>>,
 }

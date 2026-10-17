@@ -508,8 +508,9 @@ impl Sim {
             }
             crate::prop_preview::StudioMode::World => {}
         }
-        if self.history.enabled && self.config.history_seconds > 0.0 {
-            self.history.window = (self.config.history_seconds * self.config.tick_rate.hz() as f32) as u64;
+        let history_seconds = self.play().and_then(|g| g.history_seconds()).unwrap_or(self.config.history_seconds);
+        if self.history.enabled && history_seconds > 0.0 {
+            self.history.window = (history_seconds * self.config.tick_rate.hz() as f32) as u64;
             self.history.record(&self.state, input);
         }
         if self.recording.ticks() < MAX_RECORDING_TICKS {
@@ -519,11 +520,23 @@ impl Sim {
     }
 
     fn step_inner(&mut self, input: &InputFrame) {
-        // Hit-stop slows the whole world for a moment.
+        // A hook game's title, pause menu or loading screen: only its rules run.
+        if self.world_paused() {
+            let mut events = Vec::new();
+            self.play_pre(input, 0.0, &mut events);
+            self.play_post(0.0, &mut events);
+            self.state.tick += 1;
+            if !self.replaying {
+                self.events.extend(events);
+            }
+            return;
+        }
+        // Hit-stop and a hook game's slow motion slow the whole world.
         let raw_dt = self.dt();
-        let dt = raw_dt * self.game_time_scale();
+        let dt = raw_dt * self.game_time_scale() * self.play_time_scale();
         self.state.physics.params.dt = dt as Real;
         self.state.physics.gravity = Vector::new(0.0, -self.config.gravity as Real, 0.0);
+        let legacy = self.legacy_controls();
 
         // Behaviours set this tick's velocities of moving objects; characters then move
         // (rapier's controller carries them with kinematic platforms) and the physics step
@@ -531,7 +544,9 @@ impl Sim {
         self.run_behaviors(dt);
 
         // Getting in and out of vehicles.
-        self.vehicle_interact(input);
+        if legacy {
+            self.vehicle_interact(input);
+        }
 
         // The game decides what the hero and its monsters do this tick.
         let mut events = Vec::new();
@@ -551,7 +566,8 @@ impl Sim {
             let inp = if let Some(gi) = game_inputs.get(&id) {
                 gi
             } else if Some(id) == self.state.player {
-                input
+                // A game with its own controls moves the player only through `pre`.
+                if legacy { input } else { &idle }
             } else {
                 // Non-player characters: their brain drives them like a player would.
                 let st = &mut self.state;
@@ -620,7 +636,8 @@ impl Sim {
                 }
             }
         }
-        self.drive_vehicles(input, dt);
+        let vehicle_inputs = self.play_vehicles(dt);
+        self.drive_vehicles(input, &vehicle_inputs, legacy, dt);
         self.zone_props(dt);
         let collector = EventCollector::default();
         self.state.physics.step(&mut self.pipeline, &collector);
@@ -1074,6 +1091,7 @@ impl Sim {
             prop_preview: None,
             creature_preview: None,
             creature: None,
+            present: self.present().map(std::sync::Arc::new),
         }
     }
 

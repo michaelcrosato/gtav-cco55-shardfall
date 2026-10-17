@@ -270,8 +270,15 @@ impl Clock {
                 InputFrame::default()
             } else {
                 let mut i = sh.input.lock().unwrap();
-                let mut frame = *i;
+                let mut frame = i.clone();
+                // Presses, mouse movement, activity and commands belong to the first tick
+                // that sees them.
                 i.pressed = 0;
+                i.pad.pressed = 0;
+                i.mouse_delta = glam::Vec2::ZERO;
+                i.wheel = 0.0;
+                i.activity = false;
+                i.cmds.clear();
                 frame.cmd = sh.cmds.lock().unwrap().pop_front();
                 frame
             };

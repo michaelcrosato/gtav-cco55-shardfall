@@ -316,6 +316,7 @@ pub(crate) fn empty_frame(config: Arc<SimConfig>, dt: f32, ticket: u64) -> Rende
         prop_preview: None,
         creature_preview: None,
         creature: None,
+        present: None,
     }
 }
 

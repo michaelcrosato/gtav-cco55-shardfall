@@ -36,6 +36,7 @@ pub mod nav;
 pub mod params;
 pub mod parts;
 pub mod physics;
+pub mod present;
 pub mod projectile;
 pub mod prop_instance;
 pub mod prop_preview;
