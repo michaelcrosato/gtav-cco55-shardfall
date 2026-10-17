@@ -1,0 +1,16 @@
+{"format":2,"name":"ac_unit","unit":"cm",
+"description":"A packaged rooftop AC unit, 1.8 m: beige case on two rails, louvred front (+z), fan grille on top.",
+"tags":["hvac","rooftop","ac","air","machine","roof"],
+"category":"architecture",
+"materials":{
+"case":{"base":"MAT/gtf/painted_metal","color":"#c9c6bd"},
+"grille":{"color":"#3a3c3f"},
+"louver":{"base":"MAT/gtf/painted_metal","color":"#a9a69d","layers":[{"type":"stripes","size":6,"axis":"y","cover":0.4,"soft":0.6,"shade":0.6}]},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#5a5e62"}},
+"parts":{
+"body":{"type":"box","size":[180,100,120],"pos":[0,60,0],"mat":"case"},
+"curb":{"type":"box","size":[190,10,12],"pos":[0,5,50],"mat":"steel","mirror":"z"},
+"fan":{"type":"cylinder","radius":36,"height":5,"pos":[40,112.5,0],"mat":"grille"},
+"hub":{"type":"cylinder","radius":9,"height":4,"pos":[40,117,0],"mat":"case"},
+"louver":{"type":"box","size":[150,60,1],"pos":[0,55,60.5],"mat":"louver"},
+"pipe":{"type":"cylinder","radius":3,"from":[-92,70,30],"to":[-92,10,30],"mat":"steel"}}}

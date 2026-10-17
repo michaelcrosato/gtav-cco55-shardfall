@@ -1,0 +1,45 @@
+name	revision	review
+LIB/gtf_city/ac_unit	prop2-72645ed528bb77e3	ok: 1.8 m beige rooftop unit on rails, louvred front +z, dark fan grille on top, side pipe; 7 parts
+LIB/gtf_city/antenna_mast	prop2-587f9ff14fe41f88	ok: 9.6 m mast on a concrete block, 3 TV crossbars, white dish toward +z, whip; red beacon glows only after dark (night sheet); 8 parts
+LIB/gtf_city/barricade	prop2-b118ff0478152ca6	ok (fix 1: panel seated on the top rail): Type III barricade, diagonal striped rails, blank panel, amber lamp; 8 parts
+LIB/gtf_city/beach_umbrella	prop2-4db573f207c79d7b	ok: 2.2 m cream canopy with coral gores on a white pole; instantly reads as beach umbrella; 3 parts
+LIB/gtf_city/bench	prop2-20d29d767da54a00	ok: 1.9 m wooden seat and leaning back on concrete blocks and steel posts, sit socket on the seat, front +z; 6 parts
+LIB/gtf_city/billboard	prop2-66d93972b819e778	ok: blank 12x4 m panel facing +z in a dark frame on two legs; 4 catwalk lamps light the panel only after dark (night sheet); 10 parts
+LIB/gtf_city/bollard	prop2-6615b3fe60085433	ok: 95 cm dark steel bollard with dome and yellow band; clear silhouette; 3 parts
+LIB/gtf_city/bus_stop	prop2-3f9fe76a147e2949	ok: cantilever shelter, glass back, roof, ref'd bench, ad panel at -x backlit only after dark (night sheet); open to +z; sit socket; 12 parts
+LIB/gtf_city/chain_link_fence	prop2-5b7d3148e04acb97	ok (fix 1: coarse light diamond lattice on dark base): 3 m chain-link with posts and top rail, reads as mesh (opaque); 4 parts
+LIB/gtf_city/dumpster	prop2-cad42874991a244a	ok: slanted green front-load dumpster, black lids, fork pockets, skids; profile reads from the side, front +z; 7 parts
+LIB/gtf_city/fire_hydrant	prop2-b7e68854d5e301d1	ok: 80 cm yellow wet-barrel hydrant with silver bonnet, side outlets and pumper nozzle toward +z reads at once; 7 parts
+LIB/gtf_city/forklift	prop2-26147005b99dd139	ok (fix 2: wheels proud of body and counterweight): yellow forklift, overhead guard, mast, forks to +z; 14 parts
+LIB/gtf_city/gantry_crane	prop2-b21f4d855ea043cc	ok (fix 1 in engine: set pieces may reach 100 m): 45 m STS crane, red portal, white boom to +z, A-frame, stays, house; 23 parts
+LIB/gtf_city/guard_rail	prop2-4f8402afe611ead5	ok: 3 m galvanised W-beam on blockouts and two posts, beam faces +z; reads as highway guardrail; 5 parts
+LIB/gtf_city/hedge	prop2-5418db04581bf0e2	ok: 2x1x1 m trimmed hedge block with leafy noise, flat ends join along x; 1 part
+LIB/gtf_city/jersey_barrier	prop2-3a5a84a5174a92ce	ok: 3 m safety-shape concrete K-rail, 81 cm, drain slots; profile reads from the end, runs along x; 3 parts
+LIB/gtf_city/lifeguard_tower	prop2-abaf5debb5cdb143	ok: pastel hut on 4 stilts, slatted deck rails, window to +z, ramp to -z, white roof; color knob 5 presets; 12 parts
+LIB/gtf_city/low_wall	prop2-1964be0671be3a76	ok: 3 m stucco garden wall, 1 m, terracotta cap; color knob cream/peach/mint/coral; 2 parts
+LIB/gtf_city/mailbox	prop2-cdc236d6915b169e	ok: blue rounded-top mailbox on 4 legs with front chute, generic, no markings; reads from all sides; 7 parts
+LIB/gtf_city/newspaper_box	prop2-3a0a2b17dc7b4499	ok: blue vending box on a pedestal, window and handle on +z, coin unit on top; color knob with 5 presets; 5 parts
+LIB/gtf_city/oil_drum	prop2-e05aafa2003bea66	ok: 88 cm blue steel drum, two hoops, rimmed ends, bung; color knob with 5 presets; 6 parts
+LIB/gtf_city/pallet_stack	prop2-faab278ee116ece0	ok (fix 1: jitter yaw only, no tilt): five 1.2x1.0 m pallets, dark recessed cores read as fork gaps; 10 parts
+LIB/gtf_city/palm_short	prop2-613ca14d05170adf	ok (fix 1: wider fronds): 6.3 m date palm, thick diamond-scarred trunk, knob and wide arching fronds; 12 parts
+LIB/gtf_city/palm_tall	prop2-a0ff9bcfdcc6905d	ok (fix 1: round frond head, tight skirt): 21 m slender ringed trunk with a small round fan-frond head; reads as LA Washingtonia; 12 parts
+LIB/gtf_city/parking_meter	prop2-dca3393632b06669	ok: 1.55 m smart meter, dark head with screen and slot toward +z, chrome dome on a thin post; 6 parts
+LIB/gtf_city/ped_signal	prop2-bdd38401e69881d5	ok (fix 1: unlit walk lens darker): head on 3.3 m post faces +z, dont_walk orange over walk, visor, button; 8 parts
+LIB/gtf_city/planter	prop2-df281d3837ed14aa	ok: 1 m concrete box planter with soil and a two-tone rounded shrub; reads as street planter; 4 parts
+LIB/gtf_city/power_pole	prop2-0f6937a8fc2a10d2	ok: 10.9 m wood pole with braced crossarm, 3 glass insulators, transformer can toward +z; reads as a utility pole; 8 parts
+LIB/gtf_city/rooftop_sign_frame	prop2-d26623b996e68331	ok (fix 1: strut feet above the floor): 8.2x3 m white steel frame, 5 posts, 2 rails, back struts and sill; 11 parts
+LIB/gtf_city/shipping_container	prop2-a939839867958d9a	ok (fix 1: own rib layers, no scaled rust blotches): 12.2 m 40 ft box, 27 cm ribs, rails, end frames, door bars at +x; color knob; 9 parts
+LIB/gtf_city/shrub	prop2-c1b335168b7419ff	ok: 80 cm two-tone rounded shrub from 4 ellipsoids; reads as landscaping; 4 parts
+LIB/gtf_city/speed_sign	prop2-b4f51f8f7ebc2406	ok (fix 1: shorter description): blank white 60x75 cm face, black border at 2.25 m, grey back, square post; face +z; 4 parts
+LIB/gtf_city/stop_sign	prop2-f89dee408579081d	ok: flat-topped red octagon with white border at 2.25 m reads instantly, grey back, square post; face +z; 4 parts
+LIB/gtf_city/street_lamp	prop2-ddf4233efff86937	ok: 9.2 m cobra-head toward +z; the lens glows and lights a 22 m pool only after dark (night sheet, downtown at night); grounded, 6 parts
+LIB/gtf_city/street_lamp_double	prop2-b2cf5149c20eb869	ok: 9.2 m median light, two heads toward +-z; both lenses glow and light the road only after dark (night sheet); grounded, 9 parts
+LIB/gtf_city/street_name_sign	prop2-3335155f61d13515	ok: two crossed blank green blades on a 3 m pole read as a corner street sign from all sides; 5 parts
+LIB/gtf_city/street_tree	prop2-c711648f594b1089	ok: 7.4 m trunk, two branches and a lobed rounded canopy ~5 m across; reads as a street tree; 9 parts
+LIB/gtf_city/traffic_cone	prop2-958f6d954303f70b	ok: 70 cm orange cone, two white bands, black square base; instantly readable; 4 parts
+LIB/gtf_city/traffic_signal	prop2-e5924a7d80a26fed	ok: mast arm to -x over the road, 3-lamp head with visors faces +z, red/amber/green lenses read; arm knob; 12 parts
+LIB/gtf_city/trash_bin	prop2-59d4514e100cb694	ok: 1 m city-green slatted bin, two bands, domed lid with dark opening; reads as a public litter bin; 6 parts
+LIB/gtf_city/trash_can_beach	prop2-7b1cadf28703fb72	ok: blue drum can with white band for text, black lid and handle, 98 cm; reads as beach trash can; 4 parts
+LIB/gtf_city/volleyball_net	prop2-449debc8b5743fe1	ok (fix 1: grey mesh, thicker dark cords): 10 m net between 2.55 m poles, white top band; reads as a net; 5 parts
+LIB/gtf_city/water_tank	prop2-d075f8c0b513f790	ok: classic rooftop stave tank with 3 hoops and conical roof on a braced 3 m stand; strong silhouette; 12 parts
+LIB/gtf_city/wood_fence	prop2-01f059b9b96796bb	ok: 3 m board fence, boards face +z, rails and posts behind, top cap; reads as a yard fence; 6 parts

@@ -1,0 +1,394 @@
+# Grand Theft Freeway-BX vehicle archetypes (PLAN.md §5.6.3, §6.8.2), read by
+# `gtf_game::vehicles` and spawned with `vehicles::spawn(sim, key, feet, yaw, paint)`.
+#
+# Each table is the engine's `pav_core::vehicle::VehicleDef` (docs/REFERENCE.md, "Vehicles")
+# plus the game's own fields: `name`, `colors` (paint picked per copy; the body prop's `$accent`
+# parts), `traffic_weight` (share of ambient traffic) and `sound` (engine cue family).
+#
+# Positions are in the body frame, metres: the ground under the centre at rest is the origin, +z
+# the front, +x the vehicle's own LEFT (the driver's side). `size` is the body collider's half
+# extents, its bottom `clearance` above the ground; `com` the centre of mass from the collider's
+# centre. Handling: `power` N per driven wheel at low speed, constant power above `knee` × top
+# speed, the engine fading over the last 8% of `max_speed`; `brake` N in total (60% front);
+# `grip` the tyres' friction coefficient (≈ cornering g), `drift_grip` the rear tyres' while the
+# handbrake locks them; `steer` degrees of lock below 8 m/s, `steer_at_top` the share left at top
+# speed. Feel targets and how they are measured: `gtf vehicle_feel`, crates/gtf_game/tests/vehicles.rs.
+
+[fenwick_commuter]
+name = "Fenwick Commuter"
+class = "compact"
+colors = ["#c9c9c4", "#2c5aa0", "#9b1c25", "#1f2126", "#e0d9c6", "#4f7a4a"]
+traffic_weight = 0.30
+sound = "engine.compact"
+size = [0.86, 0.6, 1.98]
+clearance = 0.28
+com = [0.0, -0.32, 0.15]
+mass = 1150
+drive = "fwd"
+power = 2600
+knee = 0.42
+max_speed = 30.0
+brake = 10000
+grip = 0.98
+drift_grip = 0.37
+steer = 34.0
+steer_at_top = 0.35
+wheels = { radius = 0.31, track = 0.75, front_z = 1.28, rear_z = -1.22 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.36, 0.55, 0.05], [-0.36, 0.55, 0.05], [0.36, 0.58, -0.8], [-0.36, 0.58, -0.8]]
+lights = { head = [[0.58, 0.72, 1.96], [-0.58, 0.72, 1.96]], tail = [[0.66, 0.9, -1.98], [-0.66, 0.9, -1.98]] }
+health = 1000
+radio = true
+
+[zephyr_wagon]
+name = "Zephyr Wagon"
+class = "wagon"
+colors = ["#7a8a7a", "#c9b892", "#3a4d6b", "#8c2f2f", "#d8d8d2"]
+traffic_weight = 0.10
+sound = "engine.compact"
+size = [0.9, 0.61, 2.4]
+clearance = 0.27
+com = [0.0, -0.33, 0.1]
+mass = 1550
+drive = "rwd"
+power = 3650
+knee = 0.41
+max_speed = 31.0
+brake = 13500
+grip = 1.0
+drift_grip = 0.3
+steer = 33.0
+steer_at_top = 0.35
+wheels = { radius = 0.32, track = 0.78, front_z = 1.45, rear_z = -1.4 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.37, 0.56, 0.15], [-0.37, 0.56, 0.15], [0.37, 0.59, -0.75], [-0.37, 0.59, -0.75]]
+lights = { head = [[0.6, 0.72, 2.38], [-0.6, 0.72, 2.38]], tail = [[0.68, 0.95, -2.4], [-0.68, 0.95, -2.4]] }
+health = 1000
+radio = true
+
+[okami_kaze]
+name = "Okami Kaze"
+class = "sports"
+colors = ["#c81e2b", "#f2f2f2", "#1b1d22", "#2a6fdb", "#f2b705"]
+traffic_weight = 0.04
+sound = "engine.sports"
+size = [0.94, 0.52, 2.2]
+clearance = 0.18
+com = [0.0, -0.25, -0.05]
+mass = 1250
+drive = "awd"
+power = 2650
+knee = 0.41
+max_speed = 42.0
+brake = 13500
+grip = 1.04
+drift_grip = 0.4
+steer = 32.0
+steer_at_top = 0.3
+downforce = 0.6
+wheels = { radius = 0.34, track = 0.81, front_z = 1.35, rear_z = -1.3 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.38, 0.42, -0.15], [-0.38, 0.42, -0.15]]
+lights = { head = [[0.66, 0.6, 2.18], [-0.66, 0.6, 2.18]], tail = [[0.7, 0.78, -2.2], [-0.7, 0.78, -2.2]] }
+health = 900
+radio = true
+
+[bravura_stallion]
+name = "Bravura Stallion"
+class = "muscle"
+colors = ["#e8b21f", "#1b1d22", "#a3241f", "#2d5f9a", "#4a8c3f"]
+traffic_weight = 0.06
+sound = "engine.muscle"
+size = [0.96, 0.57, 2.45]
+clearance = 0.2
+com = [0.0, -0.3, 0.1]
+mass = 1600
+drive = "rwd"
+power = 5350
+knee = 0.5
+max_speed = 38.0
+brake = 15500
+grip = 1.0
+drift_grip = 0.28
+steer = 32.0
+steer_at_top = 0.32
+wheels = { radius = 0.35, track = 0.82, front_z = 1.5, rear_z = -1.45 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.38, 0.46, -0.1], [-0.38, 0.46, -0.1]]
+lights = { head = [[0.68, 0.7, 2.44], [-0.68, 0.7, 2.44]], tail = [[0.7, 0.82, -2.45], [-0.7, 0.82, -2.45]] }
+health = 1100
+radio = true
+
+[daimon_titan]
+name = "Daimon Titan"
+class = "SUV"
+colors = ["#1d1f24", "#e6e6e3", "#5b6168", "#24364f", "#6b2228"]
+traffic_weight = 0.15
+sound = "engine.heavy"
+size = [1.0, 0.76, 2.5]
+clearance = 0.33
+com = [0.0, -0.36, 0.1]
+mass = 2300
+drive = "awd"
+power = 2820
+knee = 0.5
+max_speed = 31.0
+brake = 20000
+grip = 0.98
+drift_grip = 0.3
+steer = 33.0
+steer_at_top = 0.4
+wheels = { radius = 0.39, track = 0.85, front_z = 1.5, rear_z = -1.45 }
+suspension = { stiffness = 36.0 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.4, 0.72, 0.15], [-0.4, 0.72, 0.15], [0.4, 0.75, -0.8], [-0.4, 0.75, -0.8]]
+lights = { head = [[0.7, 0.92, 2.48], [-0.7, 0.92, 2.48]], tail = [[0.8, 1.1, -2.5], [-0.8, 1.1, -2.5]] }
+health = 1300
+radio = true
+
+[marlin_bay]
+name = "Marlin Bay"
+class = "pickup"
+colors = ["#b23a2a", "#e8e4da", "#3f5a3a", "#2a2d33", "#3d6a8f"]
+traffic_weight = 0.12
+sound = "engine.heavy"
+size = [1.0, 0.74, 2.68]
+clearance = 0.34
+com = [0.0, -0.36, 0.3]
+mass = 2100
+drive = "rwd"
+power = 4950
+knee = 0.5
+max_speed = 30.0
+brake = 18500
+grip = 0.97
+drift_grip = 0.28
+steer = 34.0
+steer_at_top = 0.42
+wheels = { radius = 0.39, track = 0.85, front_z = 1.75, rear_z = -1.6 }
+suspension = { stiffness = 36.0 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.4, 0.74, 0.45], [-0.4, 0.74, 0.45]]
+lights = { head = [[0.72, 0.95, 2.66], [-0.72, 0.95, 2.66]], tail = [[0.88, 0.95, -2.68], [-0.88, 0.95, -2.68]] }
+health = 1200
+radio = true
+
+[fenwick_courier]
+name = "Fenwick Courier"
+class = "van"
+colors = ["#f1f1ee", "#1f4f8a", "#c9c9c4"]
+traffic_weight = 0.08
+sound = "engine.heavy"
+size = [1.0, 1.05, 2.68]
+clearance = 0.3
+com = [0.0, -0.6, 0.2]
+mass = 2600
+drive = "rwd"
+power = 4080
+knee = 0.31
+max_speed = 26.0
+brake = 21000
+grip = 0.88
+drift_grip = 0.42
+steer = 36.0
+steer_at_top = 0.4
+wheels = { radius = 0.36, track = 0.86, front_z = 1.75, rear_z = -1.55 }
+suspension = { stiffness = 34.0 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.42, 0.85, 1.2], [-0.42, 0.85, 1.2]]
+lights = { head = [[0.72, 0.85, 2.66], [-0.72, 0.85, 2.66]], tail = [[0.9, 0.9, -2.68], [-0.9, 0.9, -2.68]] }
+health = 1300
+radio = true
+
+[paloma_cab]
+name = "Paloma Cab"
+class = "taxi"
+colors = ["#f2c230"]
+traffic_weight = 0.10
+sound = "engine.compact"
+size = [0.92, 0.6, 2.4]
+clearance = 0.26
+com = [0.0, -0.32, 0.1]
+mass = 1500
+drive = "rwd"
+power = 3680
+knee = 0.4
+max_speed = 32.0
+brake = 13000
+grip = 1.0
+drift_grip = 0.3
+steer = 34.0
+steer_at_top = 0.35
+wheels = { radius = 0.33, track = 0.79, front_z = 1.45, rear_z = -1.4 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.37, 0.55, 0.15], [-0.37, 0.55, 0.15], [0.37, 0.58, -0.8], [-0.37, 0.58, -0.8]]
+lights = { head = [[0.62, 0.7, 2.38], [-0.62, 0.7, 2.38]], tail = [[0.7, 0.88, -2.4], [-0.7, 0.88, -2.4]] }
+health = 1000
+radio = true
+
+[sppd_interceptor]
+name = "SPPD Interceptor"
+class = "police"
+colors = ["#14161b"]
+traffic_weight = 0.0
+sound = "engine.muscle"
+size = [0.95, 0.62, 2.48]
+clearance = 0.24
+com = [0.0, -0.33, 0.1]
+mass = 1750
+drive = "rwd"
+power = 5670
+knee = 0.43
+max_speed = 40.0
+brake = 17500
+grip = 1.02
+drift_grip = 0.3
+steer = 33.0
+steer_at_top = 0.32
+wheels = { radius = 0.34, track = 0.81, front_z = 1.5, rear_z = -1.45 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.38, 0.55, 0.15], [-0.38, 0.55, 0.15], [0.38, 0.58, -0.8], [-0.38, 0.58, -0.8]]
+lights = { head = [[0.64, 0.72, 2.46], [-0.64, 0.72, 2.46]], tail = [[0.72, 0.9, -2.48], [-0.72, 0.9, -2.48]] }
+siren = true
+health = 1200
+radio = true
+
+[metro_bus]
+name = "Metro Bus"
+class = "bus"
+colors = ["#e2e2dc"]
+traffic_weight = 0.0
+sound = "engine.bus"
+size = [1.27, 1.35, 6.0]
+clearance = 0.38
+com = [0.0, -0.75, -0.5]
+mass = 12000
+drive = "rwd"
+power = 10000
+knee = 0.28
+max_speed = 20.0
+brake = 70000
+grip = 0.8
+drift_grip = 0.5
+steer = 38.0
+steer_at_top = 0.5
+wheels = { radius = 0.5, track = 1.05, front_z = 4.1, rear_z = -2.5 }
+suspension = { stiffness = 25.0, damping = 3.0, travel = 0.22 }
+doors = [{ part = "door_l", side = "left" }]
+seats = [[0.75, 1.25, 5.0], [-0.6, 1.3, 3.0], [0.6, 1.3, 1.5], [-0.6, 1.3, 0.0], [0.6, 1.3, -1.5], [-0.6, 1.3, -3.0]]
+lights = { head = [[0.95, 0.75, 6.0], [-0.95, 0.75, 6.0]], tail = [[1.05, 0.9, -6.0], [-1.05, 0.9, -6.0]] }
+health = 3000
+
+[ironclad_armored]
+name = "Ironclad Armored Truck"
+class = "armoured"
+colors = ["#3d4a3e"]
+traffic_weight = 0.0
+sound = "engine.heavy"
+size = [1.22, 1.2, 3.3]
+clearance = 0.4
+com = [0.0, -0.6, 0.0]
+mass = 9000
+drive = "awd"
+power = 4420
+knee = 0.41
+max_speed = 25.0
+brake = 60000
+grip = 0.85
+drift_grip = 0.5
+steer = 34.0
+steer_at_top = 0.45
+wheels = { radius = 0.52, track = 1.0, front_z = 2.2, rear_z = -2.0 }
+suspension = { stiffness = 28.0, damping = 3.2, travel = 0.22 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.5, 1.2, 2.2], [-0.5, 1.2, 2.2]]
+lights = { head = [[0.9, 1.0, 3.3], [-0.9, 1.0, 3.3]], tail = [[1.0, 1.0, -3.3], [-1.0, 1.0, -3.3]] }
+health = 3500
+
+[city_works]
+name = "City Works Utility Truck"
+class = "utility"
+colors = ["#f2a51f"]
+traffic_weight = 0.03
+sound = "engine.heavy"
+size = [1.22, 1.25, 3.5]
+clearance = 0.4
+com = [0.0, -0.6, 0.4]
+mass = 7000
+drive = "rwd"
+power = 6870
+knee = 0.43
+max_speed = 24.0
+brake = 47000
+grip = 0.85
+drift_grip = 0.5
+steer = 36.0
+steer_at_top = 0.45
+wheels = { radius = 0.5, track = 1.0, front_z = 2.6, rear_z = -1.9 }
+suspension = { stiffness = 28.0, damping = 3.2, travel = 0.22 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.5, 1.2, 2.6], [-0.5, 1.2, 2.6]]
+lights = { head = [[0.9, 1.0, 3.5], [-0.9, 1.0, 3.5]], tail = [[1.0, 0.9, -3.5], [-1.0, 0.9, -3.5]] }
+health = 2000
+
+[sppd_tactical]
+name = "SPPD Tactical Van"
+class = "police"
+colors = ["#1a1d24"]
+traffic_weight = 0.0
+sound = "engine.heavy"
+size = [1.05, 1.1, 3.0]
+clearance = 0.33
+com = [0.0, -0.6, 0.2]
+mass = 3600
+drive = "rwd"
+power = 7420
+knee = 0.47
+max_speed = 30.0
+brake = 30000
+grip = 0.9
+drift_grip = 0.45
+steer = 35.0
+steer_at_top = 0.4
+wheels = { radius = 0.42, track = 0.9, front_z = 2.0, rear_z = -1.75 }
+suspension = { stiffness = 32.0 }
+doors = [{ part = "door_l", side = "left" }, { part = "door_r", side = "right" }]
+seats = [[0.45, 0.95, 1.4], [-0.45, 0.95, 1.4], [0.5, 0.95, -0.5], [-0.5, 0.95, -0.5]]
+lights = { head = [[0.78, 0.95, 3.0], [-0.78, 0.95, 3.0]], tail = [[0.95, 1.0, -3.0], [-0.95, 1.0, -3.0]] }
+siren = true
+health = 2200
+
+[skylark_news]
+name = "Skylark News Helicopter"
+kind = "helicopter"
+class = "helicopter"
+colors = ["#2f6fb0"]
+traffic_weight = 0.0
+sound = "rotor"
+accent = "#f2f2f2"
+size = [0.9, 0.85, 2.0]
+mass = 1500
+power = 9.0
+max_speed = 28.0
+climb = 6.0
+ceiling = 150.0
+seats = [[0.35, 0.85, 0.6], [-0.35, 0.85, 0.6]]
+health = 1200
+
+[sppd_air]
+name = "SPPD Air Unit"
+kind = "helicopter"
+class = "helicopter"
+colors = ["#1a1d24"]
+traffic_weight = 0.0
+sound = "rotor"
+accent = "#e8e8e8"
+size = [0.95, 0.85, 2.1]
+mass = 1600
+power = 10.0
+max_speed = 30.0
+climb = 7.0
+ceiling = 160.0
+seats = [[0.35, 0.85, 0.6], [-0.35, 0.85, 0.6]]
+siren = true
+health = 1500

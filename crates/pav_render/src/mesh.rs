@@ -1,0 +1,369 @@
+//! Procedural mesh generation. Every built-in mesh fits the unit cube [-0.5, 0.5]^3
+//! so an instance's scale equals its size. Winding is counter-clockwise when seen from outside.
+
+use bytemuck::{Pod, Zeroable};
+use glam::Vec3;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct Vertex {
+    pub pos: [f32; 3],
+    pub normal: [f32; 3],
+    pub uv: [f32; 2],
+    /// Multiplied with the instance colour (white for built-in meshes).
+    pub color: [f32; 4],
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct MeshData {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+}
+
+/// Identifies a mesh. Built-ins and rounded boxes are generated on demand by the renderer;
+/// `Custom` meshes must be uploaded with `Renderer::upsert_mesh` first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum MeshKey {
+    Cube,
+    Sphere,
+    Cylinder,
+    Cone,
+    Plane,
+    /// A tuft of grass: seven tapered, curving blades in the unit box (two-sided).
+    Tuft,
+    /// Rounded box with absolute half extents and corner radius, in millimetres.
+    RoundedBox {
+        half_mm: [u32; 3],
+        radius_mm: u32,
+    },
+    Custom(u64),
+    /// A coarser `Sphere`, `Cylinder` or `Cone` for small or far instances, `segments` round (the
+    /// full meshes have 32). The renderer picks it for static regions' instances by their size on
+    /// screen (`MeshKey::for_size`); scenes keep naming the full mesh.
+    Coarse {
+        round: Round,
+        segments: u8,
+    },
+}
+
+/// The built-in round meshes with coarser versions (`MeshKey::Coarse`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Round {
+    Sphere,
+    Cylinder,
+    Cone,
+}
+
+/// Radii on screen (pixels) below which a round mesh drops to 16 and then 8 segments: an n-gon
+/// stands at most r (1 - cos(pi / n)) inside its circle, half a pixel at these radii.
+const COARSE_16_PX: f32 = 26.0;
+const COARSE_8_PX: f32 = 6.5;
+
+impl MeshKey {
+    pub fn rounded_box(half: Vec3, radius: f32) -> Self {
+        let mm = |v: f32| (v.max(0.0) * 1000.0).round() as u32;
+        MeshKey::RoundedBox { half_mm: [mm(half.x), mm(half.y), mm(half.z)], radius_mm: mm(radius) }
+    }
+
+    pub fn generate(&self) -> Option<MeshData> {
+        Some(match *self {
+            MeshKey::Cube => MeshData::cube(),
+            MeshKey::Sphere => MeshData::sphere(32, 16),
+            MeshKey::Cylinder => MeshData::cylinder(32),
+            MeshKey::Cone => MeshData::cone(32),
+            MeshKey::Plane => MeshData::plane(),
+            MeshKey::Tuft => MeshData::tuft(),
+            MeshKey::RoundedBox { half_mm, radius_mm } => {
+                let h = Vec3::new(half_mm[0] as f32, half_mm[1] as f32, half_mm[2] as f32) / 1000.0;
+                MeshData::rounded_box(h, radius_mm as f32 / 1000.0, 4)
+            }
+            MeshKey::Custom(_) => return None,
+            MeshKey::Coarse { round, segments } => {
+                let n = u32::from(segments.max(4));
+                match round {
+                    Round::Sphere => MeshData::sphere(n, n / 2),
+                    Round::Cylinder => MeshData::cylinder(n),
+                    Round::Cone => MeshData::cone(n),
+                }
+            }
+        })
+    }
+
+    /// The version of this mesh to draw when its radius covers `px` pixels on screen: the round
+    /// built-ins drop to 16 and then 8 segments as they shrink, their outline staying within
+    /// half a pixel of the full mesh's; everything else draws as itself.
+    pub fn for_size(self, px: f32) -> MeshKey {
+        let round = match self {
+            MeshKey::Sphere => Round::Sphere,
+            MeshKey::Cylinder => Round::Cylinder,
+            MeshKey::Cone => Round::Cone,
+            _ => return self,
+        };
+        if px > COARSE_16_PX { self } else { MeshKey::Coarse { round, segments: if px > COARSE_8_PX { 16 } else { 8 } } }
+    }
+
+    /// A short name for statistics: `sphere`, `sphere/16` (a coarse one), `custom`...
+    pub fn label(self) -> &'static str {
+        match self {
+            MeshKey::Cube => "cube",
+            MeshKey::Sphere => "sphere",
+            MeshKey::Cylinder => "cylinder",
+            MeshKey::Cone => "cone",
+            MeshKey::Plane => "plane",
+            MeshKey::Tuft => "tuft",
+            MeshKey::RoundedBox { .. } => "rounded_box",
+            MeshKey::Custom(_) => "custom",
+            MeshKey::Coarse { round, segments } => match (round, segments) {
+                (Round::Sphere, 16) => "sphere/16",
+                (Round::Sphere, _) => "sphere/8",
+                (Round::Cylinder, 16) => "cylinder/16",
+                (Round::Cylinder, _) => "cylinder/8",
+                (Round::Cone, 16) => "cone/16",
+                (Round::Cone, _) => "cone/8",
+            },
+        }
+    }
+}
+
+/// Tangent frame (u, v) for a face with normal n, such that cross(u, v) == n.
+fn face_frame(n: Vec3) -> (Vec3, Vec3) {
+    let v = if n.y.abs() > 0.5 { Vec3::Z * n.y.signum() } else { Vec3::Y };
+    let u = v.cross(n);
+    (u, v)
+}
+
+const FACES: [Vec3; 6] = [Vec3::X, Vec3::NEG_X, Vec3::Y, Vec3::NEG_Y, Vec3::Z, Vec3::NEG_Z];
+
+impl MeshData {
+    fn push(&mut self, pos: Vec3, normal: Vec3, uv: [f32; 2]) -> u32 {
+        self.vertices.push(Vertex { pos: pos.to_array(), normal: normal.to_array(), uv, color: [1.0; 4] });
+        (self.vertices.len() - 1) as u32
+    }
+
+    /// Adds a quad; corners must be counter-clockwise seen from the side `normal` points to.
+    pub fn push_quad(&mut self, p: [Vec3; 4], normal: Vec3) {
+        let uvs = [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+        let i0 = self.push(p[0], normal, uvs[0]);
+        for k in 1..4 {
+            self.push(p[k], normal, uvs[k]);
+        }
+        self.indices.extend_from_slice(&[i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3]);
+    }
+
+    pub fn cube() -> Self {
+        let mut m = MeshData::default();
+        for n in FACES {
+            let (u, v) = face_frame(n);
+            let c = n * 0.5;
+            m.push_quad([c - u * 0.5 - v * 0.5, c + u * 0.5 - v * 0.5, c + u * 0.5 + v * 0.5, c - u * 0.5 + v * 0.5], n);
+        }
+        m
+    }
+
+    /// Unit plane in XZ facing +Y.
+    pub fn plane() -> Self {
+        let mut m = MeshData::default();
+        let (u, v) = face_frame(Vec3::Y);
+        m.push_quad([-u * 0.5 - v * 0.5, u * 0.5 - v * 0.5, u * 0.5 + v * 0.5, -u * 0.5 + v * 0.5], Vec3::Y);
+        m
+    }
+
+    pub fn sphere(segments: u32, rings: u32) -> Self {
+        let mut m = MeshData::default();
+        for i in 0..=rings {
+            let theta = std::f32::consts::PI * i as f32 / rings as f32;
+            for j in 0..=segments {
+                let phi = std::f32::consts::TAU * j as f32 / segments as f32;
+                let n = Vec3::new(theta.sin() * phi.cos(), theta.cos(), theta.sin() * phi.sin());
+                m.push(n * 0.5, n, [j as f32 / segments as f32, i as f32 / rings as f32]);
+            }
+        }
+        let row = segments + 1;
+        for i in 0..rings {
+            for j in 0..segments {
+                let a = i * row + j;
+                let b = a + row;
+                m.indices.extend_from_slice(&[a, a + 1, b + 1, a, b + 1, b]);
+            }
+        }
+        m
+    }
+
+    /// Grass blades fanning out from the bottom centre of the unit box, darker at the root
+    /// (vertex colour). Normals lean up so blades take light like the ground they stand on.
+    pub fn tuft() -> Self {
+        let mut m = MeshData::default();
+        const BLADES: u32 = 7;
+        const SEGS: u32 = 3;
+        for b in 0..BLADES {
+            let yaw = b as f32 * 2.399 + 0.3;
+            let (sy, cy) = yaw.sin_cos();
+            let out = Vec3::new(cy, 0.0, sy);
+            let side = Vec3::new(-sy, 0.0, cy);
+            let lean = 0.12 + 0.05 * (b % 3) as f32;
+            let height = 0.8 + 0.2 * ((b * 7 % 5) as f32 / 4.0);
+            let normal = (out * 0.45 + Vec3::Y).normalize();
+            let first = m.vertices.len() as u32;
+            for k in 0..=SEGS {
+                let t = k as f32 / SEGS as f32;
+                let centre = out * (0.08 + lean * t * t) * 1.0 + Vec3::Y * (-0.5 + height * t);
+                let w = 0.2 * (1.0 - t * t) + 0.015;
+                let shade = 0.7 + 0.55 * t;
+                for s in [-1.0f32, 1.0] {
+                    m.vertices.push(Vertex {
+                        pos: (centre + side * w * s).to_array(),
+                        normal: normal.to_array(),
+                        uv: [(s + 1.0) * 0.5, t],
+                        color: [shade, shade, shade, 1.0],
+                    });
+                }
+            }
+            for k in 0..SEGS {
+                let a = first + k * 2;
+                m.indices.extend_from_slice(&[a, a + 1, a + 3, a, a + 3, a + 2]);
+            }
+        }
+        m
+    }
+
+    pub fn cylinder(segments: u32) -> Self {
+        Self::lathe(segments, 0.5, 0.5)
+    }
+
+    pub fn cone(segments: u32) -> Self {
+        Self::lathe(segments, 0.5, 0.0)
+    }
+
+    /// Solid of revolution around Y from y=-0.5 (radius r0) to y=0.5 (radius r1), with caps.
+    fn lathe(segments: u32, r0: f32, r1: f32) -> Self {
+        let mut m = MeshData::default();
+        let slope = (r0 - r1) / 1.0;
+        for j in 0..=segments {
+            let phi = std::f32::consts::TAU * j as f32 / segments as f32;
+            let (s, c) = phi.sin_cos();
+            let n = Vec3::new(c, slope, s).normalize();
+            let u = j as f32 / segments as f32;
+            m.push(Vec3::new(c * r0, -0.5, s * r0), n, [u, 1.0]);
+            m.push(Vec3::new(c * r1, 0.5, s * r1), n, [u, 0.0]);
+        }
+        for j in 0..segments {
+            let a = j * 2;
+            // a = bottom j, a+1 = top j, a+2 = bottom j+1, a+3 = top j+1
+            m.indices.extend_from_slice(&[a, a + 1, a + 3, a, a + 3, a + 2]);
+        }
+        for (y, r, n) in [(-0.5f32, r0, Vec3::NEG_Y), (0.5, r1, Vec3::Y)] {
+            if r <= 0.0 {
+                continue;
+            }
+            let center = m.push(Vec3::new(0.0, y, 0.0), n, [0.5, 0.5]);
+            let first = m.vertices.len() as u32;
+            for j in 0..=segments {
+                let phi = std::f32::consts::TAU * j as f32 / segments as f32;
+                let (s, c) = phi.sin_cos();
+                m.push(Vec3::new(c * r, y, s * r), n, [0.5 + c * 0.5, 0.5 + s * 0.5]);
+            }
+            for j in 0..segments {
+                let (a, b) = (first + j, first + j + 1);
+                if n.y > 0.0 {
+                    m.indices.extend_from_slice(&[center, b, a]);
+                } else {
+                    m.indices.extend_from_slice(&[center, a, b]);
+                }
+            }
+        }
+        m
+    }
+
+    /// Box with rounded edges, absolute half extents. `seg` = segments per rounded edge.
+    pub fn rounded_box(half: Vec3, radius: f32, seg: u32) -> Self {
+        let r = radius.min(half.min_element()).max(0.0);
+        let inner = half - Vec3::splat(r);
+        let axis_coords = |h: f32, inn: f32| -> Vec<f32> {
+            let mut v = Vec::new();
+            for i in 0..=seg {
+                let a = std::f32::consts::FRAC_PI_2 * (1.0 - i as f32 / seg as f32);
+                v.push(-inn - r * a.sin());
+            }
+            for i in 0..=seg {
+                let a = std::f32::consts::FRAC_PI_2 * i as f32 / seg as f32;
+                v.push(inn + r * a.sin());
+            }
+            let _ = h;
+            v
+        };
+        let mut m = MeshData::default();
+        for n in FACES {
+            let (u, v) = face_frame(n);
+            let (ua, va, na) = (u.abs(), v.abs(), n.abs());
+            let us = axis_coords(half.dot(ua), inner.dot(ua));
+            let vs = axis_coords(half.dot(va), inner.dot(va));
+            let base = m.vertices.len() as u32;
+            for (j, &t) in vs.iter().enumerate() {
+                for (i, &s) in us.iter().enumerate() {
+                    let p = n * half.dot(na) + u * s + v * t;
+                    let c = p.clamp(-inner, inner);
+                    let d = p - c;
+                    let normal = if d.length_squared() > 1e-12 { d.normalize() } else { n };
+                    let pos = c + normal * r;
+                    m.push(pos, normal, [i as f32 / (us.len() - 1) as f32, j as f32 / (vs.len() - 1) as f32]);
+                }
+            }
+            let row = us.len() as u32;
+            for j in 0..(vs.len() as u32 - 1) {
+                for i in 0..(row - 1) {
+                    let a = base + j * row + i;
+                    let b = a + row;
+                    m.indices.extend_from_slice(&[a, a + 1, b + 1, a, b + 1, b]);
+                }
+            }
+        }
+        m
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// For convex meshes centred on the origin every triangle must face outward.
+    fn assert_outward(m: &MeshData, name: &str) {
+        for t in m.indices.chunks(3) {
+            let p = |i: u32| Vec3::from(m.vertices[i as usize].pos);
+            let (a, b, c) = (p(t[0]), p(t[1]), p(t[2]));
+            let n = (b - a).cross(c - a);
+            if n.length_squared() < 1e-12 {
+                continue; // degenerate (poles, collapsed strips)
+            }
+            let centroid = (a + b + c) / 3.0;
+            assert!(n.dot(centroid) > 0.0, "{name}: inward triangle {t:?}");
+        }
+    }
+
+    #[test]
+    fn builtin_meshes_face_outward() {
+        assert_outward(&MeshData::cube(), "cube");
+        assert_outward(&MeshData::sphere(16, 8), "sphere");
+        assert_outward(&MeshData::cylinder(16), "cylinder");
+        assert_outward(&MeshData::cone(16), "cone");
+        assert_outward(&MeshData::rounded_box(Vec3::new(1.0, 0.5, 0.7), 0.2, 3), "rounded_box");
+    }
+
+    #[test]
+    fn round_meshes_coarsen_as_they_shrink_on_screen() {
+        let coarse = |round, segments| MeshKey::Coarse { round, segments };
+        assert_eq!(MeshKey::Sphere.for_size(40.0), MeshKey::Sphere);
+        assert_eq!(MeshKey::Sphere.for_size(20.0), coarse(Round::Sphere, 16));
+        assert_eq!(MeshKey::Cylinder.for_size(3.0), coarse(Round::Cylinder, 8));
+        assert_eq!(MeshKey::Cube.for_size(1.0), MeshKey::Cube, "only the round built-ins coarsen");
+        // Each coarse mesh is closed and faces out, with far fewer triangles than the full one.
+        let tris = |key: MeshKey| key.generate().unwrap().indices.len() / 3;
+        for round in [Round::Sphere, Round::Cylinder, Round::Cone] {
+            for segments in [16, 8] {
+                let key = coarse(round, segments);
+                assert_outward(&key.generate().unwrap(), key.label());
+            }
+        }
+        assert!(tris(coarse(Round::Sphere, 8)) * 10 < tris(MeshKey::Sphere));
+        assert!(tris(coarse(Round::Cylinder, 8)) * 3 < tris(MeshKey::Cylinder));
+    }
+}

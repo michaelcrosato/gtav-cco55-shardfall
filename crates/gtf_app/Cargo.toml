@@ -1,0 +1,28 @@
+[package]
+name = "gtf_app"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Grand Theft Freeway-BX binaries: the game and its agent CLI."
+
+[[bin]]
+name = "grand_theft_freeway"
+path = "src/bin/grand_theft_freeway.rs"
+
+[[bin]]
+name = "gtf"
+path = "src/bin/gtf.rs"
+
+[dependencies]
+gtf_game = { path = "../gtf_game" }
+pav_app = { path = "../pav_app" }
+pav_core.workspace = true
+pav_tools.workspace = true
+pav_world.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+glam.workspace = true
+png.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,902 @@
+//! Devices -> actions. Keyboard keys are bound by physical position (WASD stays WASD on AZERTY).
+//! The fixed system layer (pause, rewind, menus) is handled in `app.rs` and never rebinds.
+
+use std::collections::HashSet;
+
+use glam::Vec2;
+use pav_core::input::buttons;
+use winit::event::{ElementState, MouseButton};
+use winit::keyboard::KeyCode;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Device {
+    #[default]
+    KeyboardMouse,
+    Gamepad,
+    /// A phone or tablet (touch.rs).
+    Touch,
+}
+
+/// Game-action bindings (defaults; rooms may override in the future).
+pub struct KeyBinds {
+    pub up: &'static [KeyCode],
+    pub down: &'static [KeyCode],
+    pub left: &'static [KeyCode],
+    pub right: &'static [KeyCode],
+    pub buttons: &'static [(u32, &'static [KeyCode])],
+}
+
+pub const KEYS: KeyBinds = KeyBinds {
+    up: &[KeyCode::KeyW, KeyCode::ArrowUp],
+    down: &[KeyCode::KeyS, KeyCode::ArrowDown],
+    left: &[KeyCode::KeyA, KeyCode::ArrowLeft],
+    right: &[KeyCode::KeyD, KeyCode::ArrowRight],
+    buttons: &[
+        (buttons::JUMP, &[KeyCode::Space]),
+        (buttons::CROUCH, &[KeyCode::KeyC, KeyCode::ControlLeft]),
+        (buttons::CRAWL, &[KeyCode::KeyZ]),
+        (buttons::USE, &[KeyCode::KeyF]),
+        (buttons::FOCUS, &[KeyCode::ShiftLeft]),
+        (buttons::INTERACT, &[KeyCode::KeyE]),
+    ],
+};
+
+/// Physical key names usable in room files (`[keys]`).
+pub fn key_from_name(n: &str) -> Option<KeyCode> {
+    use KeyCode::*;
+    let letters = [
+        KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO, KeyP, KeyQ, KeyR, KeyS, KeyT,
+        KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
+    ];
+    if let Some(c) = n.strip_prefix("Key").and_then(|l| l.chars().next()).filter(|c| c.is_ascii_uppercase() && n.len() == 4) {
+        return Some(letters[(c as u8 - b'A') as usize]);
+    }
+    let digits = [Digit0, Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9];
+    if let Some(d) = n.strip_prefix("Digit").and_then(|d| d.parse::<usize>().ok()).filter(|d| *d < 10) {
+        return Some(digits[d]);
+    }
+    Some(match n {
+        "Space" => Space,
+        "Enter" => Enter,
+        "Tab" => Tab,
+        "ShiftLeft" => ShiftLeft,
+        "ShiftRight" => ShiftRight,
+        "ControlLeft" => ControlLeft,
+        "ControlRight" => ControlRight,
+        "AltLeft" => AltLeft,
+        "AltRight" => AltRight,
+        "ArrowUp" => ArrowUp,
+        "ArrowDown" => ArrowDown,
+        "ArrowLeft" => ArrowLeft,
+        "ArrowRight" => ArrowRight,
+        "Comma" => Comma,
+        "Period" => Period,
+        "Slash" => Slash,
+        "Semicolon" => Semicolon,
+        "Quote" => Quote,
+        "BracketLeft" => BracketLeft,
+        "BracketRight" => BracketRight,
+        "Minus" => Minus,
+        "Equal" => Equal,
+        "CapsLock" => CapsLock,
+        "Escape" => Escape,
+        "Backspace" => Backspace,
+        "Backquote" => Backquote,
+        "Backslash" => Backslash,
+        "Delete" => Delete,
+        "Insert" => Insert,
+        "Home" => Home,
+        "End" => End,
+        "PageUp" => PageUp,
+        "PageDown" => PageDown,
+        _ => return None,
+    })
+}
+
+/// Current keyboard bindings: defaults, optionally overridden by the room.
+#[derive(Clone)]
+pub struct Bindings {
+    pub up: Vec<KeyCode>,
+    pub down: Vec<KeyCode>,
+    pub left: Vec<KeyCode>,
+    pub right: Vec<KeyCode>,
+    pub buttons: Vec<(u32, Vec<KeyCode>)>,
+}
+
+impl Default for Bindings {
+    fn default() -> Self {
+        Self {
+            up: KEYS.up.to_vec(),
+            down: KEYS.down.to_vec(),
+            left: KEYS.left.to_vec(),
+            right: KEYS.right.to_vec(),
+            buttons: KEYS.buttons.iter().map(|(b, k)| (*b, k.to_vec())).collect(),
+        }
+    }
+}
+
+impl Bindings {
+    /// Shardfall: WASD to move, mouse buttons and Q E R F for the six skill slots, Space to
+    /// dodge, 1 for a potion, Shift to attack in place.
+    pub fn game() -> Self {
+        use KeyCode::*;
+        Self {
+            up: vec![KeyW, ArrowUp],
+            down: vec![KeyS, ArrowDown],
+            left: vec![KeyA, ArrowLeft],
+            right: vec![KeyD, ArrowRight],
+            buttons: vec![
+                (buttons::SKILL3, vec![KeyQ]),
+                (buttons::SKILL4, vec![KeyE]),
+                (buttons::SKILL5, vec![KeyR]),
+                (buttons::SKILL6, vec![KeyF]),
+                (buttons::DODGE, vec![Space]),
+                (buttons::POTION, vec![Digit1]),
+                (buttons::FOCUS, vec![ShiftLeft]),
+                (buttons::INTERACT, vec![KeyG]),
+            ],
+        }
+    }
+
+    /// Defaults with a room's `[keys]` overrides applied. Returns problems found.
+    pub fn with_overrides(map: &std::collections::BTreeMap<String, Vec<String>>) -> (Self, Vec<String>) {
+        let mut b = Self::default();
+        let mut errs = Vec::new();
+        for (action, names) in map {
+            let keys: Vec<KeyCode> = names
+                .iter()
+                .filter_map(|n| {
+                    let k = key_from_name(n);
+                    if k.is_none() {
+                        errs.push(format!("unknown key '{n}'"));
+                    }
+                    k
+                })
+                .collect();
+            match action.as_str() {
+                "move_up" => b.up = keys,
+                "move_down" => b.down = keys,
+                "move_left" => b.left = keys,
+                "move_right" => b.right = keys,
+                other => match pav_core::input::buttons::from_name(other) {
+                    Some(bit) => match b.buttons.iter_mut().find(|(x, _)| *x == bit) {
+                        Some(e) => e.1 = keys,
+                        None => b.buttons.push((bit, keys)),
+                    },
+                    None => errs.push(format!("unknown action '{other}'")),
+                },
+            }
+        }
+        (b, errs)
+    }
+}
+
+/// Shardfall's controls.
+pub fn game_guide(device: Device) -> &'static [(&'static str, &'static str)] {
+    match device {
+        Device::KeyboardMouse => &[
+            ("Move", "W A S D"),
+            ("Aim", "mouse"),
+            ("Skills", "LMB · RMB · Q · E · R · F (hold to repeat)"),
+            ("Dodge roll", "Space (cancels any attack)"),
+            ("Potion", "1"),
+            ("Attack in place", "hold Shift"),
+            ("Use (trade, portal, way down, chests)", "G"),
+            ("Inventory · passives · character · skills · map", "I · P · C · K · M"),
+            ("Town portal", "T"),
+            ("Pick up", "walk over it, or click its name"),
+            ("Camera", "middle-drag rotate · wheel zoom"),
+            ("Rewind", "hold Backspace"),
+            ("Menu / tuning", "Esc / F1"),
+        ],
+        Device::Gamepad => &[
+            ("Move / aim", "left stick / right stick"),
+            ("Skills", "X · Y · B · RB · LB · RT"),
+            ("Dodge roll", "A"),
+            ("Potion", "D-pad up"),
+            ("Use (trade, portal, way down, chests)", "D-pad right"),
+            ("Map", "D-pad left"),
+            ("Inventory, character, skills, passives", "D-pad down, then LB / RB"),
+            ("In menus", "stick: cursor · A click · X right-click · hold Y: shift · right stick scroll · B close"),
+            ("Menu", "Start"),
+        ],
+        Device::Touch => &[
+            ("Move", "put a thumb down anywhere and drag"),
+            ("Attack", "automatic: the nearest foe in reach"),
+            ("Skills", "tap: at the nearest foe · drag: aim, let go to cast · hold: keep casting"),
+            ("Dodge roll · potion", "the big button · the flask"),
+            ("Use (trade, portal, way down, chests)", "the button that appears"),
+            ("Bag, hero, skills, passives", "the bag (top right)"),
+            ("Messages and the minimap", "swipe them away"),
+            ("Close a window", "tap the game outside it"),
+        ],
+    }
+}
+
+/// Human-readable control guide per device.
+pub fn guide(device: Device) -> &'static [(&'static str, &'static str)] {
+    match device {
+        Device::KeyboardMouse => &[
+            ("Move", "W A S D"),
+            ("Jump", "Space (hold = higher)"),
+            ("Crouch", "C / Ctrl (hold)"),
+            ("Crawl", "Z (toggle)"),
+            ("Throw bomb", "F or left click (at the cursor)"),
+            ("Walk slowly", "Shift (instant model)"),
+            ("Climb ladder", "walk into it"),
+            ("Grab a ledge", "jump at it, keep pushing toward it"),
+            ("Swim", "Space up · C down"),
+            ("Dodge roll", "C while running (committed model)"),
+            ("Camera", "right-drag rotate · wheel zoom · 1–8 presets"),
+            ("Vehicles", "E get in / out"),
+            ("Rewind", "hold Backspace"),
+            ("Rooms", "F2 any room · F4 leave · F5 reset"),
+            ("Menu / tuning", "Esc / F1"),
+        ],
+        Device::Gamepad => &[
+            ("Move", "left stick"),
+            ("Aim", "right stick"),
+            ("Jump", "A (hold = higher)"),
+            ("Crouch", "B (hold)"),
+            ("Crawl", "Y (toggle)"),
+            ("Throw bomb", "X or right trigger"),
+            ("Walk slowly", "left trigger (instant model)"),
+            ("Grab a ledge", "jump at it, keep pushing toward it"),
+            ("Swim", "A up · B down"),
+            ("Dodge roll", "B while running (committed model)"),
+            ("Camera", "LB / RB rotate · D-pad zoom"),
+            ("Vehicles", "D-pad right: get in / out"),
+            ("Rewind", "hold Back/View"),
+            ("Menu", "Start"),
+        ],
+        Device::Touch => &[
+            ("Move", "put a thumb down anywhere and drag"),
+            ("Jump · bomb · crouch · use", "the buttons in the corner"),
+            ("Menu", "top right"),
+        ],
+    }
+}
+
+#[derive(Default)]
+pub struct Pad {
+    pub left: Vec2,
+    pub right: Vec2,
+    pub held: u32,
+    pub rotate: f32,
+    pub zoom: f32,
+    pub start_pressed: bool,
+    /// D-pad left (the game's map).
+    pub map_pressed: bool,
+    /// Buttons pressed since the last poll (menus read these as taps).
+    pub taps: Vec<gilrs::Button>,
+    /// A (south) and X (west) held: the menu cursor's left and right mouse buttons.
+    pub a_held: bool,
+    pub x_held: bool,
+    /// Y (north) held: Shift for the menu cursor (take a whole path in the passive tree).
+    pub y_held: bool,
+    pub back_held: bool,
+    pub any_activity: bool,
+    /// The pad as the games' controller model (`InputFrame.pad`): every button, raw sticks
+    /// (dead zones applied), analog triggers.
+    pub state: pav_core::input::PadState,
+}
+
+pub struct Input {
+    pub keys: HashSet<KeyCode>,
+    pub mouse: HashSet<MouseButton>,
+    pub cursor: Vec2,
+    pub mouse_active: bool,
+    pub gilrs: Option<gilrs::Gilrs>,
+    /// A scripted gamepad (`--pad-script FILE`): tests and agents drive controller flows.
+    pub pad_script: Option<PadScript>,
+    pub pad: Pad,
+    pub last_device: Device,
+    prev_held: u32,
+    /// Keys / mouse buttons pressed since the last `buttons()` call (short taps are never lost).
+    key_taps: HashSet<KeyCode>,
+    pub mouse_taps: HashSet<MouseButton>,
+    pub bindings: Bindings,
+    /// Game mode: the right mouse button is a skill and the gamepad uses the game layout.
+    pub game: bool,
+    /// Controller buttons held at the last poll (press edges).
+    prev_pad: u32,
+    /// The pad's family, from its name when it connected.
+    pad_family: pav_core::input::Device,
+    /// Mouse movement (pixels), wheel notches and any device activity since the last
+    /// `take_motion`.
+    mouse_delta: Vec2,
+    wheel: f32,
+    activity: bool,
+    /// The rumble playing (dropping it stops it).
+    #[cfg(not(target_arch = "wasm32"))]
+    rumble: Option<gilrs::ff::Effect>,
+}
+
+/// A pad's raw state for one frame.
+struct RawPad {
+    left: Vec2,
+    right: Vec2,
+    held: Vec<gilrs::Button>,
+    /// Analog triggers, 0..1.
+    l2: f32,
+    r2: f32,
+}
+
+/// A controller button's bit in the games' controller model (`pav_core::input::pad`).
+fn pad_bit(b: gilrs::Button) -> u32 {
+    use gilrs::Button as B;
+    use pav_core::input::pad;
+    match b {
+        B::South => pad::SOUTH,
+        B::East => pad::EAST,
+        B::West => pad::WEST,
+        B::North => pad::NORTH,
+        B::LeftTrigger => pad::L1,
+        B::RightTrigger => pad::R1,
+        B::LeftTrigger2 => pad::L2,
+        B::RightTrigger2 => pad::R2,
+        B::LeftThumb => pad::L3,
+        B::RightThumb => pad::R3,
+        B::DPadUp => pad::UP,
+        B::DPadDown => pad::DOWN,
+        B::DPadLeft => pad::LEFT,
+        B::DPadRight => pad::RIGHT,
+        B::Start => pad::START,
+        B::Select => pad::SELECT,
+        _ => 0,
+    }
+}
+
+/// One line of a pad script: hold this for so many frames.
+#[derive(Clone, Debug, Default)]
+pub struct PadStep {
+    pub frames: u32,
+    pub left: Vec2,
+    pub right: Vec2,
+    pub hold: Vec<gilrs::Button>,
+    pub tap: Vec<gilrs::Button>,
+    /// Analog triggers (0..1); holding LT/RT pulls them fully.
+    pub l2: f32,
+    pub r2: f32,
+}
+
+/// A scripted gamepad, one step per line:
+/// `<frames> [left=x,y] [right=x,y] [hold=South,North] [tap=DPadDown] [l2=0.5] [r2=1]` (`#`
+/// comments). Buttons are gilrs names: South (A), East (B), West (X), North (Y), LeftTrigger
+/// (LB), RightTrigger (RB), LeftTrigger2 (LT), RightTrigger2 (RT), LeftThumb (L3), RightThumb
+/// (R3), Start, Select, DPadUp/Down/Left/Right.
+#[derive(Clone, Debug, Default)]
+pub struct PadScript {
+    pub steps: Vec<PadStep>,
+    at: usize,
+    frame: u32,
+}
+
+impl PadScript {
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub fn parse(text: &str) -> Result<PadScript, String> {
+        let button = |n: &str| -> Result<gilrs::Button, String> {
+            use gilrs::Button as B;
+            Ok(match n {
+                "South" | "A" => B::South,
+                "East" | "B" => B::East,
+                "West" | "X" => B::West,
+                "North" | "Y" => B::North,
+                "LeftTrigger" | "LB" => B::LeftTrigger,
+                "RightTrigger" | "RB" => B::RightTrigger,
+                "LeftTrigger2" | "LT" => B::LeftTrigger2,
+                "RightTrigger2" | "RT" => B::RightTrigger2,
+                "LeftThumb" | "L3" => B::LeftThumb,
+                "RightThumb" | "R3" => B::RightThumb,
+                "Start" => B::Start,
+                "Select" => B::Select,
+                "DPadUp" => B::DPadUp,
+                "DPadDown" => B::DPadDown,
+                "DPadLeft" => B::DPadLeft,
+                "DPadRight" => B::DPadRight,
+                o => return Err(format!("unknown button '{o}'")),
+            })
+        };
+        let vec = |v: &str| -> Result<Vec2, String> {
+            let (x, y) = v.split_once(',').ok_or(format!("'{v}': want x,y"))?;
+            Ok(Vec2::new(x.trim().parse().map_err(|_| format!("'{v}'"))?, y.trim().parse().map_err(|_| format!("'{v}'"))?))
+        };
+        let mut steps = Vec::new();
+        for (n, line) in text.lines().enumerate() {
+            let line = line.split('#').next().unwrap_or("").trim();
+            if line.is_empty() {
+                continue;
+            }
+            let mut words = line.split_whitespace();
+            let frames = words.next().and_then(|w| w.parse().ok()).ok_or(format!("line {}: starts with a frame count", n + 1))?;
+            let mut st = PadStep { frames, ..Default::default() };
+            for w in words {
+                let (k, v) = w.split_once('=').ok_or(format!("line {}: '{w}'", n + 1))?;
+                match k {
+                    "left" => st.left = vec(v)?,
+                    "right" => st.right = vec(v)?,
+                    "hold" => st.hold = v.split(',').map(button).collect::<Result<_, _>>()?,
+                    "tap" => st.tap = v.split(',').map(button).collect::<Result<_, _>>()?,
+                    "l2" | "r2" => {
+                        let x: f32 = v.parse().map_err(|_| format!("line {}: '{w}'", n + 1))?;
+                        *if k == "l2" { &mut st.l2 } else { &mut st.r2 } = x.clamp(0.0, 1.0);
+                    }
+                    o => return Err(format!("line {}: unknown '{o}'", n + 1)),
+                }
+            }
+            steps.push(st);
+        }
+        Ok(PadScript { steps, at: 0, frame: 0 })
+    }
+
+    /// This frame's step (and whether it's the step's first frame); None when done.
+    fn next(&mut self) -> Option<(PadStep, bool)> {
+        let st = self.steps.get(self.at)?.clone();
+        let first = self.frame == 0;
+        self.frame += 1;
+        if self.frame >= st.frames.max(1) {
+            self.at += 1;
+            self.frame = 0;
+        }
+        Some((st, first))
+    }
+}
+
+fn deadzone(v: Vec2, dz: f32) -> Vec2 {
+    let l = v.length();
+    if l < dz { Vec2::ZERO } else { v / l * ((l - dz) / (1.0 - dz)).min(1.0) }
+}
+
+impl Input {
+    pub fn new() -> Self {
+        let gilrs = match gilrs::Gilrs::new() {
+            Ok(g) => {
+                for (_, gp) in g.gamepads() {
+                    log::info!("gamepad: {} ({:?})", gp.name(), gp.power_info());
+                }
+                Some(g)
+            }
+            Err(e) => {
+                log::warn!("gamepads unavailable: {e}");
+                None
+            }
+        };
+        Self {
+            keys: HashSet::new(),
+            mouse: HashSet::new(),
+            cursor: Vec2::ZERO,
+            mouse_active: false,
+            gilrs,
+            pad_script: None,
+            pad: Pad::default(),
+            last_device: Device::KeyboardMouse,
+            prev_held: 0,
+            key_taps: HashSet::new(),
+            mouse_taps: HashSet::new(),
+            bindings: Bindings::default(),
+            game: false,
+            prev_pad: 0,
+            pad_family: pav_core::input::Device::Gamepad,
+            mouse_delta: Vec2::ZERO,
+            wheel: 0.0,
+            activity: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            rumble: None,
+        }
+    }
+
+    /// Rumbles every connected pad that can (best effort: controllers and platforms without
+    /// force feedback stay still).
+    pub fn vibrate(&mut self, low: f32, high: f32, secs: f32) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use gilrs::ff::{BaseEffect, BaseEffectType, EffectBuilder, Replay, Ticks};
+            let Some(g) = &mut self.gilrs else { return };
+            let ids: Vec<gilrs::GamepadId> = g.gamepads().filter(|(_, gp)| gp.is_ff_supported()).map(|(id, _)| id).collect();
+            if ids.is_empty() {
+                return;
+            }
+            let play_for = Ticks::from_ms((secs.clamp(0.0, 5.0) * 1000.0) as u32);
+            let mag = |v: f32| (v.clamp(0.0, 1.0) * u16::MAX as f32) as u16;
+            let effect =
+                |kind| BaseEffect { kind, scheduling: Replay { play_for, ..Default::default() }, envelope: Default::default() };
+            match EffectBuilder::new()
+                .add_effect(effect(BaseEffectType::Strong { magnitude: mag(low) }))
+                .add_effect(effect(BaseEffectType::Weak { magnitude: mag(high) }))
+                .gamepads(&ids)
+                .finish(g)
+            {
+                Ok(e) => {
+                    let _ = e.play();
+                    self.rumble = Some(e);
+                }
+                Err(e) => log::info!("rumble unavailable: {e}"),
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = (low, high, secs);
+    }
+
+    pub fn key(&mut self, code: KeyCode, state: ElementState) {
+        self.last_device = Device::KeyboardMouse;
+        self.activity = true;
+        match state {
+            ElementState::Pressed => {
+                self.keys.insert(code);
+                self.key_taps.insert(code);
+            }
+            ElementState::Released => {
+                self.keys.remove(&code);
+            }
+        }
+    }
+
+    pub fn mouse_button(&mut self, b: MouseButton, state: ElementState) {
+        self.last_device = Device::KeyboardMouse;
+        self.mouse_active = true;
+        self.activity = true;
+        match state {
+            ElementState::Pressed => {
+                self.mouse.insert(b);
+                self.mouse_taps.insert(b);
+            }
+            ElementState::Released => {
+                self.mouse.remove(&b);
+            }
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.keys.clear();
+        self.mouse.clear();
+    }
+
+    /// Reads gamepad events and state (first connected pad).
+    pub fn poll_gamepad(&mut self) {
+        use gilrs::{Axis, Button};
+        let mut activity = false;
+        let mut taps = Vec::new();
+        // One pad state from the first connected pad, or from the pad script while it runs.
+        let mut state: Option<RawPad> = None;
+        if let Some(g) = &mut self.gilrs {
+            while let Some(ev) = g.next_event() {
+                match ev.event {
+                    gilrs::EventType::ButtonPressed(b, _) => {
+                        taps.push(b);
+                        activity = true;
+                    }
+                    gilrs::EventType::AxisChanged(_, v, _) if v.abs() > 0.4 => activity = true,
+                    gilrs::EventType::ButtonChanged(gilrs::Button::LeftTrigger2 | gilrs::Button::RightTrigger2, v, _)
+                        if v > 0.35 =>
+                    {
+                        activity = true
+                    }
+                    gilrs::EventType::Connected => log::info!("gamepad connected"),
+                    gilrs::EventType::Disconnected => log::info!("gamepad disconnected"),
+                    _ => {}
+                }
+            }
+            if let Some((_, gp)) = g.gamepads().next() {
+                const ALL: [Button; 15] = [
+                    Button::South,
+                    Button::East,
+                    Button::North,
+                    Button::West,
+                    Button::LeftTrigger,
+                    Button::RightTrigger,
+                    Button::Select,
+                    Button::Start,
+                    Button::DPadUp,
+                    Button::DPadDown,
+                    Button::DPadLeft,
+                    Button::DPadRight,
+                    Button::LeftThumb,
+                    Button::RightThumb,
+                    Button::Mode,
+                ];
+                let trig = |b: Button| gp.button_data(b).map(|d| d.value()).unwrap_or(0.0).clamp(0.0, 1.0);
+                self.pad_family = pav_core::input::Device::from_pad_name(gp.name());
+                state = Some(RawPad {
+                    left: Vec2::new(gp.value(Axis::LeftStickX), gp.value(Axis::LeftStickY)),
+                    right: Vec2::new(gp.value(Axis::RightStickX), gp.value(Axis::RightStickY)),
+                    held: ALL.into_iter().filter(|b| gp.is_pressed(*b)).collect(),
+                    l2: trig(Button::LeftTrigger2),
+                    r2: trig(Button::RightTrigger2),
+                });
+            }
+        }
+        if let Some(script) = &mut self.pad_script {
+            if let Some((st, first)) = script.next() {
+                if first {
+                    taps.extend(st.tap.iter().copied());
+                }
+                activity = true;
+                let pulled = |b: Button, v: f32| if st.hold.contains(&b) { 1.0 } else { v };
+                state = Some(RawPad {
+                    left: st.left,
+                    right: st.right,
+                    held: st.hold.clone(),
+                    l2: pulled(Button::LeftTrigger2, st.l2),
+                    r2: pulled(Button::RightTrigger2, st.r2),
+                });
+            }
+        }
+        let start = taps.contains(&Button::Start);
+        let map = taps.contains(&Button::DPadLeft);
+        let tapped = taps.iter().fold(0, |b, t| b | pad_bit(*t));
+        let mut pad = Pad { start_pressed: start, map_pressed: map, taps, any_activity: activity, ..Default::default() };
+        // The controller model (games read it through `InputFrame.pad`).
+        let mut held_bits = 0;
+        if let Some(st) = &state {
+            use pav_core::input::pad as pb;
+            held_bits = st.held.iter().fold(0, |b, h| b | pad_bit(*h));
+            for (v, bit) in [(st.l2, pb::L2), (st.r2, pb::R2)] {
+                if v > 0.35 {
+                    held_bits |= bit;
+                }
+            }
+            pad.state = pav_core::input::PadState {
+                held: held_bits | tapped,
+                pressed: tapped | (held_bits & !self.prev_pad),
+                stick_l: deadzone(st.left, 0.15),
+                stick_r: deadzone(st.right, 0.15),
+                l2: st.l2,
+                r2: st.r2,
+            };
+        } else if tapped != 0 {
+            pad.state = pav_core::input::PadState { held: tapped, pressed: tapped, ..Default::default() };
+        }
+        self.prev_pad = held_bits;
+        if let Some(st) = state {
+            let is = |b: Button| st.held.contains(&b);
+            pad.left = deadzone(st.left, 0.18);
+            pad.right = deadzone(st.right, 0.25);
+            let mut held = 0;
+            let layout: &[(Button, u32)] = if self.game {
+                &[
+                    (Button::West, buttons::PRIMARY),
+                    (Button::North, buttons::SECONDARY),
+                    (Button::East, buttons::SKILL3),
+                    (Button::RightTrigger, buttons::SKILL4),
+                    (Button::LeftTrigger, buttons::SKILL5),
+                    (Button::South, buttons::DODGE),
+                    (Button::DPadUp, buttons::POTION),
+                    (Button::DPadRight, buttons::INTERACT),
+                ]
+            } else {
+                &[
+                    (Button::South, buttons::JUMP),
+                    (Button::East, buttons::CROUCH),
+                    (Button::North, buttons::CRAWL),
+                    (Button::West, buttons::USE),
+                    (Button::DPadRight, buttons::INTERACT),
+                ]
+            };
+            for (btn, action) in layout {
+                if is(*btn) {
+                    held |= action;
+                }
+            }
+            if st.r2 > 0.35 {
+                held |= if self.game { buttons::SKILL6 } else { buttons::USE };
+            }
+            if st.l2 > 0.35 {
+                held |= buttons::FOCUS;
+            }
+            pad.held = held;
+            pad.rotate = if self.game { 0.0 } else { (is(Button::RightTrigger) as i32 - is(Button::LeftTrigger) as i32) as f32 };
+            // In the game the D-pad is potion / use / map / panels, not zoom.
+            pad.zoom = if self.game { 0.0 } else { (is(Button::DPadDown) as i32 - is(Button::DPadUp) as i32) as f32 };
+            pad.a_held = is(Button::South);
+            pad.x_held = is(Button::West);
+            pad.y_held = is(Button::North);
+            pad.back_held = is(Button::Select);
+            if pad.left.length() > 0.3 || pad.right.length() > 0.3 || held != 0 || pad.state.held != 0 {
+                pad.any_activity = true;
+            }
+        }
+        if pad.any_activity {
+            self.last_device = Device::Gamepad;
+            self.activity = true;
+        }
+        self.pad = pad;
+    }
+
+    /// Mouse movement (pixels): raw movement while the pointer is held for mouse look, or zero
+    /// for a pointer move (activity only).
+    pub fn mouse_motion(&mut self, d: Vec2) {
+        self.mouse_delta += d;
+        self.last_device = Device::KeyboardMouse;
+        self.activity = true;
+    }
+
+    pub fn mouse_wheel(&mut self, notches: f32) {
+        self.wheel += notches;
+        self.activity = true;
+        self.last_device = Device::KeyboardMouse;
+    }
+
+    /// A finger touched the screen (idle timers).
+    pub fn touched(&mut self) {
+        self.activity = true;
+    }
+
+    /// Mouse movement, wheel notches and whether anything happened since the last call.
+    pub fn take_motion(&mut self) -> (Vec2, f32, bool) {
+        let out = (self.mouse_delta, self.wheel, self.activity);
+        self.mouse_delta = Vec2::ZERO;
+        self.wheel = 0.0;
+        self.activity = false;
+        out
+    }
+
+    /// The device the player used last, as the games see it (glyphs, hints).
+    pub fn device_family(&self) -> pav_core::input::Device {
+        match self.last_device {
+            Device::KeyboardMouse => pav_core::input::Device::Keyboard,
+            Device::Gamepad => self.pad_family,
+            Device::Touch => pav_core::input::Device::Touch,
+        }
+    }
+
+    /// The keyboard and mouse as a controller through a game's key map (`keys`: each bind's
+    /// key resolved once by `resolve_keys`). Returns the state with this frame's presses (key
+    /// taps since the last `buttons()` call count, so short taps are never lost).
+    pub fn keyboard_pad(&self, keys: &[(KeyOrMouse, pav_core::present::PadTarget)]) -> pav_core::input::PadState {
+        use pav_core::present::PadTarget;
+        let mut out = pav_core::input::PadState::default();
+        for (k, to) in keys {
+            let (down, tap) = match k {
+                KeyOrMouse::Key(c) => (self.keys.contains(c), self.key_taps.contains(c)),
+                KeyOrMouse::Mouse(b) => (self.mouse.contains(b), self.mouse_taps.contains(b)),
+            };
+            if !(down || tap) {
+                continue;
+            }
+            match *to {
+                PadTarget::Button(bit) => {
+                    out.held |= bit;
+                    if tap {
+                        out.pressed |= bit;
+                    }
+                }
+                PadTarget::StickL(d) => out.stick_l += d,
+                PadTarget::StickR(d) => out.stick_r += d,
+                PadTarget::L2 => {
+                    out.l2 = 1.0;
+                    out.held |= pav_core::input::pad::L2;
+                    if tap {
+                        out.pressed |= pav_core::input::pad::L2;
+                    }
+                }
+                PadTarget::R2 => {
+                    out.r2 = 1.0;
+                    out.held |= pav_core::input::pad::R2;
+                    if tap {
+                        out.pressed |= pav_core::input::pad::R2;
+                    }
+                }
+            }
+        }
+        out.stick_l = out.stick_l.clamp_length_max(1.0);
+        out.stick_r = out.stick_r.clamp_length_max(1.0);
+        out
+    }
+}
+
+/// A key or a mouse button, as a key map names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyOrMouse {
+    Key(KeyCode),
+    Mouse(MouseButton),
+}
+
+/// Resolves a game's key map (`KeyW`, `Escape`, `MouseLeft`...). Unknown names are skipped and
+/// returned.
+pub fn resolve_keys(map: &pav_core::present::KeyMap) -> (Vec<(KeyOrMouse, pav_core::present::PadTarget)>, Vec<String>) {
+    let mut out = Vec::new();
+    let mut unknown = Vec::new();
+    for b in &map.binds {
+        let k = match b.key.as_str() {
+            "MouseLeft" => Some(KeyOrMouse::Mouse(MouseButton::Left)),
+            "MouseRight" => Some(KeyOrMouse::Mouse(MouseButton::Right)),
+            "MouseMiddle" => Some(KeyOrMouse::Mouse(MouseButton::Middle)),
+            name => key_from_name(name).map(KeyOrMouse::Key),
+        };
+        match k {
+            Some(k) => out.push((k, b.to)),
+            None => unknown.push(b.key.clone()),
+        }
+    }
+    (out, unknown)
+}
+
+/// Merges two controller states (the pad and the keyboard): buttons add, sticks add up to
+/// length 1, triggers take the stronger.
+pub fn merge_pads(a: pav_core::input::PadState, b: pav_core::input::PadState) -> pav_core::input::PadState {
+    pav_core::input::PadState {
+        held: a.held | b.held,
+        pressed: a.pressed | b.pressed,
+        stick_l: (a.stick_l + b.stick_l).clamp_length_max(1.0),
+        stick_r: (a.stick_r + b.stick_r).clamp_length_max(1.0),
+        l2: a.l2.max(b.l2),
+        r2: a.r2.max(b.r2),
+    }
+}
+
+impl Input {
+    /// Screen-space movement (x right, y up) from keys and stick, length <= 1.
+    pub fn move_axis(&self) -> Vec2 {
+        let k = |codes: &[KeyCode]| codes.iter().any(|c| self.keys.contains(c)) as i32 as f32;
+        let b = &self.bindings;
+        let kb = Vec2::new(k(&b.right) - k(&b.left), k(&b.up) - k(&b.down));
+        let v = if kb != Vec2::ZERO { kb.normalize() } else { self.pad.left };
+        v.clamp_length_max(1.0)
+    }
+
+    /// Held game buttons from all devices.
+    pub fn held(&self) -> u32 {
+        let mut b = self.pad.held;
+        for (bit, codes) in &self.bindings.buttons {
+            if codes.iter().any(|c| self.keys.contains(c)) {
+                b |= bit;
+            }
+        }
+        if self.mouse.contains(&MouseButton::Left) {
+            b |= buttons::PRIMARY;
+        }
+        if self.game && self.mouse.contains(&MouseButton::Right) {
+            b |= buttons::SECONDARY;
+        }
+        b
+    }
+
+    /// Returns (held, newly pressed since the last call).
+    pub fn buttons(&mut self) -> (u32, u32) {
+        let held = self.held();
+        let mut pressed = held & !self.prev_held;
+        for (bit, codes) in &self.bindings.buttons {
+            if codes.iter().any(|c| self.key_taps.contains(c)) {
+                pressed |= bit;
+            }
+        }
+        if self.mouse_taps.contains(&MouseButton::Left) {
+            pressed |= buttons::PRIMARY;
+        }
+        if self.game && self.mouse_taps.contains(&MouseButton::Right) {
+            pressed |= buttons::SECONDARY;
+        }
+        self.key_taps.clear();
+        self.mouse_taps.clear();
+        self.prev_held = held;
+        // A tap shorter than a frame still counts as held for that frame.
+        (held | pressed, pressed)
+    }
+
+    /// True if `b` was pressed since the last call (consumes the tap).
+    pub fn take_mouse_tap(&mut self, b: MouseButton) -> bool {
+        self.mouse_taps.remove(&b)
+    }
+
+    pub fn rewind_held(&self) -> bool {
+        self.keys.contains(&KeyCode::Backspace) || self.pad.back_held
+    }
+}
+
+#[cfg(test)]
+mod pad_script_tests {
+    use super::*;
+
+    #[test]
+    fn pad_scripts_parse_and_play() {
+        let mut p = PadScript::parse("# open the bag\n2\n1 tap=DPadDown\n3 left=0.5,-1 hold=A,Y\n").unwrap();
+        assert_eq!(p.steps.len(), 3);
+        let frames: Vec<(PadStep, bool)> = std::iter::from_fn(|| p.next()).collect();
+        assert_eq!(frames.len(), 6);
+        assert!(frames[2].1 && frames[2].0.tap == vec![gilrs::Button::DPadDown]);
+        assert_eq!(frames[3].0.hold, vec![gilrs::Button::South, gilrs::Button::North]);
+        assert_eq!(frames[5].0.left, Vec2::new(0.5, -1.0));
+        assert!(PadScript::parse("x tap=A").is_err());
+        assert!(PadScript::parse("1 tap=Q").is_err());
+    }
+}

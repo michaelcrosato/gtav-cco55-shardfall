@@ -1,0 +1,13 @@
+{"format":2,"name":"street_name_sign","unit":"cm",
+"description":"A street name sign: two blank green blades (text from the game) crossed on a 3 m pole; blade_a faces +-z, blade_b +-x.",
+"tags":["street","sign","name","road","corner","pole"],
+"category":"signage",
+"materials":{
+"blade":{"color":"#1f6b45","roughness":0.4},
+"galv":{"base":"MAT/gtf/painted_metal","color":"#9ea4a8","metallic":0.5}},
+"parts":{
+"blade_a":{"type":"box","size":[120,20,1.5],"pos":[0,308,0],"mat":"blade"},
+"blade_b":{"type":"box","size":[1.5,20,120],"pos":[0,328,0],"mat":"blade"},
+"bracket":{"type":"box","size":[8,8,8],"pos":[0,294,0],"mat":"galv"},
+"cap":{"type":"box","size":[6,4,6],"pos":[0,340,0],"mat":"galv"},
+"pole":{"type":"cylinder","radius":3.5,"from":[0,0,0],"to":[0,290,0],"mat":"galv"}}}

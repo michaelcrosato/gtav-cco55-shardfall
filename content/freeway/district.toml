@@ -1,0 +1,399 @@
+# Paloma Bay — the vertical slice's district (PLAN.md §5.3, §6.8.1), built by pav_world.
+# 64 x 72 map cells of 16 m (1024 m x 1152 m), north up: x east, z south. Roads one character wide
+# are 16 m streets (sidewalks, parking, two lanes); avenues and the boulevard are drawn two
+# characters wide. Landmarks take over their cell rectangles.
+
+name = "Paloma Bay"
+cell = 16.0
+origin = [-512.0, -640.0]
+seed = 404
+
+# The map comes first (TOML: top-level keys before any [table]).
+map = '''
+mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmmmmmmmmm-------------------mmmmmmmmmmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmmmmmmmmmmmmmmmmmm-HHHHHHHHHHHHHHHHHHmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmmmmmmmmmmmmmmmmmm-HHHHHHHHHHHHHHHHHHmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmHHHHHHHHHHHHHHHHH-HHHHHHHHHHHHHHHHHHmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmHHHHHHHHHHHHHHHHH-HHHHHHHHHHHHHHHHHHmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmHHHHHHHHHHHHHHHHH-HHHHHHHHHHHHHHHHHHmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmHHHH----------------------------HHHHmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmHHHH-HHHHHHHHHHHHHHHHHHHHHHHHHH-HHHHmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmHHHH-HHHHHHHHHHHHHHHHHHHHHHHHHH-HHHHmmmmmmmmmmmmmFFFFF
+mmmmmmmmmmHHHH-HHHHHHHHHHHHHHHHHHHHHHHHHH-HHHHmmmmmmmmmmmmmFFFFF
+----------------------------------==-----------------------FFFFF
+....-....-....-......-.....-......==.....-.....-.....-.....FFFFF
+....-....-....-......-.....-......==.....-.....-.....-.....FFFFF
+....-....-....-pppppp-.....-......==.....-.....-.....-.....FFFFF
+....-....-....-pppppp-.....-......==.....-.....-.....-.....FFFFF
+----------------------------------==-----------------------FFFFF
+....-....-....-pppppp-.....-......==.....-.....-.....-.....FFFFF
+....-....-....-pppppp-.....-......==.....-.....-.....-.....FFFFF
+....-....-....-......-.....-......==.....-.....-.....-.....FFFFF
+cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccFFFFF
+cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccF-F-F
+BBBB-BBBB-BBBB-BBBBBB-BBBBB-BBBBBB==BBBBB-BBBBB-BBBBB-BBBBBBBBBB
+BBBB-BBBB-BBBB-BBBBBB-BBBBB-BBBBBB==BBBBB-BBBBB-BBBBB-BBBBBBBBBB
+cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccF-F-F
+cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccFFFFF
+----------------------------------==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...--------------------------==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...--------------------------==ccccc-ccccc-ccccc-ccc-cFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==-----------------------FFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ttttt-ttCCt-ttttt-ttt-tFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ttttt-ttCCt-ttttt-ttt-tFFFFF
+....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ttttt-ttCCt-ttttt-ttt-tFFFFF
+....-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
+====-====-====-======-=====-=============-=====-=====-===-=FFFFF
+====-====-====-======-=====-=============-=====-=====-===-=FFFFF
+ssss-....-cccc-cccccc-ccccc-cccccc==ttttt-ttCCt-ttttt-ttt-tFFFFF
+ssss-....-cccc-cccccc-ccccc-cccccc==ttttt---CCt-ttttt-ttt-tFFFFF
+ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
+ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
+----------------------------------==ttttt-ttCCt-ttttt-ttt-tF-F-F
+ssss-....-....-......-.....-......==----------------------------
+ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
+ssss-....-....-......-.....-......==ttttt-ttCC--ttttt-ttt-tFFFFF
+ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
+----------------------------------==ttttt-ttCCt-ttttt-ttt-tFFFFF
+ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
+ssss-....-....-......-.....-......==-----------------------FFFFF
+sbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb==hhhhhhhhCChhhhhhhhhhh-hFFFFF
+ssssssssssssssssssssbbssssssssssss==hhhhhhhhCCFFFFFFFFFFF-FFFFFF
+ssssssssssssssssssssbbssssssssssss==hhhhhhhhCCFFFFFFFFFFF-FFFFFF
+ssssssssssssssssssssbbssssssssssss==hhhhhhhhCChhhhhhhhhhh-hFFFFF
+ssssssssssssssssssssbbssssssssssss==hhhhhhhhCChhhhhhhhhhh-hFFFFF
+ssssssssssssssssssssbbssssssssssss==hhhhhhhhCChhhhhhhhhhh-hFFFFF
+wwwwwwwwwwwwwwwwwwwwbbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwwwwwwwbbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwwwwwwwbbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwwwwwwwbbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwwwwwwwbbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwwwwwwwbbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+'''
+
+# Ground heights in steps of `terrain_step` metres (0-9, then a-z), one character per map cell;
+# smoothed between cells. Roads on slopes follow it, flat across.
+terrain_step = 4.0
+terrain = '''
+9aababcbcdcdcddbcdcdcddbcdcdcddbcdcdcddbcdcdcddbcdcdcdda86200000
+99aa9abbcbccabcbcbccabcbcbccabcbcbccabcbcbccabcbcbccabca85300000
+86788989a89a9a96669a9a9aa89a9a9aa89a9a9aa89a9a9aa89a9a9983200000
+4555556666666666666666666666666666666666666666666666666543100000
+4555556666666666666666666666666666666666666666666666666543100000
+4444455555555555555555555555555555555555555555555555555442100000
+4444455555555555555555555555555555555555555555555555555442100000
+3333444444444444444444444444444444444444444444444444444432100000
+2223333333333333333333333333333333333333333333333333333321100000
+2222222222222222222222222222222222222222222222222222222211000000
+2222222222222222222222222222222222222222222222222222222211000000
+1111111111111111111111111111111111111111111111111111111110000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+'''
+
+[legend]
+"." = { zone = "residential" }
+"c" = { zone = "commercial" }
+"D" = { zone = "downtown" }
+"t" = { zone = "industrial" }
+"h" = { zone = "docks" }
+"p" = { zone = "park" }
+"s" = { zone = "beach" }
+"w" = { zone = "water" }
+"H" = { zone = "hills" }
+"m" = { zone = "wild" }
+"F" = { zone = "corridor" }
+"-" = { road = "street" }
+"=" = { road = "avenue" }
+"B" = { road = "boulevard" }
+"C" = { road = "channel" }
+"b" = { road = "path" }
+
+# Facade materials by building style (windows that light up at night; `podium` for towers' podiums).
+[facades]
+tower_glass = "MAT/gtf/glass_curtain"
+tower_concrete = "MAT/gtf/office_concrete"
+podium = "MAT/gtf/office_concrete"
+stucco_shop = "MAT/gtf/stucco_windows"
+apartment = "MAT/gtf/stucco_windows"
+bungalow = "MAT/gtf/stucco_windows"
+warehouse = "MAT/gtf/brick_windows"
+
+[zones.residential]   # Los Mirados: bungalows on lawns, palms and street trees
+ground = "grass"
+styles = ["bungalow"]
+lot = [12.0, 18.0]
+depth = 20.0
+height = [3.6, 4.2]
+setback = 3.0
+props = { lamp = 1.0, palm = 3.0, tree = 4.0, hydrant = 0.6, bin = 0.5 }
+
+[zones.commercial]    # Sunset Row and the avenues' frontages: stucco shops, apartments
+ground = "concrete"
+styles = ["stucco_shop", "stucco_shop", "apartment"]
+lot = [10.0, 22.0]
+depth = 30.0
+height = [5.0, 13.0]
+props = { lamp = 1.0, palm = 6.0, bench = 1.5, bin = 2.0, hydrant = 0.8, billboard = 0.4 }
+
+[zones.downtown]      # Towers of glass and concrete on plazas
+ground = "plaza"
+styles = ["tower_glass", "tower_concrete", "tower_glass"]
+lot = [24.0, 40.0]
+depth = 40.0
+height = [30.0, 110.0]
+props = { lamp = 1.0, tree = 3.0, bench = 1.5, bin = 2.0, hydrant = 0.8 }
+
+[zones.industrial]    # The Flats: sheds and warehouses on cracked asphalt
+ground = "asphalt"
+styles = ["shed", "warehouse"]
+lot = [20.0, 40.0]
+depth = 48.0
+height = [6.0, 12.0]
+props = { lamp = 1.0, hydrant = 0.5, billboard = 0.3 }
+
+[zones.docks]         # Harbor Gate
+ground = "asphalt"
+styles = ["warehouse"]
+lot = [30.0, 60.0]
+depth = 60.0
+height = [6.0, 10.0]
+props = { lamp = 1.0 }
+
+[zones.park]
+ground = "grass"
+
+[zones.beach]
+ground = "sand"
+
+[zones.water]
+ground = "water"
+
+[zones.hills]         # Mirador Hills: houses cut into the slopes among trees
+ground = "dirt"
+styles = ["bungalow"]
+lot = [14.0, 24.0]
+depth = 24.0
+height = [3.6, 5.0]
+setback = 5.0
+props = { tree = 8.0, lamp = 1.0 }
+
+[zones.wild]          # The brush slopes above the houses (and the PALOMA sign)
+ground = "brush"
+props = { tree = 2.0 }
+
+[zones.corridor]      # Under and beside Route 404: graded dirt at road level
+ground = "dirt"
+level = -0.15
+
+[[landmark]]
+key = "bank"
+name = "Paloma Savings & Trust"
+cells = [[15, 29], [20, 32]]
+assembly = "tower_bank"
+height = 132.0
+blip = "bank"
+
+[[landmark]]
+key = "city_hall"
+name = "City Hall Plaza"
+cells = [[22, 29], [26, 32]]
+assembly = "open"
+
+[[landmark]]
+key = "police"
+name = "SPPD Central"
+cells = [[10, 34], [13, 37]]
+assembly = "police"
+height = 14.0
+blip = "police"
+
+[[landmark]]
+key = "hospital"
+name = "St. Brigid Medical"
+cells = [[28, 34], [32, 37]]
+assembly = "hospital"
+height = 30.0
+blip = "hospital"
+
+[[landmark]]
+key = "gun_store"
+name = "Bang Bang Bros."
+cells = [[22, 26], [23, 27]]
+height = 7.0
+blip = "gun"
+
+[[landmark]]
+key = "gas"
+name = "Gas-N-Grab"
+cells = [[28, 26], [30, 27]]
+assembly = "open"
+blip = "shop"
+
+[[landmark]]
+key = "diner"
+name = "Freeway Diner"
+cells = [[54, 22], [56, 23]]
+height = 6.0
+blip = "activity"
+
+[[landmark]]
+key = "luxe_motors"
+name = "Luxe Motors"
+cells = [[36, 29], [40, 32]]
+height = 9.0
+blip = "vehicle"
+
+[[landmark]]
+key = "depot"
+name = "Ironclad Transit"
+cells = [[48, 46], [52, 49]]
+height = 12.0
+blip = "heist"
+
+[[landmark]]
+key = "pier"
+name = "Palisade Pier"
+cells = [[18, 64], [23, 69]]
+assembly = "open"
+blip = "activity"
+
+[[landmark]]
+key = "sign"
+name = "PALOMA"
+cells = [[24, 0], [34, 1]]
+assembly = "paloma_sign"
+
+[[landmark]]
+key = "lookout"
+name = "Lookout Point"
+cells = [[15, 2], [17, 4]]
+assembly = "lookout"
+blip = "activity"
+level = true
+
+# Route 404: the elevated freeway down the east corridor, turning west over the docks as the
+# Harbor Spur to the broken construction ramp above the water. Points and ramp ends are map cell
+# coordinates (x, z; fractions allowed). Ramps run from the deck to the street; `kind` is the
+# traffic direction (off: deck to street, on: street to deck).
+[[freeway]]
+key = "route_404"
+name = "Route 404"
+height = 11.0
+lanes = 3
+points = [[61.5, 0.0], [61.5, 51.25], [61.125, 55.625], [59.5, 58.75], [57.0, 60.0], [50.75, 60.0], [47.625, 60.3125], [45.875, 62.5], [45.125, 65.625]]
+closed_start = true
+broken_end = true
+
+[[freeway.ramps]]   # The Pretzel: southbound exit to Sunset Row
+from = [60.325, 10.0]
+to = [60.325, 23.5]
+kind = "off"
+
+[[freeway.ramps]]   # The Pretzel: northbound entrance from Sunset Row
+from = [62.675, 10.0]
+to = [62.675, 23.5]
+kind = "on"
+
+[[freeway.ramps]]   # The Pretzel: southbound entrance from Sunset Row
+from = [60.325, 37.0]
+to = [60.325, 26.5]
+kind = "on"
+
+[[freeway.ramps]]   # The Pretzel: northbound exit to Sunset Row
+from = [62.675, 37.0]
+to = [62.675, 26.5]
+kind = "off"
+
+[[freeway.ramps]]   # Harbor Gate: southbound exit (the last before the closed spur)
+from = [60.325, 40.0]
+to = [60.325, 50.5]
+kind = "off"
+
+[[freeway.ramps]]   # Harbor Gate: northbound entrance
+from = [62.675, 40.0]
+to = [62.675, 50.5]
+kind = "on"
+
+# The Ditch: ramps down its walls from the driveways (map cell coordinates: the channel's first
+# column, the side the ramp hugs, and the rows of its top and bottom ends).
+[[channel_ramp]]
+col = 44
+side = "west"
+rows = [47.6, 50.4]
+
+[[channel_ramp]]
+col = 44
+side = "east"
+rows = [53.6, 56.4]

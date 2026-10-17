@@ -1,0 +1,18 @@
+{"format":2,"name":"bus_stop","unit":"cm",
+"description":"A cantilever bus shelter, 3.8 m: posts, glass back wall, roof, bench, ad panel (ad) at -x backlit after dark.",
+"tags":["bus","shelter","stop","transit","street","bench"],
+"category":"town",
+"materials":{
+"ad":{"color":"#f2efe6","emissive":1.5},
+"frame":{"base":"MAT/gtf/painted_metal","color":"#3d4a52"},
+"glass":{"base":"MAT/gtf/tinted_glass","color":"#5f7d8a"},
+"roof":{"base":"MAT/gtf/painted_metal","color":"#d8dadb"}},
+"parts":{
+"ad":{"type":"box","size":[14,180,124],"pos":[-170,125,-2],"mat":"ad","glow":"night"},
+"beam":{"type":"box","size":[360,14,10],"pos":[0,243,-65],"mat":"frame"},
+"bench":{"ref":"LIB/gtf_city/bench","pos":[25,0,-30]},
+"glass":{"type":"box","size":[330,170,2],"pos":[0,125,-66],"mat":"glass"},
+"post":{"type":"box","size":[10,250,10],"pos":[170,125,-65],"mat":"frame","mirror":"x"},
+"roof":{"type":"box","size":[380,10,170],"pos":[0,255,0],"pitch":-3,"mat":"roof"}},
+"sockets":{
+"sit":{"pos":[25,48,-24]}}}

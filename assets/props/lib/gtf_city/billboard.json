@@ -1,0 +1,16 @@
+{"format":2,"name":"billboard","unit":"cm",
+"description":"A billboard on two steel legs: blank 12x4 m panel (panel) facing +z, frame, catwalk, 4 lamps lit after dark.",
+"tags":["billboard","sign","advert","road","freeway","steel"],
+"category":"town",
+"materials":{
+"glow":{"color":"#fff2d6","emissive":3},
+"grate":{"base":"MAT/gtf/painted_metal","color":"#55595e"},
+"panel":{"color":"#f2efe6","roughness":0.8},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#3c4046"}},
+"parts":{
+"beam":{"type":"box","size":[900,40,40],"pos":[0,900,-48],"mat":"steel"},
+"catwalk":{"type":"box","size":[1200,6,120],"pos":[0,917,40],"mat":"grate"},
+"frame":{"type":"box","size":[1240,440,20],"pos":[0,1140,-10],"mat":"steel"},
+"lamp":{"type":"box","size":[40,14,24],"pos":[0,927,85],"mat":"glow","glow":"night","array":{"count":4,"step":[300,0,0]}},
+"leg":{"type":"cylinder","radius":28,"from":[350,0,-48],"to":[350,920,-48],"mat":"steel","mirror":"x"},
+"panel":{"type":"box","size":[1200,400,4],"pos":[0,1140,2],"mat":"panel"}}}

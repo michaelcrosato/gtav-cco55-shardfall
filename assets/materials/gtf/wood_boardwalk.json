@@ -1,0 +1,6 @@
+{"format":1,"name":"gtf/wood_boardwalk","unit":"cm","description":"Sea-weathered boardwalk planks, grey-brown with dark gaps and silvered grain: piers, decks, beach walks.","tags":["wood","planks","deck","pier","boardwalk"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#9c8466","roughness":0.85,
+ "layers":[
+  {"type":"planks","size":[240,14],"gap":1.5,"vary":0.25,"cavity":0.35},
+  {"type":"wood","size":10,"axis":"x","cover":0.3,"shade":0.85},
+  {"type":"noise","size":60,"detail":2,"cover":0.3,"soft":0.8,"color":"#8b8b82","strength":0.35}
+ ]}

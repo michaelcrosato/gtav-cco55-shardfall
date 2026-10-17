@@ -1,0 +1,22 @@
+[package]
+name = "gtf_game"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Grand Theft Freeway-BX: the game's rules and content runtime (simulation only)."
+
+[dependencies]
+pav_core.workspace = true
+pav_world.workspace = true
+glam.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+anyhow.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+ciborium.workspace = true
+
+[lints]
+workspace = true

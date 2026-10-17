@@ -1,0 +1,22 @@
+{"format":2,"name":"newspaper_box","unit":"cm",
+"description":"A coin-op newspaper box on a pedestal: window and handle on the front (+z), coin unit on top. Knob: color.",
+"tags":["newspaper","vending","box","street","sidewalk","kiosk"],
+"category":"container",
+"materials":{
+"base":{"base":"MAT/gtf/painted_metal","color":"#3a3d40"},
+"body":{"base":"MAT/gtf/painted_metal","color":"#2a5aa8"},
+"chrome":"MAT/gtf/chrome",
+"window":{"color":"#d9d6cc"}},
+"parts":{
+"body":{"type":"box","size":[50,72,44],"pos":[0,66,0],"mat":"body","color":"#2a5aa8"},
+"coin":{"type":"box","size":[26,12,20],"pos":[0,108,-8],"mat":"body","color":"#2a5aa8"},
+"handle":{"type":"box","size":[18,3,3],"pos":[0,66,23.5],"mat":"chrome"},
+"pedestal":{"type":"box","size":[34,30,30],"pos":[0,15,0],"mat":"base"},
+"window":{"type":"box","size":[40,26,1],"pos":[0,84,22.5],"mat":"window"}},
+"params":{
+"color":{"choices":["blue","red","yellow","white","green"],"set":{"body.color":["#2a5aa8","#b52a25","#e2b62a","#e8e6e0","#2f6b45"],"coin.color":["#2a5aa8","#b52a25","#e2b62a","#e8e6e0","#2f6b45"]}}},
+"presets":{
+"green":{"color":"green"},
+"red":{"color":"red"},
+"white":{"color":"white"},
+"yellow":{"color":"yellow"}}}

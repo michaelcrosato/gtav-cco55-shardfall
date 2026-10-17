@@ -1,0 +1,14 @@
+{"format":2,"name":"stop_sign","unit":"cm",
+"description":"A stop sign: red octagon with a white border, 78 cm across at 2.25 m, on a square galvanised post; face toward +z.",
+"tags":["stop","sign","road","traffic","intersection","street"],
+"category":"signage",
+"materials":{
+"back":{"color":"#a7abaf","roughness":0.5,"metallic":0.4},
+"galv":{"base":"MAT/gtf/painted_metal","color":"#9ea4a8","metallic":0.5},
+"red":{"color":"#c4161c","roughness":0.4},
+"white":{"color":"#f4f4f0"}},
+"parts":{
+"border":{"type":"cylinder","radius":39,"height":0.4,"segments":8,"pos":[0,225,3.3],"axis":"z","roll":22.5,"mat":"white"},
+"face":{"type":"cylinder","radius":35,"height":0.4,"segments":8,"pos":[0,225,3.7],"axis":"z","roll":22.5,"mat":"red"},
+"plate":{"type":"cylinder","radius":39,"height":0.6,"segments":8,"pos":[0,225,2.8],"axis":"z","roll":22.5,"mat":"back"},
+"post":{"type":"box","size":[5,260,5],"pos":[0,130,0],"mat":"galv"}}}

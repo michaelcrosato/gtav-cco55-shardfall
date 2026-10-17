@@ -1,0 +1,13 @@
+{"format":2,"name":"volleyball_net","unit":"cm",
+"description":"A beach volleyball net, 10 m between two 2.55 m poles: mesh (opaque) with a white top band at 2.43 m.",
+"tags":["volleyball","net","beach","sport","court","sand"],
+"category":"town",
+"materials":{
+"band":{"color":"#f4f4f0"},
+"net":{"color":"#8f8a7e","layers":[{"type":"tiles","size":12,"gap":2.5,"color":"#1f2023"}]},
+"pole":{"base":"MAT/gtf/painted_metal","color":"#d9dad6"}},
+"parts":{
+"band":{"type":"box","size":[992,7,1.2],"pos":[0,246.5,0],"mat":"band"},
+"cord":{"type":"box","size":[992,3,1.2],"pos":[0,149.5,0],"mat":"band"},
+"net":{"type":"box","size":[992,92,0.6],"pos":[0,197,0],"mat":"net"},
+"pole":{"type":"cylinder","radius":4,"height":255,"pos":[500,127.5,0],"mat":"pole","mirror":"x"}}}

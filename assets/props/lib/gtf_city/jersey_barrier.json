@@ -1,0 +1,9 @@
+{"format":2,"name":"jersey_barrier","unit":"cm",
+"description":"A 3 m concrete K-rail (Jersey barrier), 81 cm tall, safety-shape profile with drain slots; ends at x=+-150.",
+"tags":["barrier","concrete","krail","jersey","road","construction"],
+"category":"town",
+"materials":{
+"slot":{"color":"#2b2b29"}},
+"parts":{
+"body":{"type":"extrude","points":[[-30.5,0],[30.5,0],[30.5,7.5],[20,25],[7.5,81],[-7.5,81],[-20,25],[-30.5,7.5]],"depth":300,"yaw":90,"mat":"MAT/gtf/concrete"},
+"slot":{"type":"box","size":[36,9,62],"pos":[75,4.5,0],"mat":"slot","mirror":"x"}}}

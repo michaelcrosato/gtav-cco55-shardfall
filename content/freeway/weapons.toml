@@ -1,0 +1,126 @@
+# Weapons (PLAN.md §5.6.4), in the weapon wheel's order (`icon` matches the wheel's slots).
+# Guns are hitscan: `damage` per pellet, `rpm` rounds a minute, `spread` degrees at rest, `bloom`
+# degrees each shot adds (it recovers), `recoil` radians of camera kick, `reload` seconds, `head`
+# the head-shot multiplier, `knockback` m/s given to people hit. Melee weapons play `combo` clips,
+# one a swing, and hit within `range` metres.
+
+[[weapon]]
+id = "fists"
+name = "Fists"
+icon = "fists"
+kind = "melee"
+damage = 15.0
+range = 1.5
+cue = "melee.swing"
+combo = ["QUATERNIUS/Punch_Jab", "QUATERNIUS/Punch_Cross", "CMU/Stepping_Punch"]
+knockback = 2.5
+
+[[weapon]]
+id = "p9"
+name = "P9 Pistol"
+icon = "pistol"
+kind = "gun"
+damage = 26.0
+rpm = 300.0
+magazine = 12
+reserve = 96
+range = 40.0
+spread = 0.8
+bloom = 0.9
+recoil = 0.035
+reload = 1.4
+head = 3.0
+knockback = 1.0
+cue = "gun.pistol"
+
+[[weapon]]
+id = "buzz"
+name = "Buzz SMG"
+icon = "smg"
+kind = "gun"
+damage = 18.0
+rpm = 800.0
+magazine = 30
+reserve = 240
+range = 30.0
+spread = 1.6
+bloom = 0.5
+recoil = 0.018
+reload = 1.8
+head = 2.0
+auto = true
+knockback = 0.8
+cue = "gun.smg"
+
+[[weapon]]
+id = "pump"
+name = "Pump Shotgun"
+icon = "shotgun"
+kind = "gun"
+damage = 9.0
+pellets = 10
+rpm = 70.0
+magazine = 8
+reserve = 40
+range = 15.0
+spread = 5.0
+bloom = 1.5
+recoil = 0.08
+reload = 2.6
+head = 1.5
+knockback = 6.0
+cue = "gun.shotgun"
+
+[[weapon]]
+id = "c4r"
+name = "C-4R Carbine"
+icon = "rifle"
+kind = "gun"
+damage = 30.0
+rpm = 600.0
+magazine = 30
+reserve = 210
+range = 70.0
+spread = 1.0
+bloom = 0.45
+recoil = 0.022
+reload = 2.0
+head = 2.5
+auto = true
+knockback = 1.2
+cue = "gun.rifle"
+
+[[weapon]]
+id = "marksman"
+name = "Marksman Rifle"
+icon = "sniper"
+kind = "gun"
+damage = 90.0
+rpm = 50.0
+magazine = 6
+reserve = 30
+range = 160.0
+spread = 0.15
+bloom = 2.0
+recoil = 0.07
+reload = 2.8
+head = 3.0
+knockback = 3.0
+cue = "gun.sniper"
+
+[[weapon]]
+id = "grenade"
+name = "Grenades"
+icon = "grenade"
+kind = "thrown"
+damage = 200.0
+magazine = 1
+reserve = 4
+range = 6.0
+cue = "grenade.throw"
+
+[[weapon]]
+id = "holster"
+name = "Phone"
+icon = "phone"
+kind = "none"

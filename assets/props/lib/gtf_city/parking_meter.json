@@ -1,0 +1,16 @@
+{"format":2,"name":"parking_meter","unit":"cm",
+"description":"A single-space smart parking meter on a 1.1 m post: dark head with screen and card slot toward +z, chrome dome.",
+"tags":["parking","meter","street","curb","sidewalk","pay"],
+"category":"town",
+"materials":{
+"dome":"MAT/gtf/chrome",
+"head":{"base":"MAT/gtf/painted_metal","color":"#2c2f33"},
+"screen":"MAT/gtf/tinted_glass",
+"steel":{"base":"MAT/gtf/painted_metal","color":"#5b6066"}},
+"parts":{
+"base":{"type":"cylinder","radius":8,"height":4,"pos":[0,2,0],"mat":"steel"},
+"dome":{"type":"ellipsoid","size":[22,10,18],"pos":[0,150,0],"mat":"dome"},
+"head":{"type":"rounded_box","size":[22,38,18],"radius":3,"pos":[0,131,0],"mat":"head"},
+"post":{"type":"cylinder","radius":4,"from":[0,4,0],"to":[0,112,0],"mat":"steel"},
+"screen":{"type":"box","size":[14,10,1],"pos":[0,138,9.5],"mat":"screen"},
+"slot":{"type":"box","size":[10,4,1],"pos":[0,124,9.5],"color":"#c9ccd0"}}}

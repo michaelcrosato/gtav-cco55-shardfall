@@ -1,0 +1,5 @@
+{"format":1,"name":"gtf/dirt","unit":"cm","description":"Warm packed dirt with darker soft patches and pale grit: lots, trails, construction sites.","tags":["dirt","earth","soil","ground","path"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#8d6d4c","roughness":1,
+ "layers":[
+  {"type":"noise","size":40,"detail":3,"distort":0.7,"cover":0.5,"soft":0.9,"color":"#71553a","strength":0.5},
+  {"type":"noise","size":10,"detail":2,"cover":0.3,"soft":0.4,"color":"#a6896b","strength":0.45}
+ ]}

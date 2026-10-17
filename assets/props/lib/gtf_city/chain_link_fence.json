@@ -1,0 +1,11 @@
+{"format":2,"name":"chain_link_fence","unit":"cm",
+"description":"A 3 m chain-link fence segment, 1.9 m: galvanised posts at x=+-150, top rail and diamond-mesh fabric (opaque).",
+"tags":["fence","chainlink","mesh","industrial","lot","steel"],
+"category":"architecture",
+"materials":{
+"galv":{"base":"MAT/gtf/painted_metal","color":"#9ea4a8","metallic":0.5},
+"mesh":{"color":"#454b4f","roughness":0.6,"metallic":0.3,"layers":[{"type":"stripes","size":20,"axis":[1,1,0],"cover":0.15,"color":"#c3c8cb"},{"type":"stripes","size":20,"axis":[1,-1,0],"cover":0.15,"color":"#c3c8cb"}]}},
+"parts":{
+"fabric":{"type":"box","size":[293,178,0.6],"pos":[0,92,0],"mat":"mesh"},
+"post":{"type":"cylinder","radius":3.5,"height":190,"pos":[150,95,0],"mat":"galv","mirror":"x"},
+"rail":{"type":"cylinder","radius":2,"height":300,"pos":[0,183,0],"axis":"x","mat":"galv"}}}

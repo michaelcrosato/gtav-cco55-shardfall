@@ -1,0 +1,75 @@
+# Reference views (PLAN.md §7.2): `load scene=freeway/view/<name>` puts a still camera here, with
+# streaming around it, at the view's time of day and weather. `gtf perf view=all` measures each;
+# captures of them are the look check. Positions are world metres (x east, y up, z south).
+
+[[view]]
+name = "downtown_street"
+about = "Street level by the bank plaza, looking east along the street to the avenue"
+eye = [-150.0, 1.7, -104.0]
+target = [40.0, 8.0, -104.0]
+time = "13:00"
+
+[[view]]
+name = "freeway_chase"
+about = "Chase height on Route 404, looking south along the deck"
+eye = [465.2, 14.5, -160.0]
+target = [465.2, 12.0, -60.0]
+time = "18:10"
+
+[[view]]
+name = "beach_sunset"
+about = "The boardwalk toward Palisade Pier and the Big Wheel"
+eye = [-400.0, 1.9, 296.0]
+target = [-176.0, 6.0, 430.0]
+time = "18:40"
+
+[[view]]
+name = "hills_vista"
+about = "Lookout Point over the whole city (the longest draw distance)"
+eye = [-262.0, 29.6, -570.0]
+target = [-120.0, 0.0, -150.0]
+fov = 60.0
+time = "20:15"
+
+[[view]]
+name = "docks_night_rain"
+about = "Harbor Gate Road at night in the rain: wet street between the dockside warehouses"
+eye = [104.0, 1.7, 280.0]
+target = [350.0, 4.0, 292.0]
+time = "23:00"
+weather = "rain"
+
+[[view]]
+name = "ditch_pursuit"
+about = "In the bed of The Ditch, looking down the channel to the harbor"
+eye = [214.0, -4.0, 110.0]
+target = [206.0, -4.5, 300.0]
+time = "01:00"
+
+[[view]]
+name = "hills_from_downtown"
+about = "From above downtown north to the hills and the PALOMA sign (a development check)"
+eye = [-150.0, 140.0, 20.0]
+target = [-150.0, 20.0, -620.0]
+time = "11:00"
+
+[[view]]
+name = "pretzel"
+about = "Above the Pretzel interchange: Route 404 over Sunset Row with its four ramps"
+eye = [380.0, 60.0, -330.0]
+target = [472.0, 4.0, -240.0]
+time = "16:00"
+
+[[view]]
+name = "broken_ramp"
+about = "The end of the Harbor Spur, high over the water (the stunt jump)"
+eye = [140.0, 5.0, 452.0]
+target = [208.0, 6.0, 400.0]
+time = "17:00"
+
+[[view]]
+name = "ditch_above"
+about = "Above The Ditch: the channel, its bridges and ramps"
+eye = [150.0, 45.0, 60.0]
+target = [208.0, -6.0, 180.0]
+time = "15:00"

@@ -1,0 +1,6 @@
+{"format":1,"name":"gtf/asphalt_worn","unit":"cm","description":"Sun-faded grey asphalt, exposed aggregate, hairline cracks and dark patch repairs: old streets, alleys.","tags":["road","asphalt","street","ground","worn"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#505156","roughness":0.95,
+ "layers":[
+  {"type":"noise","size":8,"detail":2,"cover":0.4,"soft":0.2,"color":"#6e6f73","strength":0.5},
+  {"type":"voronoi","size":90,"feature":"edges","gap":1.5,"shade":0.6,"strength":0.7},
+  {"type":"noise","size":150,"detail":2,"cover":0.3,"soft":0.85,"color":"#303136","strength":0.55}
+ ]}

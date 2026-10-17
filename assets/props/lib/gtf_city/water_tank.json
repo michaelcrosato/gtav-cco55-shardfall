@@ -1,0 +1,17 @@
+{"format":2,"name":"water_tank","unit":"cm",
+"description":"A rooftop water tank: wooden stave tank with steel hoops and a conical roof on a 3 m steel stand with cross bracing.",
+"tags":["water","tank","rooftop","tower","wood","roof"],
+"category":"architecture",
+"materials":{
+"hoop":{"base":"MAT/gtf/painted_metal","color":"#2e3033","metallic":0.5},
+"roof":{"color":"#4f4337","roughness":0.9},
+"staves":{"base":"MAT/barrel_staves","color":"#8a6a4a","map":"axis"},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#3d4044"}},
+"parts":{
+"brace":{"type":"box","size":[8,6],"from":[-150,20,158],"to":[150,280,158],"mat":"steel"},
+"brace2":{"type":"box","size":[8,6],"from":[150,20,158],"to":[-150,280,158],"mat":"steel"},
+"hoop":{"type":"tube","radius":177,"thickness":2,"height":8,"pos":[0,495,0],"mat":"hoop","array":{"count":3,"step":[0,110,0]}},
+"leg":{"type":"box","size":[16,300,16],"pos":[150,150,150],"mat":"steel","mirror":["x","z"]},
+"platform":{"type":"box","size":[380,20,380],"pos":[0,310,0],"mat":"steel"},
+"roof":{"type":"cone","radius":185,"height":110,"pos":[0,725,0],"mat":"roof"},
+"tank":{"type":"cylinder","radius":175,"height":350,"pos":[0,495,0],"mat":"staves"}}}

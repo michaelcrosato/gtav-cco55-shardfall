@@ -1,0 +1,26 @@
+{"format":2,"name":"traffic_signal","unit":"cm",
+"description":"A signal pole with a mast arm reaching to -x over the road and a 3-lamp head facing +z: red, amber, green. Knob: arm.",
+"tags":["traffic","signal","stoplight","intersection","road","pole"],
+"category":"town",
+"materials":{
+"black":{"base":"MAT/gtf/painted_metal","color":"#26282b","metallic":0.2},
+"lens_amber":{"color":"#f5a612","emissive":0.15},
+"lens_green":{"color":"#19c46a","emissive":0.15},
+"lens_red":{"color":"#e02a1c","emissive":0.15},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#8e9498","metallic":0.4}},
+"parts":{
+"amber":{"type":"cylinder","radius":11,"height":2,"pos":[-700,562,14],"axis":"z","mat":"lens_amber"},
+"arm":{"type":"cone","radius":11,"radius_end":6,"from":[0,590,0],"to":[-750,620,0],"mat":"steel"},
+"backplate":{"type":"box","size":[54,116,2],"pos":[-700,560,-14],"mat":"black","color":"#1b1c1e"},
+"base":{"type":"cylinder","radius":24,"height":20,"pos":[0,10,0],"mat":"MAT/gtf/concrete"},
+"cap":{"type":"ellipsoid","size":[24,10,24],"pos":[0,680,0],"mat":"steel"},
+"green":{"type":"cylinder","radius":11,"height":2,"pos":[-700,530,14],"axis":"z","mat":"lens_green"},
+"housing":{"type":"box","size":[34,100,26],"pos":[-700,562,0],"mat":"black"},
+"pole":{"type":"cone","radius":14,"radius_end":11,"from":[0,20,0],"to":[0,680,0],"mat":"steel"},
+"red":{"type":"cylinder","radius":11,"height":2,"pos":[-700,594,14],"axis":"z","mat":"lens_red"},
+"visor":{"type":"tube","radius":13.5,"thickness":1.5,"height":18,"arc":200,"facing":"y","pos":[-700,562,22],"axis":"z","mat":"black","array":{"count":3,"step":[0,-32,0]}}},
+"params":{
+"arm":{"range":[400,1200],"set":{"amber.pos.0":-0.933333,"arm.to.0":-1,"backplate.pos.0":-0.933333,"green.pos.0":-0.933333,"housing.pos.0":-0.933333,"red.pos.0":-0.933333,"visor.pos.0":-0.933333}}},
+"presets":{
+"long":{"arm":1100},
+"short":{"arm":450}}}

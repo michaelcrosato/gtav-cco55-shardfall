@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "name": "gtf/brick_windows",
+  "unit": "cm",
+  "description": "Old brick warehouse lofts: red brick (the part's colour) in pale mortar with tall cream-framed two-pane windows, bays 300 cm wide and storeys 340 cm high fitted to each face. Lit windows at night.",
+  "tags": ["facade", "brick", "loft", "warehouse", "windows", "industrial"],
+  "source": {"library": "own", "license": "CC0-1.0", "author": "Grand Theft Freeway-BX contributors"},
+  "color": "#9a5a44",
+  "look": "lit",
+  "map": "object",
+  "layers": [
+    {"type": "brick", "size": [24, 8], "gap": 1.5, "color": "#c8b8a4", "vary": 0.12, "cavity": 0.25},
+    {"type": "windows", "size": [300, 340], "pane": [0.4, 0.5], "gap": 8, "detail": 2, "color": "#27313a", "frame": "#ece6da", "reflect": 0.45, "cover": 0.5, "glow": 1.15}
+  ]
+}

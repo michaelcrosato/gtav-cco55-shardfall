@@ -1,0 +1,11 @@
+{"format":2,"name":"guard_rail","unit":"cm",
+"description":"A 3 m W-beam guardrail: galvanised beam at 73 cm facing +z on blockouts and two steel posts; ends at x=+-150.",
+"tags":["guardrail","highway","road","barrier","freeway","steel"],
+"category":"town",
+"materials":{
+"galv":{"base":"MAT/gtf/painted_metal","color":"#a9aeb1","metallic":0.6},
+"post":{"base":"MAT/gtf/painted_metal","color":"#8a8f92","metallic":0.4}},
+"parts":{
+"beam":{"type":"extrude","points":[[0,0],[7,7],[7,11],[2.5,15.5],[7,20],[7,24],[0,31],[-2,31],[-2,0]],"depth":300,"pos":[0,42,4],"yaw":-90,"mat":"galv"},
+"block":{"type":"box","size":[14,34,15],"pos":[95,58,-3.5],"mat":"post","mirror":"x"},
+"post":{"type":"box","size":[15,75,10],"pos":[95,37.5,-16],"mat":"post","mirror":"x"}}}

@@ -1,0 +1,15 @@
+{"format":2,"name":"street_tree","unit":"cm",
+"description":"A street tree, 7.4 m: straight trunk, two branches and a rounded, lobed green canopy about 5 m across.",
+"tags":["tree","street","park","shade","canopy","vegetation"],
+"category":"vegetation",
+"materials":{
+"bark":{"color":"#5e4b3a","roughness":1},
+"leaf":{"color":"#4f7d3a"},
+"leaf2":{"color":"#5f8f45"},
+"leaf3":{"color":"#46733a"}},
+"parts":{
+"branch":{"type":"cylinder","radius":6,"from":[0,260,0],"to":[90,390,20],"mat":"bark","mirror":"x"},
+"canopy":{"type":"ellipsoid","size":[500,330,480],"pos":[0,500,0],"mat":"leaf","sway":"leaves"},
+"lobe":{"type":"ellipsoid","size":[280,230,280],"pos":[0,460,0],"mat":"leaf2","sway":"leaves","radial":{"count":4,"radius":180,"start":45}},
+"top":{"type":"ellipsoid","size":[300,200,280],"pos":[20,640,-10],"mat":"leaf3","sway":"leaves"},
+"trunk":{"type":"cone","radius":15,"radius_end":10,"height":320,"pos":[0,160,0],"mat":"bark"}}}

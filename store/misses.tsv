@@ -1,0 +1,8 @@
+date	kind	query	nearest
+2026-10-15	prop	tree	LIB/quaternius_medieval_village/hay LIB/core/mushroom_cluster LIB/kenney_mini_dungeon/trap
+2026-10-15	prop	character	BUILTIN/crate LIB/quaternius_medieval_village/crate LIB/core/brazier
+2026-10-15	clip	taunt	
+2026-10-15	clip	zombie death	MESH2MOTION/Death_A MESH2MOTION/Death_B MESH2MOTION/Death_C
+2026-10-17	prop	pistol	LIB/kenney_mini_dungeon/dirt LIB/kenney_mini_dungeon/pot LIB/kenney_mini_dungeon/potion
+2026-10-17	prop	gun	LIB/core/urn BUILTIN/box LIB/core/axe
+2026-10-17	prop	rifle	LIB/core/table LIB/kaykit_adventurers/rogue LIB/kenney_mini_dungeon/table
