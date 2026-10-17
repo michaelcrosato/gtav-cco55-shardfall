@@ -1103,8 +1103,10 @@ pub struct PlayFrame {
   and abilities need no global parameter changes.
 - Public clip control for game code (`Sim::play_clip(id, clip, flags, speed)`, upper-body aim and
   cover poses, sitting, hands-up, knock-down and get-up).
-- Public query helpers: `Sim::raycast(origin, dir, max, filter) -> Option<Hit { entity, block,
-  point, normal, toi }>`, `Sim::sphere_cast(..)`, `Sim::overlap_sphere(..)`.
+- Query helpers: extend the existing `Sim::raycast(origin, dir, max, exclude)` (`world.rs`; it
+  always skips the player and returns point, normal, entity) with a `RayFilter` (include the player,
+  exclude a list, statics only, characters only) and return the distance and the static block hit;
+  add `Sim::sphere_cast(..)` and `Sim::overlap_sphere(..)` the same way.
 - Public streaming interest points for games (`Sim::set_interest(&[Vec3])`: player, camera target,
   mission anchors).
 - Font-agnostic `Text3d` in the frame.
@@ -1524,9 +1526,12 @@ user's RTX 3060 Ti should run High at 1080p/60; the on-screen readout lets them 
   the game shows it on the About screen. Optional Vercel deploy keeps working (`vercel.json` builds
   the game's page).
 - **Phones/tablets:** the same web build; touch → attract only (§5.8).
-- Controllers: gilrs (native: Windows Gaming Input supports DualSense; Linux evdev; web Gamepad API
-  "standard" mapping). Verify the DualSense mapping on the user's machine is outside this
-  environment; record it as a user check.
+- Controllers: gilrs 0.11 / gilrs-core 0.6.8. On Windows its default `wgi` backend enumerates
+  Windows Gaming Input `RawGameController`s, so a DualSense works without XInput wrappers (checked
+  in the crate source during planning); Linux uses evdev; the browser uses the Gamepad API's
+  "standard" mapping. Triggers arrive as analog button values (`button_data(..).value()`). Testing
+  a real DualSense is outside this environment: record it as a user check, and keep the glyph
+  override setting as the fallback.
 
 ---
 

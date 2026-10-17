@@ -42,6 +42,7 @@ commit pinned in `scripts/vendor-engine.sh`).
 - 4 vCPU, ~15 GB RAM, no GPU, fixed disk allowance. Use `CARGO_BUILD_JOBS=4`. Captures render on
   lavapipe; the web build runs in headless Chromium with SwiftShader (slow: 0.5–2 frames/s).
 - Toolchain 1.98.1 with `wasm32-unknown-unknown` and `x86_64-pc-windows-gnu` targets and
-  `wasm-bindgen` 0.2.129 were present at planning time; re-check after a container reset.
+  `wasm-bindgen` 0.2.129 were present at planning time, as were mingw-w64 and Wine (Windows
+  cross-builds and smoke tests); re-check after a container reset.
 - Playwright is installed globally (`/opt/node22/lib/node_modules/playwright`), Chromium under
   `/opt/pw-browsers`; Xvfb, `xwd` and ImageMagick are available for native window screenshots.
