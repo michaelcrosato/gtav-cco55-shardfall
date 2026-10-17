@@ -37,7 +37,27 @@ pub enum MeshKey {
         radius_mm: u32,
     },
     Custom(u64),
+    /// A coarser `Sphere`, `Cylinder` or `Cone` for small or far instances, `segments` round (the
+    /// full meshes have 32). The renderer picks it for static regions' instances by their size on
+    /// screen (`MeshKey::for_size`); scenes keep naming the full mesh.
+    Coarse {
+        round: Round,
+        segments: u8,
+    },
 }
+
+/// The built-in round meshes with coarser versions (`MeshKey::Coarse`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Round {
+    Sphere,
+    Cylinder,
+    Cone,
+}
+
+/// Radii on screen (pixels) below which a round mesh drops to 16 and then 8 segments: an n-gon
+/// stands at most r (1 - cos(pi / n)) inside its circle, half a pixel at these radii.
+const COARSE_16_PX: f32 = 26.0;
+const COARSE_8_PX: f32 = 6.5;
 
 impl MeshKey {
     pub fn rounded_box(half: Vec3, radius: f32) -> Self {
@@ -58,7 +78,50 @@ impl MeshKey {
                 MeshData::rounded_box(h, radius_mm as f32 / 1000.0, 4)
             }
             MeshKey::Custom(_) => return None,
+            MeshKey::Coarse { round, segments } => {
+                let n = u32::from(segments.max(4));
+                match round {
+                    Round::Sphere => MeshData::sphere(n, n / 2),
+                    Round::Cylinder => MeshData::cylinder(n),
+                    Round::Cone => MeshData::cone(n),
+                }
+            }
         })
+    }
+
+    /// The version of this mesh to draw when its radius covers `px` pixels on screen: the round
+    /// built-ins drop to 16 and then 8 segments as they shrink, their outline staying within
+    /// half a pixel of the full mesh's; everything else draws as itself.
+    pub fn for_size(self, px: f32) -> MeshKey {
+        let round = match self {
+            MeshKey::Sphere => Round::Sphere,
+            MeshKey::Cylinder => Round::Cylinder,
+            MeshKey::Cone => Round::Cone,
+            _ => return self,
+        };
+        if px > COARSE_16_PX { self } else { MeshKey::Coarse { round, segments: if px > COARSE_8_PX { 16 } else { 8 } } }
+    }
+
+    /// A short name for statistics: `sphere`, `sphere/16` (a coarse one), `custom`...
+    pub fn label(self) -> &'static str {
+        match self {
+            MeshKey::Cube => "cube",
+            MeshKey::Sphere => "sphere",
+            MeshKey::Cylinder => "cylinder",
+            MeshKey::Cone => "cone",
+            MeshKey::Plane => "plane",
+            MeshKey::Tuft => "tuft",
+            MeshKey::RoundedBox { .. } => "rounded_box",
+            MeshKey::Custom(_) => "custom",
+            MeshKey::Coarse { round, segments } => match (round, segments) {
+                (Round::Sphere, 16) => "sphere/16",
+                (Round::Sphere, _) => "sphere/8",
+                (Round::Cylinder, 16) => "cylinder/16",
+                (Round::Cylinder, _) => "cylinder/8",
+                (Round::Cone, 16) => "cone/16",
+                (Round::Cone, _) => "cone/8",
+            },
+        }
     }
 }
 
@@ -283,5 +346,24 @@ mod tests {
         assert_outward(&MeshData::cylinder(16), "cylinder");
         assert_outward(&MeshData::cone(16), "cone");
         assert_outward(&MeshData::rounded_box(Vec3::new(1.0, 0.5, 0.7), 0.2, 3), "rounded_box");
+    }
+
+    #[test]
+    fn round_meshes_coarsen_as_they_shrink_on_screen() {
+        let coarse = |round, segments| MeshKey::Coarse { round, segments };
+        assert_eq!(MeshKey::Sphere.for_size(40.0), MeshKey::Sphere);
+        assert_eq!(MeshKey::Sphere.for_size(20.0), coarse(Round::Sphere, 16));
+        assert_eq!(MeshKey::Cylinder.for_size(3.0), coarse(Round::Cylinder, 8));
+        assert_eq!(MeshKey::Cube.for_size(1.0), MeshKey::Cube, "only the round built-ins coarsen");
+        // Each coarse mesh is closed and faces out, with far fewer triangles than the full one.
+        let tris = |key: MeshKey| key.generate().unwrap().indices.len() / 3;
+        for round in [Round::Sphere, Round::Cylinder, Round::Cone] {
+            for segments in [16, 8] {
+                let key = coarse(round, segments);
+                assert_outward(&key.generate().unwrap(), key.label());
+            }
+        }
+        assert!(tris(coarse(Round::Sphere, 8)) * 10 < tris(MeshKey::Sphere));
+        assert!(tris(coarse(Round::Cylinder, 8)) * 3 < tris(MeshKey::Cylinder));
     }
 }

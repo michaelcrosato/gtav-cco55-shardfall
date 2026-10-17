@@ -192,6 +192,9 @@ pub struct RenderStats {
     pub regions_shadow: usize,
     /// Mesh instances the sun's shadow pass drew.
     pub shadow_instances: usize,
+    /// The main pass's heaviest mesh kinds by triangles: (`MeshKey::label`, instances,
+    /// triangles), the rest ("", 0, 0).
+    pub heaviest: [(&'static str, usize, usize); 4],
 }
 
 pub struct Renderer {
@@ -1255,6 +1258,8 @@ impl Renderer {
         };
         let mut main: Vec<&crate::scene::MeshInstance> = scene.meshes.iter().collect();
         let mut shadow: Vec<&crate::scene::MeshInstance> = scene.meshes.iter().filter(|m| m.flags & no_shadow == 0).collect();
+        // The loose instances come first in both lists; the regions' follow.
+        let (loose, loose_shadow) = (main.len(), shadow.len());
         let mut main_sdfs: Vec<&crate::scene::SdfInstance> = scene.sdfs.iter().collect();
         let mut shadow_sdfs: Vec<&crate::scene::SdfInstance> = scene.sdfs.iter().filter(|s| s.flags & no_shadow == 0).collect();
         // The shadow passes (the sun's, and the shadow-casting lamps' faces) share one list: a
@@ -1284,23 +1289,43 @@ impl Renderer {
                 shadow_sdfs.extend(r.sdfs.iter().filter(|s| s.flags & no_shadow == 0 && near_enough(s.flags, s.a)));
             }
         }
+        // The regions' round built-ins small on screen draw coarser (`MeshKey::for_size`), like
+        // their distance classes; loose instances (objects, previews) keep every segment. Their
+        // radius in pixels comes from the projection's pixels per metre at 1 m (or overall,
+        // orthographic).
+        let px_per_m = 0.5 * cam.proj.y_axis.y.abs() * full.1 as f32;
+        let lod = |m: &crate::scene::MeshInstance| -> MeshKey {
+            if !matches!(m.mesh, MeshKey::Sphere | MeshKey::Cylinder | MeshKey::Cone) {
+                return m.mesh;
+            }
+            let t = &m.transform;
+            let (x, z) = (t.x_axis.truncate().length(), t.z_axis.truncate().length());
+            // The unit meshes' radius is 0.5: a sphere's widest, a cylinder's round its axis.
+            let width = if m.mesh == MeshKey::Sphere { x.max(z).max(t.y_axis.truncate().length()) } else { x.max(z) };
+            let distance = if cam.ortho { 1.0 } else { t.w_axis.truncate().distance(cam.eye).max(1e-3) };
+            m.mesh.for_size(0.5 * width * px_per_m / distance)
+        };
+        let mut main: Vec<(MeshKey, &crate::scene::MeshInstance)> =
+            main.into_iter().enumerate().map(|(i, m)| (if i < loose { m.mesh } else { lod(m) }, m)).collect();
+        let mut shadow: Vec<(MeshKey, &crate::scene::MeshInstance)> =
+            shadow.into_iter().enumerate().map(|(i, m)| (if i < loose_shadow { m.mesh } else { lod(m) }, m)).collect();
         // Grouped by mesh (stable: equal meshes keep their order).
-        main.sort_by_key(|m| m.mesh);
-        shadow.sort_by_key(|m| m.mesh);
+        main.sort_by_key(|(key, _)| *key);
+        shadow.sort_by_key(|(key, _)| *key);
         // Built-in meshes are made on first use; instances of a custom mesh nobody uploaded are
         // skipped. The lists are sorted, so each mesh is looked up once per list.
         for list in [&mut main, &mut shadow] {
             let mut last: Option<(MeshKey, bool)> = None;
-            list.retain(|m| match last {
-                Some((key, ok)) if key == m.mesh => ok,
+            list.retain(|&(mesh, _)| match last {
+                Some((key, ok)) if key == mesh => ok,
                 _ => {
-                    if !self.meshes.contains_key(&m.mesh) {
-                        if let Some(data) = m.mesh.generate() {
-                            self.upsert_mesh(m.mesh, &data);
+                    if !self.meshes.contains_key(&mesh) {
+                        if let Some(data) = mesh.generate() {
+                            self.upsert_mesh(mesh, &data);
                         }
                     }
-                    let ok = self.meshes.contains_key(&m.mesh);
-                    last = Some((m.mesh, ok));
+                    let ok = self.meshes.contains_key(&mesh);
+                    last = Some((mesh, ok));
                     ok
                 }
             });
@@ -1312,14 +1337,14 @@ impl Renderer {
             params: [m.style as u32, m.flags, m.group, materials.param(m.material)],
             ext: m.ext.extend(0.0).to_array(),
         };
-        // One instanced draw per mesh kind and pass: (key, first instance, end).
+        // One instanced draw per mesh kind (and coarseness) and pass: (key, first instance, end).
         let mut batches: Vec<(MeshKey, u32, u32)> = Vec::new();
-        for &m in &main {
+        for &(mesh, m) in &main {
             let idx = gpu_meshes.len() as u32;
             gpu_meshes.push(gpu(m, &self.materials));
             match batches.last_mut() {
-                Some(b) if b.0 == m.mesh => b.2 = idx + 1,
-                _ => batches.push((m.mesh, idx, idx + 1)),
+                Some(b) if b.0 == mesh => b.2 = idx + 1,
+                _ => batches.push((mesh, idx, idx + 1)),
             }
         }
         // Dynamic meshes: one instance each (identity transform), after the regular ones.
@@ -1357,14 +1382,34 @@ impl Renderer {
         let main_triangles =
             batches.iter().map(|b| (b.2 - b.1) as usize * self.meshes[&b.0].index_count as usize / 3).sum::<usize>()
                 + dyn_draws.iter().map(|d| d.1 as usize / 3).sum::<usize>();
+        // What the main pass's triangles go to, by mesh kind: (label, instances, triangles).
+        let mut heaviest = [("", 0, 0); 4];
+        {
+            let mut kinds: Vec<(&'static str, usize, usize)> = Vec::new();
+            for b in &batches {
+                let (n, label) = ((b.2 - b.1) as usize, b.0.label());
+                let tris = n * self.meshes[&b.0].index_count as usize / 3;
+                match kinds.iter_mut().find(|k| k.0 == label) {
+                    Some(k) => {
+                        k.1 += n;
+                        k.2 += tris;
+                    }
+                    None => kinds.push((label, n, tris)),
+                }
+            }
+            kinds.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(b.0)));
+            for (slot, kind) in heaviest.iter_mut().zip(kinds) {
+                *slot = kind;
+            }
+        }
         // The shadow casters after the main list, batched the same way.
         let mut shadow_batches: Vec<(MeshKey, u32, u32)> = Vec::new();
-        for &m in &shadow {
+        for &(mesh, m) in &shadow {
             let idx = gpu_meshes.len() as u32;
             gpu_meshes.push(gpu(m, &self.materials));
             match shadow_batches.last_mut() {
-                Some(b) if b.0 == m.mesh => b.2 = idx + 1,
-                _ => shadow_batches.push((m.mesh, idx, idx + 1)),
+                Some(b) if b.0 == mesh => b.2 = idx + 1,
+                _ => shadow_batches.push((mesh, idx, idx + 1)),
             }
         }
         self.mesh_instances.write(&self.device, &self.queue, bytemuck::cast_slice(&gpu_meshes));
@@ -1674,6 +1719,7 @@ impl Renderer {
             custom_meshes: self.meshes.keys().filter(|k| matches!(k, MeshKey::Custom(_))).count(),
             lights: n_lights,
             materials: self.materials.len.saturating_sub(1),
+            heaviest,
         };
     }
 }
