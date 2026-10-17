@@ -33,9 +33,9 @@ time = "20:15"
 
 [[view]]
 name = "docks_night_rain"
-about = "Harbor Gate among the containers"
-eye = [150.0, 1.7, 300.0]
-target = [350.0, 4.0, 330.0]
+about = "Harbor Gate Road at night in the rain: wet street between the dockside warehouses"
+eye = [104.0, 1.7, 280.0]
+target = [350.0, 4.0, 292.0]
 time = "23:00"
 weather = "rain"
 
