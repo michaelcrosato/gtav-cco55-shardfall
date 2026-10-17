@@ -652,8 +652,10 @@ impl Sim {
         self.seat_riders();
         let contacts = collector.contacts.into_inner().unwrap_or_default();
         if !contacts.is_empty() {
-            self.break_blocks(contacts, &mut events);
+            self.break_blocks(&contacts, &mut events);
+            self.vehicle_contacts(&contacts, dt, &mut events);
         }
+        self.update_vehicle_damage(dt, &mut events);
         self.update_crumbles(dt, &mut events);
 
         // Bombs and debris.
@@ -1050,7 +1052,7 @@ impl Sim {
                             two_sided: matches!(s.def.shape, crate::softbody::SoftShape::Cloth { .. }),
                         })
                     });
-                    let vehicle = e.vehicle.as_ref().map(|v| v.view());
+                    let vehicle = e.vehicle.as_ref().map(|v| v.view(e.pos, e.rot));
                     let cone = self.guard_cone(e);
                     let scenery = e.character.is_none()
                         && matches!(e.body_kind, BodyKind::None | BodyKind::Fixed)

@@ -1595,6 +1595,8 @@ impl ViewBuilder {
                             self.emit_prop(&mut scene, &o, prop, settings, time, dt);
                             live.push(o.id.0);
                         }
+                        // A vehicle with a body prop draws it instead of its collider's box.
+                        None if o.vehicle.as_ref().is_some_and(|v| v.body_asset.is_some()) => {}
                         None => emit_object(&mut scene, &o, settings.style, now, 0),
                     }
                     if let Some(v) = &o.vehicle {
