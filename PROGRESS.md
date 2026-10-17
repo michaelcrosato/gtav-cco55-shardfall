@@ -25,13 +25,9 @@ resumed or compacted session reads first.
   `.claude/worktrees/agent-a73e1fb49a0cee6a4` (merged at 367da03); E9 vehicles v2 +
   `gtf_vehicles` + `vehicles.toml` + feel test in `.claude/worktrees/agent-ab25c5efa06c05e86`
   (at d6a5c61; its stale workspace build files were deleted for disk; it must merge the branch).
-- **Web (open, M2 acceptance):** the web build boots into the city (`boot complete` in 2.3 s,
-  first frame of `freeway/view/downtown_street` with 4798 meshes) but headless Chromium on
-  SwiftShader crashes the page about 0.3 s after the first frame in every `freeway` scene (`dev`
-  crashes, the title hangs); the engine's `starter`, `world` (E14 hub) and `town` run fine in the
-  same build, and a build of a05ec5a (before E7) crashes the same way, so it is the city content
-  or the game's frame data, not E7. Next: bisect in the renderer (E7 helper), e.g. a `?debug=`
-  page parameter that drops props, chunk meshes, blocks, the far view, the map or the view intent.
+- **Web:** boots into the city in headless Chromium (HUD, minimap, `out/web-m2/fixed_*`). The
+  crash after the first frame was the app asking for pointer lock without a click (fixed in
+  `pav_app`: the web asks on each click while the game wants mouse look).
 - **Disk:** a fixed allowance, about 2 GB free; prune duplicate build artefacts (keep the newest
   per crate) and avoid workspace-wide test builds in worktrees.
 - **Next:** E7 helper: prop night glow + lamp lights, then mesh LOD; E9 helper: resume; me: tune
