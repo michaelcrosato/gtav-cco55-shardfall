@@ -20,6 +20,7 @@ use pav_core::zones::{Label, Zone};
 
 pub mod def;
 mod dress;
+pub mod freeway;
 pub mod grid;
 pub mod ground;
 mod lots;
@@ -67,6 +68,8 @@ pub struct City {
     pub def: DistrictDef,
     pub terrain: Terrain,
     pub buildings: Vec<Building>,
+    /// Elevated freeways (deck centre lines and ramps).
+    pub freeways: Vec<freeway::FreewayGeom>,
     /// Chunk coordinate bounds, inclusive.
     pub chunk_bounds: (IVec2, IVec2),
     bins: BTreeMap<(i32, i32), Bin>,
@@ -102,6 +105,7 @@ impl City {
         ground::terrain_meshes(&def, &grid, &terrain, &mut out);
         lots::build(&def, &grid, &terrain, &mut out);
         dress::build(&def, &grid, &terrain, &mut out);
+        let freeways = freeway::build(&def, &grid, &terrain, &mut out);
         let lo = grid.origin;
         let hi = grid.origin + Vec2::new(grid.w as f32, grid.h as f32) * grid.cell;
         let chunk_bounds = (
@@ -128,9 +132,9 @@ impl City {
         for z in out.zones {
             bins.entry(chunk_of((z.min + z.max) * 0.5)).or_default().zones.push(z);
         }
-        let map = Arc::new(raster::draw(&grid, &terrain, &out.buildings, &def));
-        let far = Arc::new(far_view(&grid, &terrain, &def, &out.buildings));
-        Ok(City { name: def.name.clone(), grid, def, terrain, buildings: out.buildings, chunk_bounds, bins, map, far })
+        let map = Arc::new(raster::draw(&grid, &terrain, &out.buildings, &freeways, &def));
+        let far = Arc::new(far_view(&grid, &terrain, &def, &out.buildings, &freeways));
+        Ok(City { name: def.name.clone(), grid, def, terrain, buildings: out.buildings, freeways, chunk_bounds, bins, map, far })
     }
 
     /// Parses a district file and builds it.
@@ -155,16 +159,9 @@ impl City {
     }
 
     /// The ground's height at a world point: the asphalt on roads, the lot level elsewhere, the
-    /// surface on water (terrain included).
+    /// surface on water (terrain included; not decks or roofs).
     pub fn ground_y(&self, p: Vec2) -> f32 {
-        let c = self.grid.cell_of(p);
-        let h = self.terrain.height_at(p);
-        match self.grid.at(c) {
-            Some(Cell::Road(RoadClass::Path)) => ground::LOT_Y + h,
-            Some(Cell::Road(_)) => ground::ROAD_Y + h,
-            Some(Cell::Zone(z)) if self.def.zones[&self.grid.zones[z as usize]].ground == "water" => ground::WATER_Y,
-            _ => ground::LOT_Y + h,
-        }
+        ground_at(&self.def, &self.grid, &self.terrain, p)
     }
 
     /// The middle of the map cell `c` (x, z).
@@ -196,7 +193,13 @@ impl RegionProvider for City {
 
 /// The far view: per chunk, its cells' ground (zone colour, asphalt, water; terrain at 8 m
 /// detail) and its buildings' masses as boxes; around the map, the backdrop hills and the ocean.
-fn far_view(grid: &Grid, terrain: &Terrain, def: &DistrictDef, buildings: &[Building]) -> FarView {
+fn far_view(
+    grid: &Grid,
+    terrain: &Terrain,
+    def: &DistrictDef,
+    buildings: &[Building],
+    freeways: &[freeway::FreewayGeom],
+) -> FarView {
     let mut chunks: BTreeMap<(i32, i32), FarMesh> = BTreeMap::new();
     for z in 0..grid.h {
         for x in 0..grid.w {
@@ -238,7 +241,7 @@ fn far_view(grid: &Grid, terrain: &Terrain, def: &DistrictDef, buildings: &[Buil
                     if g == "water" {
                         (ground::WATER_Y, pav_core::Color::hex("#2a5a74"))
                     } else {
-                        (ground::LOT_Y, ground::ground_color(g))
+                        (ground::LOT_Y + def.zones[&grid.zones[zi as usize]].level, ground::ground_color(g))
                     }
                 }
             };
@@ -253,6 +256,26 @@ fn far_view(grid: &Grid, terrain: &Terrain, def: &DistrictDef, buildings: &[Buil
             Vec3::new(b.max.x, b.base + b.height, b.max.y),
             b.color,
         );
+    }
+    for f in freeways {
+        let deck = pav_core::Color::hex("#9c978c").0;
+        let strip = |p: &freeway::Path, half: f32, chunks: &mut BTreeMap<(i32, i32), FarMesh>| {
+            for i in 0..p.len().saturating_sub(1) {
+                let m = (p.points[i] + p.points[i + 1]) * 0.5;
+                let mesh = chunks.entry(chunk_of(m)).or_default();
+                let top = [p.at(i, -half, 0.85), p.at(i + 1, -half, 0.85), p.at(i + 1, half, 0.85), p.at(i, half, 0.85)];
+                far_quad(mesh, top, [Vec3::Y; 4], [deck; 4]);
+                for s in [-half, half] {
+                    let side = [p.at(i, s, 0.85), p.at(i + 1, s, 0.85), p.at(i + 1, s, -1.25), p.at(i, s, -1.25)];
+                    let n = p.right[i] * s.signum();
+                    far_side(mesh, side, n, deck);
+                }
+            }
+        };
+        strip(&f.deck, freeway::HALF, &mut chunks);
+        for r in &f.ramps {
+            strip(&r.path, freeway::RAMP_HALF, &mut chunks);
+        }
     }
     backdrop(grid, terrain, def, &mut chunks);
     FarView { chunks: chunks.into_iter().map(|(k, m)| (k, Arc::new(m))).collect(), version: 1 }
@@ -269,6 +292,23 @@ fn far_quad(mesh: &mut FarMesh, v: [Vec3; 4], n: [Vec3; 4], c: [[f32; 3]; 4]) {
         mesh.max = if base == 0 && k == 0 { v[k] } else { mesh.max.max(v[k]) };
     }
     if (v[1] - v[0]).cross(v[2] - v[0]).y >= 0.0 {
+        mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    } else {
+        mesh.indices.extend_from_slice(&[base, base + 2, base + 1, base, base + 3, base + 2]);
+    }
+}
+
+/// Adds a vertical quad facing `n`.
+fn far_side(mesh: &mut FarMesh, v: [Vec3; 4], n: Vec3, c: [f32; 3]) {
+    let base = mesh.positions.len() as u32;
+    for p in v {
+        mesh.positions.push(p.to_array());
+        mesh.normals.push(n.to_array());
+        mesh.colors.push(c);
+        mesh.min = if base == 0 && mesh.positions.len() == 1 { p } else { mesh.min.min(p) };
+        mesh.max = if base == 0 && mesh.positions.len() == 1 { p } else { mesh.max.max(p) };
+    }
+    if (v[1] - v[0]).cross(v[2] - v[0]).dot(n) >= 0.0 {
         mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     } else {
         mesh.indices.extend_from_slice(&[base, base + 2, base + 1, base, base + 3, base + 2]);
@@ -358,6 +398,20 @@ fn backdrop(grid: &Grid, terrain: &Terrain, def: &DistrictDef, chunks: &mut BTre
         far_quad(&mut sea, v, [Vec3::Y; 4], [ocean; 4]);
     }
     chunks.insert((-10_001, -10_001), sea);
+}
+
+/// The ground's height at a world point (see `City::ground_y`).
+pub(crate) fn ground_at(def: &DistrictDef, grid: &Grid, terrain: &Terrain, p: Vec2) -> f32 {
+    let h = terrain.height_at(p);
+    match grid.at(grid.cell_of(p)) {
+        Some(Cell::Road(RoadClass::Path)) => ground::LOT_Y + h,
+        Some(Cell::Road(_)) => ground::ROAD_Y + h,
+        Some(Cell::Zone(z)) => {
+            let rules = &def.zones[&grid.zones[z as usize]];
+            if rules.ground == "water" { ground::WATER_Y } else { ground::LOT_Y + rules.level + h }
+        }
+        None => ground::LOT_Y + h,
+    }
 }
 
 /// A small deterministic random stream per (seed, purpose, place).

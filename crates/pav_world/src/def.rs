@@ -118,6 +118,8 @@ pub struct ZoneRules {
     pub props: BTreeMap<String, f32>,
     /// Population and other per-zone tables the game reads (traffic, peds); unparsed here.
     pub population: toml::Table,
+    /// Raises or lowers the zone's ground from lot level (m): -0.15 puts it at road level.
+    pub level: f32,
 }
 
 impl Default for ZoneRules {
@@ -131,6 +133,7 @@ impl Default for ZoneRules {
             styles: Vec::new(),
             props: BTreeMap::new(),
             population: toml::Table::new(),
+            level: 0.0,
         }
     }
 }
@@ -162,6 +165,8 @@ pub struct Landmark {
 #[serde(deny_unknown_fields)]
 pub struct Freeway {
     pub key: String,
+    #[serde(default)]
+    pub name: String,
     /// Deck height above the ground (m).
     pub height: f32,
     /// Lanes each way.
@@ -170,16 +175,30 @@ pub struct Freeway {
     pub points: Vec<[f32; 2]>,
     #[serde(default)]
     pub ramps: Vec<Ramp>,
+    /// A barrier closes the deck at its first point (where it leaves the map).
+    #[serde(default)]
+    pub closed_start: bool,
     /// The last stretch ends in the air (the broken construction ramp).
     #[serde(default)]
     pub broken_end: bool,
 }
 
-/// A ramp from a freeway down to a street.
+/// Which way traffic uses a ramp.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RampKind {
+    /// From the deck down to the street.
+    Off,
+    /// From the street up to the deck.
+    On,
+}
+
+/// A ramp between a freeway deck and a street.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ramp {
-    /// Where it leaves the freeway and where it lands (map cell coordinates).
+    /// Its end beside the deck and its end on the street (map cell coordinates).
     pub from: [f32; 2],
     pub to: [f32; 2],
+    pub kind: RampKind,
 }

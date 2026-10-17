@@ -33,10 +33,10 @@ mmmmmmmmmmHHHH-HHHHHHHHHHHHHHHHHHHHHHHHHH-HHHHmmmmmmmmmmmmmFFFFF
 ....-....-....-pppppp-.....-......==.....-.....-.....-.....FFFFF
 ....-....-....-......-.....-......==.....-.....-.....-.....FFFFF
 cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccFFFFF
-cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccFFFFF
-BBBB-BBBB-BBBB-BBBBBB-BBBBB-BBBBBB==BBBBB-BBBBB-BBBBB-BBBBBFFFFF
-BBBB-BBBB-BBBB-BBBBBB-BBBBB-BBBBBB==BBBBB-BBBBB-BBBBB-BBBBBFFFFF
-cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccFFFFF
+cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccF-F-F
+BBBB-BBBB-BBBB-BBBBBB-BBBBB-BBBBBB==BBBBB-BBBBB-BBBBB-BBBBBBBBBB
+BBBB-BBBB-BBBB-BBBBBB-BBBBB-BBBBBB==BBBBB-BBBBB-BBBBB-BBBBBBBBBB
+cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccF-F-F
 cccc-cccc-cccc-cccccc-ccccc-cccccc==ccccc-ccccc-ccccc-cccccFFFFF
 ----------------------------------==ccccc-ccccc-ccccc-ccc-cFFFFF
 ....-...D-DDDD-DDDDDD-DDDDD-DDDDD.==ccccc-ccccc-ccccc-ccc-cFFFFF
@@ -60,8 +60,8 @@ ssss-....-cccc-cccccc-ccccc-cccccc==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-cccc-cccccc-ccccc-cccccc==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
-----------------------------------==ttttt-ttCCt-ttttt-ttt-tFFFFF
-ssss-....-....-......-.....-......==--------CC-------------FFFFF
+----------------------------------==ttttt-ttCCt-ttttt-ttt-tF-F-F
+ssss-....-....-......-.....-......==--------CC------------------
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
@@ -69,8 +69,8 @@ ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==ttttt-ttCCt-ttttt-ttt-tFFFFF
 ssss-....-....-......-.....-......==--------CC-------------FFFFF
 sbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb==hhhhhhhhCChhhhhhhhhhh-hFFFFF
-ssssssssssssssssssssbbssssssssssss==hhhhhhhhCChhhhhhhhhhh-hFFFFF
-ssssssssssssssssssssbbssssssssssss==hhhhhhhhCChhhhhhhhhhh-hFFFFF
+ssssssssssssssssssssbbssssssssssss==hhhhhhhhCCFFFFFFFFFFF-FFFFFF
+ssssssssssssssssssssbbssssssssssss==hhhhhhhhCCFFFFFFFFFFF-FFFFFF
 ssssssssssssssssssssbbssssssssssss==hhhhhhhhCChhhhhhhhhhh-hFFFFF
 ssssssssssssssssssssbbssssssssssss==hhhhhhhhCChhhhhhhhhhh-hFFFFF
 ssssssssssssssssssssbbssssssssssss==hhhhhhhhCChhhhhhhhhhh-hFFFFF
@@ -218,7 +218,7 @@ ground = "asphalt"
 styles = ["warehouse"]
 lot = [30.0, 60.0]
 depth = 60.0
-height = [8.0, 14.0]
+height = [6.0, 10.0]
 props = { lamp = 1.0 }
 
 [zones.park]
@@ -243,8 +243,9 @@ props = { tree = 8.0, lamp = 1.0 }
 ground = "brush"
 props = { tree = 2.0 }
 
-[zones.corridor]      # Under and beside Route 404
+[zones.corridor]      # Under and beside Route 404: graded dirt at road level
 ground = "dirt"
+level = -0.15
 
 [[landmark]]
 key = "bank"
@@ -331,3 +332,46 @@ cells = [[15, 2], [17, 4]]
 assembly = "lookout"
 blip = "activity"
 level = true
+
+# Route 404: the elevated freeway down the east corridor, turning west over the docks as the
+# Harbor Spur to the broken construction ramp above the water. Points and ramp ends are map cell
+# coordinates (x, z; fractions allowed). Ramps run from the deck to the street; `kind` is the
+# traffic direction (off: deck to street, on: street to deck).
+[[freeway]]
+key = "route_404"
+name = "Route 404"
+height = 11.0
+lanes = 3
+points = [[61.5, 0.0], [61.5, 51.25], [61.125, 55.625], [59.5, 58.75], [57.0, 60.0], [50.75, 60.0], [47.625, 60.3125], [45.875, 62.5], [45.125, 65.625]]
+closed_start = true
+broken_end = true
+
+[[freeway.ramps]]   # The Pretzel: southbound exit to Sunset Row
+from = [60.325, 10.0]
+to = [60.325, 23.5]
+kind = "off"
+
+[[freeway.ramps]]   # The Pretzel: northbound entrance from Sunset Row
+from = [62.675, 10.0]
+to = [62.675, 23.5]
+kind = "on"
+
+[[freeway.ramps]]   # The Pretzel: southbound entrance from Sunset Row
+from = [60.325, 37.0]
+to = [60.325, 26.5]
+kind = "on"
+
+[[freeway.ramps]]   # The Pretzel: northbound exit to Sunset Row
+from = [62.675, 37.0]
+to = [62.675, 26.5]
+kind = "off"
+
+[[freeway.ramps]]   # Harbor Gate: southbound exit (the last before the closed spur)
+from = [60.325, 40.0]
+to = [60.325, 50.5]
+kind = "off"
+
+[[freeway.ramps]]   # Harbor Gate: northbound entrance
+from = [62.675, 40.0]
+to = [62.675, 50.5]
+kind = "on"

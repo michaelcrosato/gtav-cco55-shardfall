@@ -141,7 +141,7 @@ pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut
                             }
                         }
                     } else {
-                        out.blocks.push(slab(lo, hi, -0.6, LOT_Y, ground_color(&rules.ground)));
+                        out.blocks.push(slab(lo, hi, -0.6, LOT_Y + rules.level, ground_color(&rules.ground)));
                     }
                 }
                 Cell::Road(class) => road_cell(grid, c, class, lo, hi, white, yellow, out),
@@ -290,16 +290,30 @@ fn crossings(grid: &Grid, c: IVec2, lo: Vec2, hi: Vec2, d: IVec2, k: i32, white:
 
 /// Triangles collected for one chunk.
 #[derive(Default)]
-struct MeshBuf {
+pub(crate) struct MeshBuf {
     p: Vec<[f32; 3]>,
     n: Vec<[f32; 3]>,
     c: Vec<[f32; 3]>,
     i: Vec<u32>,
 }
 
+/// The chunk a world point (x, z) falls in.
+pub(crate) fn chunk_key(p: Vec2) -> (i32, i32) {
+    ((p.x / CHUNK_SIZE).floor() as i32, (p.y / CHUNK_SIZE).floor() as i32)
+}
+
+/// Turns per-chunk buffers into mesh patches (with their exact colliders).
+pub(crate) fn patches(bufs: BTreeMap<(i32, i32), MeshBuf>, out: &mut Out) {
+    for (key, b) in bufs {
+        if !b.i.is_empty() {
+            out.meshes.push(Arc::new(TerrainPatch::from_mesh(key, b.p, b.n, b.c, b.i)));
+        }
+    }
+}
+
 impl MeshBuf {
     /// A quad (corners in order around it), wound so it faces along `facing`.
-    fn quad(&mut self, v: [Vec3; 4], n: [Vec3; 4], c: [[f32; 3]; 4], facing: Vec3) {
+    pub(crate) fn quad(&mut self, v: [Vec3; 4], n: [Vec3; 4], c: [[f32; 3]; 4], facing: Vec3) {
         let base = self.p.len() as u32;
         for k in 0..4 {
             self.p.push(v[k].to_array());
@@ -364,9 +378,7 @@ pub(crate) fn terrain_meshes(def: &DistrictDef, grid: &Grid, terrain: &Terrain, 
                 continue;
             }
             let lo = grid.corner(c);
-            let mid = lo + Vec2::splat(grid.cell * 0.5);
-            let key = ((mid.x / CHUNK_SIZE).floor() as i32, (mid.y / CHUNK_SIZE).floor() as i32);
-            let buf = bufs.entry(key).or_default();
+            let buf = bufs.entry(chunk_key(lo + Vec2::splat(grid.cell * 0.5))).or_default();
             let at = |sx: i32, sz: i32, y0: f32| {
                 let q = terrain.sample_pos(sx, sz);
                 Vec3::new(q.x, y0 + terrain.sample(sx, sz), q.y)
@@ -488,7 +500,5 @@ pub(crate) fn terrain_meshes(def: &DistrictDef, grid: &Grid, terrain: &Terrain, 
             }
         }
     }
-    for (key, b) in bufs {
-        out.meshes.push(Arc::new(TerrainPatch::from_mesh(key, b.p, b.n, b.c, b.i)));
-    }
+    patches(bufs, out);
 }

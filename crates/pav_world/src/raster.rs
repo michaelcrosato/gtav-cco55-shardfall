@@ -13,7 +13,13 @@ fn rgb(hex: u32) -> [u8; 4] {
     [(hex >> 16) as u8, (hex >> 8) as u8, hex as u8, 255]
 }
 
-pub fn draw(grid: &Grid, terrain: &Terrain, buildings: &[Building], def: &DistrictDef) -> MapImage {
+pub fn draw(
+    grid: &Grid,
+    terrain: &Terrain,
+    buildings: &[Building],
+    freeways: &[crate::freeway::FreewayGeom],
+    def: &DistrictDef,
+) -> MapImage {
     let mpp = 1.0;
     let w = (grid.w as f32 * grid.cell / mpp) as u32;
     let h = (grid.h as f32 * grid.cell / mpp) as u32;
@@ -66,6 +72,45 @@ pub fn draw(grid: &Grid, terrain: &Terrain, buildings: &[Building], def: &Distri
                 let i = ((y as u32 * w + x as u32) * 4) as usize;
                 px[i..i + 4].copy_from_slice(&shade);
             }
+        }
+    }
+    // Freeways over everything: the deck light, its edges darker.
+    let mut fill = |q: [Vec2; 4], color: [u8; 4]| {
+        let lo = q.iter().fold(Vec2::splat(f32::MAX), |a, b| a.min(*b));
+        let hi = q.iter().fold(Vec2::splat(f32::MIN), |a, b| a.max(*b));
+        let (x0, y0) = to_px(grid, lo, mpp);
+        let (x1, y1) = to_px(grid, hi, mpp);
+        for y in y0.max(0)..=y1.min(h as i32 - 1) {
+            for x in x0.max(0)..=x1.min(w as i32 - 1) {
+                let p = grid.origin + Vec2::new(x as f32 + 0.5, y as f32 + 0.5) * mpp;
+                let inside = (0..4).all(|k| {
+                    let (a, b) = (q[k], q[(k + 1) % 4]);
+                    (b - a).perp_dot(p - a) >= 0.0
+                }) || (0..4).all(|k| {
+                    let (a, b) = (q[k], q[(k + 1) % 4]);
+                    (b - a).perp_dot(p - a) <= 0.0
+                });
+                if inside {
+                    let i = ((y as u32 * w + x as u32) * 4) as usize;
+                    px[i..i + 4].copy_from_slice(&color);
+                }
+            }
+        }
+    };
+    for f in freeways {
+        let mut strip = |p: &crate::freeway::Path, half: f32| {
+            for i in 0..p.len().saturating_sub(1) {
+                let q = |j: usize, u: f32| {
+                    let v = p.at(j, u, 0.0);
+                    Vec2::new(v.x, v.z)
+                };
+                fill([q(i, -half - 0.6), q(i + 1, -half - 0.6), q(i + 1, half + 0.6), q(i, half + 0.6)], rgb(0x4a5562));
+                fill([q(i, -half + 0.8), q(i + 1, -half + 0.8), q(i + 1, half - 0.8), q(i, half - 0.8)], rgb(0x95a3b3));
+            }
+        };
+        strip(&f.deck, crate::freeway::HALF);
+        for r in &f.ramps {
+            strip(&r.path, crate::freeway::RAMP_HALF);
         }
     }
     MapImage { width: w, height: h, rgba: px, origin: grid.origin, metres_per_px: mpp, version: 1 }
