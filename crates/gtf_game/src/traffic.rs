@@ -546,8 +546,10 @@ impl Traffic {
     }
 
     /// Crashes this tick: traffic cars that hit something stop for a moment (and drop to full
-    /// physics); two traffic cars hitting each other count as an AI crash.
-    pub fn crashes(&mut self, sim: &mut Sim, events: &[pav_core::frame::SimEvent]) {
+    /// physics); two traffic cars hitting each other count as an AI crash — an incident's when one
+    /// of them was fleeing, pulled over or shaken, or it happened within 40 m of a chase (`hot`:
+    /// the police vehicles, and the player while wanted).
+    pub fn crashes(&mut self, sim: &mut Sim, events: &[pav_core::frame::SimEvent], hot: &[Vec3]) {
         for ev in events {
             let pav_core::frame::SimEvent::Crash { vehicle, other, impulse, .. } = ev else { continue };
             if *impulse < 800.0 {
@@ -565,8 +567,10 @@ impl Traffic {
                 let again = self.crashed.iter().any(|&(a, b, t)| (a, b) == pair && sim.state.tick < t + 20 * 60);
                 self.crashed.retain(|&(_, _, t)| sim.state.tick < t + 20 * 60);
                 self.crashed.push((pair.0, pair.1, sim.state.tick));
+                let at = sim.state.entities.get(*vehicle).map(|e| e.pos).unwrap_or_default();
+                let chase = hot.iter().map(|p| p.distance(at)).fold(f32::MAX, f32::min);
                 if again {
-                } else if calm(*vehicle) && calm(*o) {
+                } else if calm(*vehicle) && calm(*o) && chase > 40.0 {
                     self.ai_crashes += 1;
                     if self.crash_sites.len() < 16 {
                         let what = |id: EntityId| {
@@ -584,13 +588,13 @@ impl Traffic {
                                 a.map(|a| a.passing).unwrap_or(0.0),
                             )
                         };
-                        let at = sim.state.entities.get(*vehicle).map(|e| e.pos).unwrap_or_default();
                         self.crash_sites.push(format!(
-                            "tick {} at {:.0},{:.0} impulse {:.0}: {} / {}",
+                            "tick {} at {:.0},{:.0} impulse {:.0} chase {:.0} m: {} / {}",
                             sim.state.tick,
                             at.x,
                             at.z,
                             impulse,
+                            chase.min(9999.0),
                             what(*vehicle),
                             what(*o)
                         ));

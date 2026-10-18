@@ -797,7 +797,12 @@ impl Game for Freeway {
 
     fn post(&mut self, sim: &mut Sim, dt: f32, events: &mut Vec<SimEvent>) {
         self.time += dt;
-        self.traffic.crashes(sim, events);
+        let mut hot: Vec<Vec3> =
+            self.police.units.iter().filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos)).collect();
+        if self.heat.stars > 0 {
+            hot.extend(sim.state.player.and_then(|p| sim.state.entities.get(p)).map(|e| e.pos));
+        }
+        self.traffic.crashes(sim, events, &hot);
         audio::crash_sounds(events);
         // Explosions hurt everyone near them; whoever sat in the vehicle that blew up dies.
         let blast = fate::blasts(sim, events, sim.state.player);

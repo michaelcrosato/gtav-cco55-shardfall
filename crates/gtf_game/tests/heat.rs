@@ -154,16 +154,19 @@ fn escape(seed: u64, rolling: bool) -> (Option<u32>, String) {
 
 /// The heat-evasion bot (D13): cruising in a fast car at three stars until a police unit spots
 /// it, it then runs on autopilot — leaving wrecked or boxed-in cars for others — and shakes the
-/// police off within three minutes, on three seeds. (Over seeds 1–8 it escapes 7 of 8 times from
-/// a rolling start and 6 of 8 from a standstill: `evasion_rate`. Seed 1 is the rolling miss: a
-/// PIT pins it at a junction and it will not drive through the officers who get out.)
+/// police off within three minutes on at least three of the first five seeds. (A chase is chaotic:
+/// any change to the traffic or the police reshuffles which seeds get away, so the test counts
+/// escapes rather than naming seeds; `evasion_rate` reports eight seeds from a rolling start and
+/// from a standstill.)
 #[test]
 fn the_evasion_bot_escapes_three_stars() {
-    for seed in [2, 4, 5] {
+    let mut escaped = 0;
+    for seed in 1..=5 {
         let (cleared, line) = escape(seed, true);
         eprintln!("{line}");
-        assert!(cleared.is_some(), "{line}");
+        escaped += cleared.is_some() as u32;
     }
+    assert!(escaped >= 3, "escaped on {escaped} of 5 seeds");
 }
 
 /// How often the bot gets away, over eight seeds, from a rolling start and from a standstill

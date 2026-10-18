@@ -64,6 +64,10 @@ pub static TOOLS: &[Tool] = &[
             arg("mode", "string", "traffic, peds or roam (default traffic)"),
             arg("seconds", "number", "game seconds to run (default 120)"),
             arg("seed", "integer", "scene seed (default 1)"),
+            arg("time", "string", "time of day to start at, HH:MM (default 12:00)"),
+            arg("wanted", "integer", "roam: stars to start with (default 0: the first after a minute of calm)"),
+            arg("shots", "string", "a path prefix: also capture the game (HUD on) every shot_every seconds"),
+            arg("shot_every", "number", "seconds between captures (default 10)"),
         ],
         run: t_soak,
     },
@@ -139,7 +143,9 @@ fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
     args.insert("seed".into(), json!(seed));
     pav_tools::call(s, "load", &args)?;
     let cmd = |s: &mut Session, c: &str| s.sim.step(&pav_core::InputFrame { cmds: vec![c.into()], ..Default::default() });
-    cmd(s, "time 12:00");
+    cmd(s, &format!("time {}", text(a, "time").unwrap_or("12:00")));
+    let shots = text(a, "shots").map(str::to_string);
+    let shot_every = (a.get("shot_every").and_then(Value::as_f64).unwrap_or(10.0).max(1.0) * 60.0) as u64;
     match mode.as_str() {
         "traffic" => {
             cmd(s, "drive fenwick_commuter");
@@ -151,6 +157,9 @@ fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
         "roam" => {
             cmd(s, "drive okami_kaze");
             cmd(s, "autopilot escape");
+            if let Some(n) = a.get("wanted").and_then(Value::as_u64).filter(|n| *n > 0) {
+                cmd(s, &format!("wanted {}", n.min(5)));
+            }
         }
         _ => {}
     }
@@ -190,6 +199,17 @@ fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
             last = now;
         }
         s.sim.drain_events();
+        if let Some(prefix) = &shots
+            && t > 0
+            && t % shot_every == 0
+        {
+            let mut c = Args::new();
+            c.insert("out".into(), json!(format!("{prefix}_{:03}s.png", t / 60)));
+            c.insert("hud".into(), json!(true));
+            c.insert("width".into(), json!(1280));
+            c.insert("height".into(), json!(720));
+            pav_tools::call(s, "capture", &c)?;
+        }
         if mode == "roam" {
             let g = freeway(s)?;
             let (alive, stars, fate) = (g.fate.alive(), g.heat.stars, g.fate);

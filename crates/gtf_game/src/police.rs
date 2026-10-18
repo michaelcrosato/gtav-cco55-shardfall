@@ -926,7 +926,9 @@ impl Police {
                 let d = (BLOCK_AHEAD[0] - gone).max(0.0) + 5.0;
                 let (at, dir) = l.at(along + d.min(left));
                 let hidden = sight_blocked(sim, cam.eye, at + Vec3::Y);
-                if (hidden || gone + d > BLOCK_AHEAD[1]) && at.distance(m.player) > 90.0 {
+                let across = Vec3::new(-dir.z, 0.0, dir.x) * 2.6;
+                let loaded = ground_loaded(sim, at + across) && ground_loaded(sim, at - across);
+                if (hidden || gone + d > BLOCK_AHEAD[1]) && at.distance(m.player) > 90.0 && loaded {
                     self.set_block(sim, m, at, dir);
                     return;
                 }
