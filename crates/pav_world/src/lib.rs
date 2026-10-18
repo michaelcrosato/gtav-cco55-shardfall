@@ -22,6 +22,7 @@ pub mod channel;
 pub mod cover;
 pub mod def;
 pub mod dress;
+mod edge;
 mod extras;
 pub mod freeway;
 pub mod grid;
@@ -124,6 +125,7 @@ impl City {
         dress::docks(&def, &grid, &mut out);
         dress::beach(&def, &grid, &mut out);
         let freeways = freeway::build(&def, &grid, &terrain, &mut out);
+        edge::build(&def, &grid, &terrain, &mut out);
         let lanes = lanes::LaneGraph::build(&grid, &terrain, &freeways, &channels, def.seed);
         let signal_heads = dress::signals(&grid, &lanes, &mut out);
         let walk = walk::WalkMap::build(&def, &grid, &out.buildings, &lanes);
@@ -200,6 +202,23 @@ impl City {
     /// surface on water (terrain included; not decks or roofs).
     pub fn ground_y(&self, p: Vec2) -> f32 {
         ground_at(&self.def, &self.grid, &self.terrain, p)
+    }
+
+    /// Whether a world point lies inside a building's footprint (grown by `margin` metres).
+    pub fn in_building(&self, p: Vec2, margin: f32) -> bool {
+        self.buildings
+            .iter()
+            .any(|b| p.x > b.min.x - margin && p.x < b.max.x + margin && p.y > b.min.y - margin && p.y < b.max.y + margin)
+    }
+
+    /// The highest roof within `r` metres of a world point, or the ground there when no building
+    /// stands that close (what a helicopter flies over).
+    pub fn roof_y(&self, p: Vec2, r: f32) -> f32 {
+        self.buildings
+            .iter()
+            .filter(|b| p.clamp(b.min, b.max).distance_squared(p) < r * r)
+            .map(|b| b.base + b.height)
+            .fold(self.ground_y(p), f32::max)
     }
 
     /// The middle of the map cell `c` (x, z).
