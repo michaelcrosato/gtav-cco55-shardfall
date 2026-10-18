@@ -5,29 +5,25 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase (2026-10-17, end of session 1):** M0-M2 done. M3, M4 and M5 are partly done; the next
-  session continues them in the order of `HANDOFF.md`. Read `HANDOFF.md` first, then this file.
-- **Landed since M2:** the on-foot camera (shoulder, walls, recentre, sprint FOV, aim and R3
-  shoulder swap); the radio skeleton (live stations from `radio.toml`, procedural songs, the
-  `audio_capture` mix); E9 vehicles v2 in the engine (free pitch and roll, tyres, damage to fire
-  and explosions, seats and doors, kinematic traffic mode, helicopter flight, water) with all 15
-  archetypes in `vehicles.toml` and the feel test; pedestrians (archetypes in `peds.toml`,
-  population manager, walk-tile routes, crossings on the walk light, flee and cower, E11 low
-  detail); ambience beds by place, crowd and weather; on-foot combat (weapons in `weapons.toml`,
-  hitscan, aim assist and magnetism, melee combos, vitals, deaths); E7 night glow for prop parts
-  (street lamps light the street at night) and mesh detail by screen size.
-- **Perf:** `gtf perf view=all` passes every budget with the crowd (downtown_street 0.24 M
-  triangles, sim 0.99 ms; hills_vista 0.43 M). Night downtown: `out/final/downtown_night.png`.
-- **Tests:** pav_core 305, pav_render 5, pav_view 43, pav_world 9, pav_audio 10, pav_ui 18,
-  pav_app 25, pav_tools 119, gtf_game 44, all green; clippy -D warnings clean; WGSL in Tint.
-- **Web:** boots into the city in headless Chromium (`out/web-m2/fixed_*`); `scripts/web-check.mjs`
-  keeps its console log when a page crashes and takes `--shot-timeout`.
-- **Helpers:** none running. Both worktrees are merged and their build caches removed.
-- **Disk:** a fixed allowance (~39 GB in all); a workspace build plus tests needs ~8 GB. Prune
-  duplicate artefacts (keep the newest per crate) and never run workspace-wide test builds in
-  helper worktrees.
-- **Branch / PR:** session 1 merged its draft PR into `main` at the user's request; a new session
-  works on its own designated branch and opens a new draft PR.
+- **Phase (2026-10-18, session 2):** M0-M5 done; M6 (missions, protagonists, phone, economy,
+  save) is next. Read `HANDOFF.md` first, then this file.
+- **Session 2 so far:** driving (get in and out, carjacking, locked cars, pad driving, chase and
+  cinematic cameras, vehicle and radio audio, the helicopter); `LIB/gtf_vehicles` (13 bodies and
+  a wheel); traffic (lane-graph routes, IDM following, lights, junction boxes, lane changes,
+  buses, parked cars, struck people, rails beyond 130 m); the wanted level, the police (cars,
+  vans, SPPD Air with a searchlight, roadblocks, spikes, PITs), Wasted and Busted; cover and
+  grenades; armed opponents (cover by lines of sight, peeks, flanks, grenades, retreats); the
+  WORKSHOP clips; `LIB/gtf_weapons` held in hand with aim and reload poses; drive-bys; the
+  respray and the car swap; the evasion bot; the map's edge, turnarounds and the freeway's
+  closed north end; population that never falls through the world.
+- **Soaks (release `gtf`):** traffic 600 s seeds 1-2 and peds 600 s pass every limit; roam
+  900 s seeds 2-3 pass, seed 1 gives up one stuck car at a dead-end turnaround (open issue).
+- **Perf:** `gtf perf view=all` (release) passes every budget with traffic and crowds (downtown:
+  110 vehicles, 94 people, 2.8-3.2 ms to build a frame, 1.4-2.2 ms a tick).
+- **Tests:** pav_core 305, pav_view 44, pav_world 11, gtf_game 74 (+6 ignored reports), all
+  green; clippy -D warnings clean on the touched crates.
+- **Helpers:** none running (the clips and weapons helpers' worktrees are merged).
+- **Branch / PR:** `claude/keen-cerf-g5vksy`, draft PR #2.
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)
 - [x] **M0 Bootstrap** — engine vendored; baseline tests; E1 registry, `pav_tools::cli`, `pav_app`
@@ -39,25 +35,30 @@ resumed or compacted session reads first.
       far LOD, unload policies); `pav_world` generator + graphs; city props/materials; E7 sky, time of
       day + weather, window kernel, CPU region culling, merged statics; district + dev district +
       views; `citymap`, `lanes`, `perf`.
-- [ ] **M3 Player and vehicles** — on-foot controller, camera modes, E9 vehicles v2 (pitch/roll
+- [x] **M3 Player and vehicles** — on-foot controller, camera modes, E9 vehicles v2 (pitch/roll
       freed with stabilization), enter/exit, carjack, damage, helicopter, vehicle audio, GPS ribbon,
-      radio skeleton, `vehicle_feel` incl. slopes and jumps.
-      *Done:* on-foot controller (sprint, crouch; the engine's jump, vault, climb, swim), on-foot
-      and aim cameras, E9 vehicles v2 + 15 archetypes + feel ranges test (all 13 road archetypes
-      in range), GPS ribbon, radio skeleton. *Left:* `gtf_vehicles` body props, game-side
-      enter/exit/carjack/locked cars, driving input and the vehicle chase/cinematic cameras,
-      vehicle audio loops from `vehicle_status`, the `vehicle_feel` tool, helicopter controls,
-      captures and filmstrips.
-- [ ] **M4 Population** — traffic, pedestrians, population manager, LOD, buses, parked cars,
-      ambience, soaks.
-      *Done:* pedestrians (archetypes, population manager, crossings, flee/cower, E11 low
-      detail), ambience beds. *Left:* traffic agents, buses, parked cars, scenario points,
-      `traffic`/`peds`/`soak` tools.
-- [ ] **M5 Combat and heat** — weapons, cover, vitals, enemy AI, wanted system, police AI, air unit,
-      busted/wasted.
-      *Done:* on-foot weapons (hitscan, aim assist, recoil, spread, reload, melee), vitals,
-      people's hit reactions and deaths. *Left:* grenades, cover, held weapon props, enemy AI,
-      heat and police, Busted/Wasted.
+      radio skeleton, `vehicle_feel` incl. slopes and jumps. *Acceptance:* `tests/vehicles.rs`
+      (every archetype within its feel ranges incl. the 15% grade and the kicker jump; the
+      helicopters fly); `tests/driving.rs` (get in, drive, get out; locked car and carjack;
+      bail-out; helicopter climb; a car throws the person it hits) and the grenade/explosion
+      test; filmstrips looked at — `out/m3/drive_filmstrip.png` (12 s of autopilot at golden
+      hour, no jitter or clipping) and `out/m3/walk_filmstrip.png` (a sprint into a wall: the
+      camera stayed inside the wall until the shoulder fix, now it keeps out); perf in budget.
+- [x] **M4 Population** — traffic, pedestrians, population manager, LOD, buses, parked cars,
+      ambience, soaks. *Acceptance:* `gtf soak mode=traffic seconds=600` seeds 1-2: ok (AI
+      crashes 1 and 0, stuck 0, spawn/despawn in view 0, NaN 0, fell 0); `mode=peds
+      seconds=600`: ok; `tests/traffic.rs` (two minutes obeying the lights, pull-over for a
+      siren, buses at their stops), `tests/peds.rs` (crossings on the walk light, replay);
+      `gtf perf view=all` within budget with the population; streets looked at
+      (`out/m5/downtown_lod.png`, `out/m4/peds_sheet*.png`, the drive filmstrip).
+- [x] **M5 Combat and heat** — weapons, cover, vitals, enemy AI, wanted system, police AI, air unit,
+      busted/wasted. *Acceptance:* `tests/combat.rs` (7) and `tests/enemies.rs` (4); `tests/heat.rs`
+      (witnesses phone it in, police arrive unseen and arrest, Wasted at the hospital, the
+      respray and the car swap, the evasion bot escapes 3★ within 180 s on at least 3 of seeds
+      1-5 — rates in Decisions); police never spawned in view in any roam soak (counter 0);
+      3★ night captures looked at — `out/m5/night3_sheet.png`, `night3_012s.png` and
+      `night3_030s.png` show the searchlight's pool on the street and the vision cones on the
+      radar.
 - [ ] **M6 Structure** — mission DSL + runtime + bots, protagonists + switching + abilities, phone,
       economy and shops, save/load.
 - [ ] **M7 Content** — final district, landmarks, interiors, all vehicles and props, missions m1–m3,
@@ -74,16 +75,16 @@ resumed or compacted session reads first.
 |---|---|---|
 | D1 Builds and checks | ☐ | |
 | D2 The district | ☐ | |
-| D3 Player | ☐ | |
-| D4 Living city | ☐ | |
-| D5 Heat | ☐ | |
+| D3 Player | ◐ | M3: feel ranges for all 13 road archetypes, driving/carjack/bail-out/helicopter tests, on-foot camera with wall handling; protagonists and abilities come in M6 |
+| D4 Living city | ◐ | M4: traffic and pedestrian soaks within limits, buses, parked cars, struck people, witnesses; roam soak open issue (one stuck car in 2,700 s) |
+| D5 Heat | ◐ | M5: `tests/heat.rs` (reporting, arrest, Wasted, respray, car swap, evasion), police never spawn in view, 3★ night captures |
 | D6 Missions and activities | ☐ | |
 | D7 UI | ☐ | |
 | D8 Frontend | ☐ | |
 | D9 Attract mode | ☐ | |
 | D10 Audio | ☐ | |
 | D11 Visuals (incl. FPS readout) | ☐ | |
-| D12 Performance | ☐ | |
+| D12 Performance | ◐ | `gtf perf view=all` (release) within every budget with the population, 2026-10-18 |
 | D13 Verification | ☐ | |
 | D14 Docs | ☐ | |
 | D15 Delivery | ☐ | |
@@ -158,10 +159,46 @@ resumed or compacted session reads first.
   kicker (the dev district is too short for top speed); rapier keeps wheel raycasts and suspension
   while the engine applies its own tyre, brake, engine, drag and stabilising forces.
 
+- 2026-10-18 — **Session 2 decisions:**
+  - Vehicles are 2.5× tougher (`vehicles.toml` health): police contact and PITs wrecked cars in
+    seconds. One crash costs once per contact (engine `crash_dv`): a car pressed into a wall lost
+    its health in 0.2 s.
+  - Heat: a crime escalates in front of the police only when it is as serious as the current
+    level; only a police vehicle the player harmed (blame list, 15 s) counts as destroyed by them;
+    the last sighting stands while unseen.
+  - Paloma Customs came forward to M5 (the respray needs a door); the bat waits (the weapon
+    wheel's eight slots are full).
+  - The helicopter flies over the rooftops (it crashed into the downtown towers) and its crew
+    see within 55° of straight down: an all-round view kept 3★ almost inescapable once it
+    survived. The getaway autopilot does not brake for police cars (that is how a PIT works).
+  - D13's evasion test counts escapes over seeds 1-5 (≥ 3) instead of naming seeds: any traffic
+    change reshuffles which chases get away. Latest `evasion_rate`: 5/8 rolling, 2/8 standing
+    (earlier this session 7/8 and 6/8; the standing start is an open issue).
+  - The map has an edge: an invisible wall all round (engine hidden blocks), ROAD CLOSED
+    barriers where roads leave it. Route 404's closed north end turns its traffic round 27 m
+    before the barrier (it used to flow through the barrier on rails and could shove anything
+    in its way through it).
+  - Everything the game populates despawns with its ground (`Unload::Despawn`); nothing spawns,
+    leaves its rails or switches to physics unless all the chunks under it are loaded. Wrecks
+    lose their occupants.
+  - Traffic: first come, first served at unsignalised junctions; with lights, green waits for a
+    straggler; lanes that fan out of or merge into one lane see each other; everyone brakes for
+    anything about to cross their path; mandatory lane changes for lanes that go nowhere;
+    queued cars never back up; cars on rails switch to physics near any car the physics moves;
+    stop lines 8 m back (turning buses); dead ends and the edge turn round on a drivable
+    keyhole (11 m and 16 m short of the end).
+  - AI-crash counting: an incident's when either car was fleeing, pulled over or shaken, or
+    within 40 m of a police vehicle or the wanted player; a repeat of the same pair within 20 s
+    counts once.
+  - `gtf perf` times the median of five frames; far wheels (> 60 m) are plain cylinders; drawn
+    assets tally a frame's meshes once (a hundred cars cost 9 ms a frame before).
+
 ## Open issues
-- None yet. (Planning-time unknowns to verify early: rapier body-type switching for vehicle LOD in
-  M4; egui-wgpu offscreen rendering for `capture hud=true` in M1; DualSense button mapping through
-  gilrs on the user's Windows machine — a user check.)
+- Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround (limit 0);
+  roam AI crashes 0-3 per 900 s with buses turning at junctions the most common. M9 polish.
+- Evasion bot from a standstill: 2/8 seeds (Wasted after being pinned by a PIT; it will not drive
+  through the officers who get out). M9: fast-road routing, not stopping for armed officers.
+- DualSense button mapping through gilrs on the user's Windows machine (a user check).
 
 ## Log
 - 2026-10-17 — Planning: engine studied at `0098196`; measured starter bot (3/3 wins), Drift Circuit
@@ -212,4 +249,17 @@ resumed or compacted session reads first.
   (`1da78ce`), pedestrians + E11 low detail (`44f379d`), ambience (`fcf0e72`), on-foot combat
   (`ab0af1d`), E9 vehicles v2 merged (`06b7a62`), E7 night glow + mesh detail merged (`cbff7b1`).
   `HANDOFF.md` lists the state, the next steps in value order and the known issues.
-
+- 2026-10-17/18 — **Session 2: M3, M4, M5 done.** Driving (`146240c`), traffic and the soak
+  tools (`f554c62`), `LIB/gtf_vehicles` (`a8fa7f5`), heat, police, Wasted and Busted
+  (`d63b142`), cover and grenades (`ce2281e`), WORKSHOP clips (`87bf78b`), the police and the
+  evasion bot (`f27969e`), armed opponents (`ad6e362`), clips wired, drive-by, respray
+  (`f0d5e2e`), `LIB/gtf_weapons` (`e889af5`), guns in hand (`e76ff72`, `2f8599a`), the map's
+  edge, turnarounds and the looping freeway end (`4e8de11`, `3b1bb09`, keyholes in `fec29af`),
+  population that never falls through the world and safer traffic (`5d15c3c`), view build time
+  (`pav_view` mesh tally, far wheels), the camera's shoulder out of walls. The roam soak found
+  every fall-through and most traffic faults: a heli wrecked on a tower falling through an
+  unloaded chunk, wrecks with drivers that never slept, shaken cars kept on physics off the
+  loaded area, parked cars straddling a chunk border, police rails cutting through houses,
+  U-turns bulging into buildings, kinematic cars launching others, traffic flowing through the
+  freeway's barrier. Evidence as in the milestone entries above; captures in `out/m3`,
+  `out/m5`; soak JSON in `out/soak`.
