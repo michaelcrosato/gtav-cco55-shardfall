@@ -1261,7 +1261,7 @@ impl ViewBuilder {
                 let mut lights = Vec::new();
                 let mut night_lights = Vec::new();
                 let mut list = Vec::with_capacity(chunk.blocks.len());
-                for b in chunk.blocks.iter().filter(|b| b.alive) {
+                for b in chunk.blocks.iter().filter(|b| b.alive && !b.has(block_flags::HIDDEN)) {
                     // Blocks are world-mapped with seed 0, so neighbours (4 m floor tiles) join;
                     // a material laid on the block's own faces (a facade) is seeded by its place.
                     let at = b.center().to_array().map(f32::to_bits);

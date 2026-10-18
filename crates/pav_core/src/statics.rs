@@ -32,6 +32,8 @@ pub mod block_flags {
     pub const CRACKED: u32 = 16;
     /// Crumbles only under the player (monsters fall into holes but don't make them).
     pub const PLAYER_CRUMBLE: u32 = 32;
+    /// Not drawn: collision only (an invisible wall at the edge of the world).
+    pub const HIDDEN: u32 = 64;
 }
 
 /// Which region static content belongs to.
