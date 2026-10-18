@@ -259,25 +259,43 @@ struct Segment {
 
 /// How far short of the map's edge a road that runs off it ends (m): its turnaround and the
 /// barriers beyond it fit in between.
-const EDGE_PULL: f32 = 14.0;
+const EDGE_PULL: f32 = 16.0;
 
 /// How far short of a dead end (a lot, a building) a road's lanes end (m), so the U-turn there
 /// stays on the road.
-const DEAD_PULL: f32 = 9.0;
+const DEAD_PULL: f32 = 11.0;
 
-/// A turnaround a car can drive: from the end of `p0` (heading `d0`) out toward the kerb and
-/// round a 4.5 m circle to the start of the lane back, `p2` (on the far side of the centre line).
+/// A turnaround a car can drive: a keyhole from the end of `p0` (heading `d0`), swinging out
+/// toward the kerb and round (4 m either side of the centre line, 8.3 m on), back in to the start
+/// of the lane the other way, `p2`.
 fn turnaround(p0: Vec3, d0: Vec3, p2: Vec3) -> Vec<Vec3> {
-    let r = 4.5;
-    let across = (p2 - p0).normalize_or_zero();
-    let c = (p0 + p2) * 0.5 + d0 * 1.0;
-    let mut pts = vec![p0];
-    for k in 0..=10 {
-        let t = std::f32::consts::PI * k as f32 / 10.0;
-        pts.push(c - across * r * t.cos() + d0 * r * t.sin());
-    }
-    pts.push(p2);
-    pts
+    // (across from p0's side to p2's, along the way in), the ends at ±1.
+    const SHAPE: [(f32, f32); 13] = [
+        (-1.0, 0.0),
+        (-1.45, 1.5),
+        (-2.0, 3.0),
+        (-2.22, 4.5),
+        (-1.83, 6.5),
+        (-1.0, 7.8),
+        (0.0, 8.3),
+        (1.0, 7.8),
+        (1.83, 6.5),
+        (2.22, 4.5),
+        (2.0, 3.0),
+        (1.45, 1.5),
+        (1.0, 0.0),
+    ];
+    let mid = (p0 + p2) * 0.5;
+    let half = (p2 - p0) * 0.5;
+    // Across scales with the lanes' spacing up to 4 m out; along it is fixed.
+    let unit = half.normalize_or_zero();
+    let h = half.length();
+    SHAPE
+        .iter()
+        .map(|&(x, y)| {
+            mid + unit * if x.abs() <= 1.0 { x * h } else { x.signum() * (h + (x.abs() - 1.0) * (4.0 - h) / 1.22) } + d0 * y
+        })
+        .collect()
 }
 
 /// Points every ~4 m from `p` to `q` on the ground (terrain heights added).
@@ -558,10 +576,11 @@ impl LaneGraph {
                 jm.signal = Some(SignalPlan { offset, ..plan });
             }
         }
-        // Stop lines: signalised approaches stop 5 m back; others yield at the line.
+        // Stop lines: signalised approaches stop 8 m back (room for a bus swinging round the
+        // corner); others yield at the line.
         for l in g.lanes.iter_mut() {
             if l.kind != LaneKind::Connector && l.junction.is_some() {
-                l.stop = 5.0;
+                l.stop = 8.0;
             }
         }
         // U-turns at dead ends.
