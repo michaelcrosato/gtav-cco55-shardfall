@@ -8,7 +8,8 @@ title = "Test Drive II"
 protagonist = "mack"
 district = "dev"
 text = "Every on-foot and story step kind, end to end."
-start = "at:40,-70"
+start = "spot:t2_start"
+blip = { letter = "T", at = "spot:test_far" }
 time = { at = "15:00", lock = true }
 reward = { cash = 800, text = ["roxy", "Nice work, old man. Same time next week?"] }
 

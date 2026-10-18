@@ -210,3 +210,9 @@ yaw = 0.0
 name = "t1_goon"
 at = [5.5, 3.5]
 yaw = 270.0
+
+# The second test mission's start: on the sidewalk by the range, facing the street.
+[[spot]]
+name = "t2_start"
+at = [10.44, 4.06]
+yaw = 180.0

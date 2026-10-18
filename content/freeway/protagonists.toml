@@ -117,7 +117,7 @@ seconds = 10.0
 time_scale = 0.5
 grip = 0.4
 in_car = true
-tint = [0.25, 1.0, 0.55, 0.14]
+tint = [0.25, 1.0, 0.55, 0.22]
 fill = { near_miss = 0.06, drift = 0.03, air = 0.08 }
 
 [ability.deadeye]
@@ -127,7 +127,7 @@ time_scale = 0.35
 assist = 2.0
 damage = 1.5
 on_foot = true
-tint = [0.3, 0.55, 1.0, 0.16]
+tint = [0.3, 0.55, 1.0, 0.24]
 fill = { headshot = 0.12, kill = 0.06, takedown = 0.15 }
 
 [ability.overdrive]
@@ -138,5 +138,5 @@ taken = 0.5
 knockback = 2.0
 on_foot = true
 in_car = true
-tint = [1.0, 0.12, 0.1, 0.2]
+tint = [1.0, 0.12, 0.1, 0.26]
 fill = { dealt = 0.004, taken = 0.004, explosion = 0.12 }

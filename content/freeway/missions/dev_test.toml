@@ -9,6 +9,7 @@ protagonist = "dez"
 district = "dev"
 text = "Every driving step kind, end to end."
 start = "at:-30,-26"
+blip = { letter = "T", at = "spot:test_start" }
 time = { at = "12:00", lock = true }
 weather = "clear"
 reward = { cash = 500 }

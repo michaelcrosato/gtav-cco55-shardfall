@@ -144,3 +144,87 @@ layers = [
     { wave = "triangle", freq = 2093, decay = 0.22, volume = 0.06, delay = 0.07 },
     { wave = "noise", freq = 1, decay = 0.03, volume = 0.03, cutoff = 6000 },
 ]
+
+# Missions: a sting when one begins, a tick per step, the MISSION PASSED fanfare (a rising major
+# arpeggio) and MISSION FAILED (a falling minor one).
+[cue."mission.start"]
+layers = [
+    { wave = "triangle", freq = 392, decay = 0.25, volume = 0.08 },
+    { wave = "triangle", freq = 587.3, decay = 0.35, volume = 0.07, delay = 0.12 },
+    { wave = "noise", freq = 1, attack = 0.01, decay = 0.4, volume = 0.03, cutoff = 2500, cutoff_end = 600 },
+]
+
+[cue."mission.step"]
+layers = [{ wave = "sine", freq = 1046.5, decay = 0.12, volume = 0.05 }]
+
+[cue."mission.pass"]
+layers = [
+    { wave = "triangle", freq = 523.3, decay = 0.3, volume = 0.08 },
+    { wave = "triangle", freq = 659.3, decay = 0.3, volume = 0.08, delay = 0.12 },
+    { wave = "triangle", freq = 784, decay = 0.4, volume = 0.08, delay = 0.24 },
+    { wave = "triangle", freq = 1046.5, attack = 0.02, decay = 0.9, sustain = 0.3, hold = 0.4, release = 0.3, volume = 0.07, delay = 0.36 },
+]
+
+[cue."mission.fail"]
+layers = [
+    { wave = "square", freq = 311.1, decay = 0.35, volume = 0.05, duty = 0.3, cutoff = 1800 },
+    { wave = "square", freq = 261.6, decay = 0.35, volume = 0.05, duty = 0.3, cutoff = 1600, delay = 0.18 },
+    { wave = "square", freq = 207.7, attack = 0.02, decay = 0.9, volume = 0.05, duty = 0.3, cutoff = 1400, delay = 0.36 },
+]
+
+# Dialogue babble: one short voiced syllable (pitched per speaker by the game).
+[cue."voice.babble"]
+layers = [
+    { wave = "square", freq = 180, freq_end = 210, glide = 0.05, attack = 0.005, decay = 0.07, volume = 0.035, duty = 0.35, cutoff = 1400 },
+    { wave = "sine", freq = 360, freq_end = 420, glide = 0.05, attack = 0.005, decay = 0.06, volume = 0.02 },
+]
+voices = 2
+
+# The character switch: a rising whoosh up into the sky-cam, a thump landing.
+[cue."switch.whoosh"]
+layers = [
+    { wave = "noise", freq = 1, attack = 0.25, decay = 0.9, volume = 0.12, cutoff = 600, cutoff_end = 4000 },
+    { wave = "sine", freq = 110, freq_end = 330, glide = 0.8, attack = 0.1, decay = 0.9, volume = 0.06 },
+]
+
+[cue."switch.land"]
+layers = [
+    { wave = "sine", freq = 90, freq_end = 45, glide = 0.15, decay = 0.25, volume = 0.3 },
+    { wave = "noise", freq = 1, decay = 0.15, volume = 0.08, cutoff = 1800, cutoff_end = 300 },
+]
+
+# Special abilities: on (a swelling chord), off (it sinks away).
+[cue."ability.on"]
+layers = [
+    { wave = "sine", freq = 220, freq_end = 440, glide = 0.3, attack = 0.05, decay = 0.6, volume = 0.1 },
+    { wave = "triangle", freq = 659.3, attack = 0.1, decay = 0.6, volume = 0.05, delay = 0.1 },
+]
+
+[cue."ability.off"]
+layers = [{ wave = "sine", freq = 440, freq_end = 180, glide = 0.4, decay = 0.5, volume = 0.08 }]
+
+# The phone: up, away, and the camera's shutter.
+[cue."phone.open"]
+layers = [
+    { wave = "sine", freq = 880, decay = 0.06, volume = 0.05 },
+    { wave = "sine", freq = 1318.5, decay = 0.08, volume = 0.05, delay = 0.05 },
+]
+
+[cue."phone.close"]
+layers = [
+    { wave = "sine", freq = 1318.5, decay = 0.06, volume = 0.05 },
+    { wave = "sine", freq = 880, decay = 0.08, volume = 0.05, delay = 0.05 },
+]
+
+[cue."camera.shutter"]
+layers = [
+    { wave = "noise", freq = 1, decay = 0.03, volume = 0.18, cutoff = 7000 },
+    { wave = "noise", freq = 1, decay = 0.04, volume = 0.12, cutoff = 5000, delay = 0.06 },
+]
+
+# Something picked up.
+[cue."ui.pickup"]
+layers = [
+    { wave = "triangle", freq = 987.8, decay = 0.08, volume = 0.07 },
+    { wave = "triangle", freq = 1318.5, decay = 0.14, volume = 0.06, delay = 0.06 },
+]
