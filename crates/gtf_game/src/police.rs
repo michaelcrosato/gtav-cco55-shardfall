@@ -96,8 +96,18 @@ fn route_from(city: &City, from: Vec3, to: Vec3) -> Vec<Vec3> {
             pts.remove(0);
         }
     }
-    pts.push(to);
+    // Off the road (the player on foot in a yard) the rails stop at the kerb: they never cut
+    // across lots and through houses.
+    if on_road(city, to) {
+        pts.push(to);
+    }
     pts
+}
+
+/// Whether `p` is on a road cars drive (a street, avenue, boulevard or alley).
+fn on_road(city: &City, p: Vec3) -> bool {
+    use pav_world::def::RoadClass;
+    city.road_at(Vec2::new(p.x, p.z)).is_some_and(|r| !matches!(r, RoadClass::Path | RoadClass::Channel))
 }
 
 /// Whether something fixed stands between `from` and `to` (a roadblock out of sight).
@@ -107,8 +117,7 @@ fn sight_blocked(sim: &Sim, from: Vec3, to: Vec3) -> bool {
 
 /// Whether the ground at `p` is loaded (its streaming chunk is active).
 fn ground_loaded(sim: &Sim, p: Vec3) -> bool {
-    let size = pav_core::statics::CHUNK_SIZE;
-    sim.state.statics.is_active(pav_core::statics::RegionKey::Chunk((p.x / size).floor() as i32, (p.z / size).floor() as i32))
+    crate::world::ground_loaded(sim, p)
 }
 
 /// What an officer on foot is doing.
@@ -158,7 +167,13 @@ pub struct Police {
     /// Seconds the player has been all but still (in a car stopped this long, units pull up and
     /// their crews get out).
     pub still: f32,
+    /// Wrecked units that left the roster this tick, for the game to clear away (with anyone
+    /// still sitting in them) like any other wreck.
+    pub wrecks: Vec<EntityId>,
 }
+
+/// How far from straight down a helicopter crew sees (radians).
+const AIR_VIEW: f32 = 55.0 * std::f32::consts::PI / 180.0;
 
 /// A car stopped this long (s) brings the crews out.
 const STILL_HALT: f32 = 2.0;
@@ -314,10 +329,16 @@ impl Police {
         // Gone, wrecked or emptied units leave the roster; dead officers too.
         self.officers.retain(|o| sim.state.entities.get(o.id).is_some_and(|e| !e.name.starts_with("dead:")));
         let officers = &self.officers;
+        let mut wrecks = Vec::new();
         self.units.retain(|u| {
             let alive = sim.state.entities.get(u.vehicle).and_then(|e| e.vehicle.as_ref()).is_some_and(|v| !v.state.wrecked);
-            alive || officers.iter().any(|o| o.vehicle == u.vehicle)
+            let keep = alive || officers.iter().any(|o| o.vehicle == u.vehicle);
+            if !keep && sim.state.entities.get(u.vehicle).is_some() {
+                wrecks.push(u.vehicle);
+            }
+            keep
         });
+        self.wrecks.extend(wrecks);
         self.pass -= m.dt;
         if self.pass <= 0.0 {
             self.pass = 1.0;
@@ -418,6 +439,7 @@ impl Police {
                 Kind::Air => "sppd_air",
             };
             let Ok(vehicle) = crate::vehicles::spawn(sim, key, pos + Vec3::Y * 0.05, yaw, None) else { return };
+            crate::world::ambient(sim, vehicle);
             let crew_n = match kind {
                 Kind::Car => 2,
                 Kind::Van => 4,
@@ -427,6 +449,7 @@ impl Police {
             for seat in 0..crew_n {
                 let look = uniform(sim);
                 let id = sim.spawn_npc("cop:officer", pos, yaw, look, None, None);
+                crate::world::ambient(sim, id);
                 if sim.enter_vehicle_seat(id, vehicle, seat) {
                     crew.push(id);
                     self.officers.push(Officer { id, vehicle, seat, duty: Duty::Seated, cooldown: 1.0 });
@@ -496,7 +519,12 @@ impl Police {
         let seen = if u.kind == Kind::Air {
             let range = if m.hidden { 35.0 } else { 60.0 };
             let lit = !m.night || u.light.distance(m.player) < 9.0;
-            lit && Self::can_see(sim, c.center - Vec3::Y * 1.5, Vec3::ZERO, range, std::f32::consts::PI, m.player)
+            // The crew watch the ground below them (at night, the searchlight's pool): within 55°
+            // of straight down, which takes in their orbit round the player — outrun it and they
+            // lose you.
+            let eye = c.center - Vec3::Y * 1.5;
+            let below = (m.player + Vec3::Y - eye).normalize_or_zero().dot(Vec3::NEG_Y) > AIR_VIEW.cos();
+            lit && below && Self::can_see(sim, eye, Vec3::ZERO, range, std::f32::consts::PI, m.player)
         } else {
             crew_in
                 && Self::can_see(sim, c.center + Vec3::Y * 0.6, c.forward(), if m.hidden { 35.0 } else { 60.0 }, 1.2, m.player)
@@ -533,7 +561,7 @@ impl Police {
         }
         // Far away: along the path on rails; near (on loaded ground): back on the wheels.
         let dist = c.center.distance(m.player);
-        if u.rails && dist < RAILS_NEAR && ground_loaded(sim, c.feet()) {
+        if u.rails && dist < RAILS_NEAR && ground_loaded(sim, c.feet()) && on_road(m.city, c.feet()) {
             sim.set_vehicle_kinematic(u.vehicle, false);
             u.rails = false;
         } else if !u.rails && (dist > RAILS_FAR + 20.0 || !ground_loaded(sim, c.feet())) {
@@ -706,9 +734,14 @@ impl Police {
         };
         u.orbit += dt * 0.18;
         let ground = m.city.ground_y(Vec2::new(centre.x, centre.z)).max(m.player.y);
-        let want = Vec3::new(centre.x + u.orbit.cos() * radius, ground + 32.0, centre.z + u.orbit.sin() * radius);
+        let mut want = Vec3::new(centre.x + u.orbit.cos() * radius, ground + 32.0, centre.z + u.orbit.sin() * radius);
         let to = want - c.center;
         let flat = Vec2::new(to.x, to.z);
+        // Over the rooftops: clear of the towers here and on the way (40 m on).
+        let here = Vec2::new(c.center.x, c.center.z);
+        let on = here + flat.normalize_or_zero() * flat.length().min(40.0);
+        want.y = want.y.max(m.city.roof_y(here, 30.0).max(m.city.roof_y(on, 30.0)) + 15.0);
+        let to = want - c.center;
         // Face the player when close, else where it is going.
         let look = if flat.length() < 25.0 { m.player - c.center } else { to };
         let yaw_want = look.x.atan2(look.z);
@@ -854,7 +887,7 @@ impl Police {
         let cam = m.camera;
         let mut keep = Vec::new();
         for b in std::mem::take(&mut self.blocks) {
-            if b.at.distance(m.player) > 260.0 && !crate::traffic::seen(&cam, b.at) {
+            if b.at.distance(m.player) > 200.0 && !crate::traffic::seen(&cam, b.at) {
                 for c in &b.cars {
                     let crew: Vec<EntityId> = self.officers.iter().filter(|o| o.vehicle == *c).map(|o| o.id).collect();
                     self.officers.retain(|o| o.vehicle != *c);
@@ -935,8 +968,10 @@ impl Police {
                 let look = uniform(sim);
                 let stand = pos - dir * 2.5 + across * (seat as f32 - 0.5) * 1.6;
                 let id = sim.spawn_npc("cop:officer", stand, dir.x.atan2(dir.z) + std::f32::consts::PI, look, None, None);
+                crate::world::ambient(sim, id);
                 self.officers.push(Officer { id, vehicle: car, seat, duty: Duty::Chase, cooldown: 1.5 });
             }
+            crate::world::ambient(sim, car);
             sim.set_vehicle_lights(car, true);
             cars.push(car);
         }

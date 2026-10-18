@@ -229,6 +229,7 @@ impl Enemies {
             puppet.weapon.kind = pav_core::puppet::WeaponKind::Dagger;
         }
         let id = sim.spawn_npc(&format!("{}:{}", s.prefix, side), feet, facing, puppet, None, None);
+        crate::world::ambient(sim, id);
         self.list.push(Enemy {
             id,
             side: side.into(),

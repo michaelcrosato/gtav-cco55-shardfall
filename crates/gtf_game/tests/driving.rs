@@ -207,14 +207,25 @@ fn a_car_throws_the_person_it_hits() {
     let mut sim = roam();
     cmd(&mut sim, "drive okami_kaze");
     let car = newest(&sim, "okami_kaze");
-    // Someone standing 40 m down the road.
+    // Someone standing 40 m down a clear road (no traffic in the way to strike them first).
     let c = gtf_game::drive::Car::read(&sim, car).unwrap();
+    let others: Vec<EntityId> = sim
+        .state
+        .entities
+        .iter()
+        .filter(|e| e.vehicle.is_some() && e.id != car && e.pos.distance(c.center) < 80.0)
+        .map(|e| e.id)
+        .collect();
+    for id in others {
+        sim.despawn(id);
+    }
     let who = sim.spawn_npc("target", c.feet() + c.forward() * 40.0, 0.0, pav_core::puppet::PuppetDef::default(), None, None);
     steps(&mut sim, 5, &InputFrame::default());
     let mut hit_at = None;
     for _ in 0..360 {
         sim.step(&throttle(1.0));
-        if game(&sim).struck.count > 0 {
+        // (This person: traffic may strike someone else meanwhile.)
+        if game(&sim).struck.ghosts.iter().any(|g| g.0 == who) {
             hit_at = sim.vehicle_status(car).map(|s| s.kmh);
             break;
         }

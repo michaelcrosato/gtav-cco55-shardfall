@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Result, anyhow};
 use glam::{Vec2, Vec3};
 use pav_core::Color;
+use pav_core::entity::EntityId;
 use pav_core::present::{Blip, BlipIcon};
 use pav_core::region::StreamSettings;
 use pav_core::sim::Sim;
@@ -160,4 +161,43 @@ pub fn signal_lamps(city: &City, at: Vec3, t: f32, out: &mut Vec<pav_core::prese
             glow: Default::default(),
         });
     }
+}
+
+/// Marks `id` as population the game makes again (traffic, parked cars, people, the police):
+/// when its ground unloads it goes with it, rather than staying behind with nothing under it.
+pub fn ambient(sim: &mut Sim, id: EntityId) {
+    if let Some(e) = sim.state.entities.get_mut(id) {
+        e.unload = pav_core::entity::Unload::Despawn;
+    }
+}
+
+/// People of the population on foot where the ground is not loaded (they walked off the edge of
+/// the streamed area, or were left there) go, as the engine removes those standing on ground
+/// that unloads: otherwise they would fall through.
+pub fn sweep_unloaded(sim: &mut Sim) {
+    let gone: Vec<EntityId> = sim
+        .state
+        .entities
+        .iter()
+        .filter(|e| e.unload == pav_core::entity::Unload::Despawn && Some(e.id) != sim.state.player)
+        .filter(|e| e.character.as_ref().is_some_and(|c| c.riding.is_none()))
+        .filter(|e| !ground_loaded(sim, e.pos))
+        .map(|e| e.id)
+        .collect();
+    for id in gone {
+        sim.despawn(id);
+    }
+}
+
+/// Whether the ground around `p` is loaded (every streaming chunk within a car's length of it is
+/// active; none lies beyond the map's edge): only there do bodies with physics stand on it
+/// (elsewhere they fall through, or tip over the edge of what is loaded).
+pub fn ground_loaded(sim: &Sim, p: Vec3) -> bool {
+    use pav_core::statics::{CHUNK_SIZE, RegionKey};
+    const REACH: f32 = 3.0;
+    let (lo, hi) = sim.region_provider().map(|r| r.bounds()).unwrap_or((glam::IVec2::MIN, glam::IVec2::MAX));
+    let span = |a: f32, min: i32, max: i32| {
+        (((a - REACH) / CHUNK_SIZE).floor() as i32).max(min)..=(((a + REACH) / CHUNK_SIZE).floor() as i32).min(max)
+    };
+    span(p.x, lo.x, hi.x).all(|x| span(p.z, lo.y, hi.y).all(|z| sim.state.statics.is_active(RegionKey::Chunk(x, z))))
 }

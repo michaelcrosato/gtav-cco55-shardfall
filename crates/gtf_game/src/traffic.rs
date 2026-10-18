@@ -174,12 +174,28 @@ pub struct Traffic {
     pub filled: bool,
     pub spawned: u32,
     pub despawned: u32,
-    /// Soak counters (PLAN §7.5).
+    /// Soak counters (PLAN §7.5): cars given up as stuck and traffic hitting traffic — the
+    /// traffic's own (`stuck`, `ai_crashes`), and an incident's (`stuck_incident`: a police car,
+    /// a wreck or an abandoned car within 40 m; `incident_crashes`: one of the two fleeing, pulled
+    /// over or shaken).
     pub stuck: u32,
     pub spawn_in_view: u32,
     pub despawn_in_view: u32,
     pub ai_crashes: u32,
     pub nan: u32,
+    #[serde(default)]
+    pub stuck_incident: u32,
+    #[serde(default)]
+    pub incident_crashes: u32,
+    /// Pairs of traffic cars that collided lately (ids, tick).
+    #[serde(default)]
+    pub crashed: Vec<(u32, u32, u64)>,
+    /// Where the first AI crashes happened and between whom, and where cars were given up as
+    /// stuck (for the soak report).
+    #[serde(skip)]
+    pub crash_sites: Vec<String>,
+    #[serde(skip)]
+    pub stuck_sites: Vec<String>,
     /// The autopilot's input for the player's car this tick.
     pub pilot_input: Option<VehicleInput>,
     /// The autopilot is running from this point (the police): it ignores the lights, drives
@@ -191,6 +207,43 @@ pub struct Traffic {
     /// The bus loop (derived from the city and the data).
     #[serde(skip)]
     pub bus_loop: Option<Arc<BusLoop>>,
+    /// Lanes that start or end where others do (derived from the lane graph).
+    #[serde(skip)]
+    pub siblings: Option<Arc<Siblings>>,
+}
+
+/// Lanes that share their start (turns fanning out of one approach) or their end (connectors and
+/// ramps merging into one lane): cars on one are seen from the others where they overlap.
+#[derive(Debug, Default)]
+pub struct Siblings {
+    lanes: usize,
+    start: BTreeMap<u32, Vec<u32>>,
+    end: BTreeMap<u32, Vec<u32>>,
+}
+
+impl Siblings {
+    fn of(g: &LaneGraph) -> Siblings {
+        let mut by_prev: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+        let mut by_next: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+        for (i, l) in g.lanes.iter().enumerate() {
+            if let [p] = l.prev[..] {
+                by_prev.entry(p).or_default().push(i as u32);
+            }
+            if let [n] = l.next[..] {
+                by_next.entry(n).or_default().push(i as u32);
+            }
+        }
+        let pair_up = |groups: BTreeMap<u32, Vec<u32>>| {
+            let mut out: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+            for list in groups.values().filter(|l| l.len() > 1) {
+                for &a in list {
+                    out.insert(a, list.iter().copied().filter(|&b| b != a).collect());
+                }
+            }
+            out
+        };
+        Siblings { lanes: g.lanes.len(), start: pair_up(by_prev), end: pair_up(by_next) }
+    }
 }
 
 /// A bus route: the lanes around the loop and the stops.
@@ -217,9 +270,18 @@ pub struct Moment<'a> {
     pub people: Vec<Vec3>,
     /// Gunfire this tick: where.
     pub gunfire: Option<Vec3>,
+    /// The police's vehicles (the autopilot on the run does not brake for them: that is how a
+    /// PIT stops a car).
+    pub police: Vec<EntityId>,
 }
 
 /// Whether the camera sees a point (in front, within a wide cone, not far off; close by always).
+/// Everyone sitting in `car` but the player.
+pub fn occupants(sim: &Sim, car: EntityId) -> Vec<EntityId> {
+    let Some(v) = sim.state.entities.get(car).and_then(|e| e.vehicle.as_ref()) else { return Vec::new() };
+    v.driver.into_iter().chain(v.passengers.iter().flatten().copied()).filter(|&id| Some(id) != sim.state.player).collect()
+}
+
 pub fn seen(cam: &CameraIntent, p: Vec3) -> bool {
     let d = p - cam.eye;
     let len = d.length();
@@ -252,6 +314,68 @@ fn ahead(g: &LaneGraph, lane: u32, along: f32, route: &[u32], dist: f32) -> (Vec
 
 /// Picks the next lane after `lane`: straight on most of the time, then right, then left;
 /// U-turns only at dead ends.
+/// Whether every way on from `lane` runs off the map (the freeway's far end) or stops within
+/// `depth` lanes: the player's autopilot keeps out of such roads.
+fn dead_end(g: &LaneGraph, lane: u32, depth: u32) -> bool {
+    let open: Vec<u32> = g.lanes[lane as usize]
+        .next
+        .iter()
+        .copied()
+        .filter(|&n| {
+            let l = &g.lanes[n as usize];
+            !l.closed && drivable(l.kind)
+        })
+        .collect();
+    if open.is_empty() {
+        return true;
+    }
+    depth > 0 && open.iter().all(|&n| dead_end(g, n, depth - 1))
+}
+
+/// Whether there is room to move over into a lane at `at` (its occupants): nobody beside or just
+/// ahead, and nobody behind closing faster than they could brake for (two seconds of the speed
+/// they gain on a car going `speed`).
+fn gap_beside(cars: Option<&Vec<(f32, f32, f32, EntityId)>>, me: EntityId, at: f32, speed: f32) -> bool {
+    cars.is_none_or(|v| {
+        v.iter().all(|&(al, sp, half, id)| {
+            let behind = 6.0 + half + ((sp - speed) * 2.0).max(0.0) + sp * 0.5;
+            id == me || al < at - behind || al > at + 10.0 + half
+        })
+    })
+}
+
+/// Whether `lane` leads on to an open lane.
+fn goes_on(g: &LaneGraph, lane: u32) -> bool {
+    g.lanes[lane as usize].next.iter().any(|&n| {
+        let l = &g.lanes[n as usize];
+        !l.closed && drivable(l.kind)
+    })
+}
+
+/// For a lane that goes nowhere: the neighbour to move into, toward the nearest lane beside it
+/// that does go on (the outer lane at the last exit before the closed spur).
+fn way_on(g: &LaneGraph, lane: u32) -> Option<u32> {
+    let l = &g.lanes[lane as usize];
+    for (first, right) in [(l.right, true), (l.left, false)] {
+        let mut at = first;
+        for _ in 0..4 {
+            let Some(id) = at else { break };
+            if goes_on(g, id) {
+                return first;
+            }
+            let x = &g.lanes[id as usize];
+            at = if right { x.right } else { x.left };
+        }
+    }
+    None
+}
+
+/// When a car reaches the stop line `to_line` metres ahead at `speed`, in half-second steps (the
+/// order of who goes first at an unsignalised junction).
+fn first_come(to_line: f32, speed: f32) -> i32 {
+    (to_line.max(0.0) / speed.max(1.0) / 0.5) as i32
+}
+
 fn pick_next(g: &LaneGraph, lane: u32, rng: &mut Rng) -> Option<u32> {
     let options: Vec<(u32, f32)> = g.lanes[lane as usize]
         .next
@@ -343,6 +467,7 @@ fn seat_driver(sim: &mut Sim, car: EntityId, at: Vec3) -> Option<EntityId> {
         Some(crate::peds::look(&a, &mut sim.state.rng))
     });
     let id = sim.spawn_npc("driver", at, 0.0, look.unwrap_or_default(), None, None);
+    crate::world::ambient(sim, id);
     if sim.enter_vehicle_seat(id, car, 0) {
         Some(id)
     } else {
@@ -354,10 +479,14 @@ fn seat_driver(sim: &mut Sim, car: EntityId, at: Vec3) -> Option<EntityId> {
 impl Traffic {
     /// Stop driving `car` (carjacked, abandoned): it is left where it is. Returns its driver if
     /// still seated.
-    pub fn release(&mut self, car: EntityId) -> Option<EntityId> {
+    pub fn release(&mut self, sim: &mut Sim, car: EntityId) -> Option<EntityId> {
         let i = self.cars.iter().position(|a| a.car == car)?;
         let a = self.cars.remove(i);
         self.loose.push(car);
+        // Off the rails: someone else drives it now.
+        if a.tier == Tier::Rail {
+            sim.set_vehicle_kinematic(car, false);
+        }
         a.driver
     }
 
@@ -371,13 +500,13 @@ impl Traffic {
         let g = &city.lanes;
         let fwd = c.forward();
         let keep = |l: &pav_world::lanes::Lane| !l.closed && drivable(l.kind);
-        let Some((lane, along, _)) = g.nearest(c.feet(), keep) else { return };
+        let Some((lane, along, _)) = g.nearest_level(c.feet(), 4.0, keep).or_else(|| g.nearest(c.feet(), keep)) else { return };
         // The nearest lane may run the other way: prefer one along the car's heading.
         let lane = if g.lanes[lane as usize].at(along).1.dot(fwd) < 0.0 {
             let keep2 = |l: &pav_world::lanes::Lane| {
                 keep(l) && l.points.len() >= 2 && (l.points[1] - l.points[0]).normalize_or_zero().dot(fwd) > 0.3
             };
-            g.nearest(c.feet(), keep2).map(|x| x.0).unwrap_or(lane)
+            g.nearest_level(c.feet(), 4.0, keep2).map(|x| x.0).unwrap_or(lane)
         } else {
             lane
         };
@@ -430,11 +559,50 @@ impl Traffic {
                 && ours(*o)
                 && vehicle.0 < o.0
             {
-                self.ai_crashes += 1;
+                let calm = |id: EntityId| self.cars.iter().any(|a| a.car == id && a.mood == Mood::Cruise);
+                // Two cars that keep bumping (wedged, nudging free) are one crash.
+                let pair = (vehicle.0, o.0);
+                let again = self.crashed.iter().any(|&(a, b, t)| (a, b) == pair && sim.state.tick < t + 20 * 60);
+                self.crashed.retain(|&(_, _, t)| sim.state.tick < t + 20 * 60);
+                self.crashed.push((pair.0, pair.1, sim.state.tick));
+                if again {
+                } else if calm(*vehicle) && calm(*o) {
+                    self.ai_crashes += 1;
+                    if self.crash_sites.len() < 16 {
+                        let what = |id: EntityId| {
+                            let a = self.cars.iter().find(|a| a.car == id);
+                            let c = Car::read(sim, id);
+                            format!(
+                                "{}#{} {:?} lane {} along {:.0} speed {:.1} held {} pass {:.1}",
+                                sim.state.entities.get(id).map(|e| e.name.as_str()).unwrap_or("?"),
+                                id.0,
+                                a.map(|a| a.tier),
+                                a.map(|a| a.lane).unwrap_or(0),
+                                a.map(|a| a.along).unwrap_or(0.0),
+                                c.map(|c| c.speed()).unwrap_or(0.0),
+                                a.is_some_and(|a| a.held),
+                                a.map(|a| a.passing).unwrap_or(0.0),
+                            )
+                        };
+                        let at = sim.state.entities.get(*vehicle).map(|e| e.pos).unwrap_or_default();
+                        self.crash_sites.push(format!(
+                            "tick {} at {:.0},{:.0} impulse {:.0}: {} / {}",
+                            sim.state.tick,
+                            at.x,
+                            at.z,
+                            impulse,
+                            what(*vehicle),
+                            what(*o)
+                        ));
+                    }
+                } else {
+                    self.incident_crashes += 1;
+                }
             }
             for id in [Some(*vehicle), *other].into_iter().flatten() {
+                let loaded = sim.state.entities.get(id).is_some_and(|e| crate::world::ground_loaded(sim, e.pos));
                 if let Some(a) = self.cars.iter_mut().find(|a| a.car == id) {
-                    if a.tier == Tier::Rail {
+                    if a.tier == Tier::Rail && loaded {
                         sim.set_vehicle_kinematic(id, false);
                         a.tier = Tier::Full;
                     }
@@ -464,9 +632,13 @@ impl Traffic {
             "spawned": self.spawned,
             "despawned": self.despawned,
             "stuck_cars": self.stuck,
+            "stuck_incident": self.stuck_incident,
             "spawn_in_view": self.spawn_in_view,
             "despawn_in_view": self.despawn_in_view,
             "ai_crashes": self.ai_crashes,
+            "incident_crashes": self.incident_crashes,
+            "ai_crash_sites": self.crash_sites,
+            "stuck_sites": self.stuck_sites,
             "nan_positions": self.nan,
         })
     }
@@ -540,10 +712,16 @@ impl Traffic {
             ok
         });
         for (car, driver) in dead {
-            if sim.state.entities.get(car).is_some() {
+            // Nobody climbs out of a wreck (and a car that is gone leaves no driver behind).
+            let people = if sim.state.entities.get(car).is_some() {
                 self.loose.push(car);
+                occupants(sim, car)
+            } else {
+                driver.into_iter().filter(|&d| Some(d) != sim.state.player).collect()
+            };
+            for p in people {
+                sim.despawn(p);
             }
-            let _ = driver;
         }
         self.pass -= m.dt;
         if self.pass <= 0.0 {
@@ -565,6 +743,26 @@ impl Traffic {
             let Some(e) = sim.state.entities.get(a.car) else { continue };
             let far = e.pos.distance(player) > d.density.despawn;
             let stuck = a.blocked > d.drive.give_up && !seen(&m.camera, e.pos);
+            if stuck && self.stuck_sites.len() < 16 {
+                let l = &g.lanes[a.lane as usize];
+                self.stuck_sites.push(format!(
+                    "tick {} {}#{} at {:.0},{:.0} lane {} ({:?} {:?}, len {:.0}) along {:.0} route {} {:?} {:?} goes_on {}",
+                    sim.state.tick,
+                    e.name,
+                    a.car.0,
+                    e.pos.x,
+                    e.pos.z,
+                    a.lane,
+                    l.kind,
+                    l.turn,
+                    l.length,
+                    a.along,
+                    a.route.len(),
+                    a.tier,
+                    a.mood,
+                    goes_on(g, a.lane)
+                ));
+            }
             if (far && !seen(&m.camera, e.pos)) || stuck {
                 gone.push((a.car, a.driver, stuck));
             }
@@ -572,7 +770,21 @@ impl Traffic {
         for (car, driver, stuck) in gone {
             self.cars.retain(|a| a.car != car);
             if stuck {
-                self.stuck += 1;
+                // An incident nearby (a vehicle that is neither traffic nor parked: the police, a
+                // wreck, an abandoned car), or the traffic's own doing.
+                let at = sim.state.entities.get(car).map(|e| e.pos).unwrap_or(player);
+                let incident = sim.state.entities.iter().any(|e| {
+                    e.vehicle.is_some()
+                        && e.id != car
+                        && e.pos.distance(at) < 40.0
+                        && !self.cars.iter().any(|a| a.car == e.id)
+                        && !self.parked.values().any(|&p| p == e.id)
+                });
+                if incident {
+                    self.stuck_incident += 1;
+                } else {
+                    self.stuck += 1;
+                }
             }
             if let Some(dr) = driver {
                 sim.despawn(dr);
@@ -605,10 +817,24 @@ impl Traffic {
                 None => {}
             }
         }
+        // Loose cars go once far and out of view, with anyone left sitting in them (the player's
+        // aside); an occupied one goes as soon as its ground unloads (the engine only puts empty
+        // cars to sleep, so it would fall through).
         self.loose.retain(|&car| {
             let Some(e) = sim.state.entities.get(car) else { return false };
-            let ridden = e.vehicle.as_ref().is_some_and(|v| v.driver.is_some());
-            if !ridden && Some(car) != m.player_car && e.pos.distance(player) > d.density.despawn && !seen(&m.camera, e.pos) {
+            let people = occupants(sim, car);
+            let player_in = e
+                .vehicle
+                .as_ref()
+                .is_some_and(|v| sim.state.player.is_some_and(|p| v.driver == Some(p) || v.passengers.contains(&Some(p))));
+            if player_in || Some(car) == m.player_car || seen(&m.camera, e.pos) {
+                return true;
+            }
+            let far = e.pos.distance(player) > d.density.despawn;
+            if far || (!people.is_empty() && !crate::world::ground_loaded(sim, e.pos)) {
+                for p in people {
+                    sim.despawn(p);
+                }
                 sim.despawn(car);
                 return false;
             }
@@ -627,14 +853,18 @@ impl Traffic {
             if !first && seen(&m.camera, s.pos) && s.pos.distance(player) < d.parked.radius * 0.8 {
                 continue;
             }
-            // Not on top of something already there (the player's car, a loose car).
-            if sim.state.entities.iter().any(|e| e.vehicle.is_some() && e.pos.distance(s.pos) < 3.0) {
+            // Not on top of something already there (the player's car, a loose car), and only on
+            // loaded ground.
+            if sim.state.entities.iter().any(|e| e.vehicle.is_some() && e.pos.distance(s.pos) < 3.0)
+                || !crate::world::ground_loaded(sim, s.pos)
+            {
                 continue;
             }
             let kinds = ambient_kinds();
             let Some(key) = pick_kind(&kinds, &mut sim.state.rng) else { break };
             let paint = Some(sim.state.rng.below(8) as usize);
             if let Ok(car) = crate::vehicles::spawn(sim, &key, s.pos + Vec3::Y * 0.05, s.dir.x.atan2(s.dir.z), paint) {
+                crate::world::ambient(sim, car);
                 self.parked.insert(i, car);
                 if hash(seed ^ 0x5eed, i as u64) < d.parked.locked {
                     locked.insert(car);
@@ -681,6 +911,7 @@ impl Traffic {
             let Some(key) = pick_kind(&kinds, &mut sim.state.rng) else { break };
             let paint = Some(sim.state.rng.below(8) as usize);
             let Ok(car) = crate::vehicles::spawn(sim, &key, pos + Vec3::Y * 0.05, dir.x.atan2(dir.z), paint) else { continue };
+            crate::world::ambient(sim, car);
             let driver = seat_driver(sim, car, pos);
             let desire = sim.state.rng.range(d.drive.personality[0], d.drive.personality[1]);
             let speed = ln.speed * desire * 0.8;
@@ -706,7 +937,7 @@ impl Traffic {
                 passing: 0.0,
             };
             self.extend(&mut agent, g, &mut sim.state.rng);
-            if pos.distance(player) > d.density.full {
+            if pos.distance(player) > d.density.full || !crate::world::ground_loaded(sim, pos) {
                 sim.set_vehicle_kinematic(car, true);
                 agent.tier = Tier::Rail;
             }
@@ -738,6 +969,7 @@ impl Traffic {
                 continue;
             }
             let Ok(car) = crate::vehicles::spawn(sim, &d.bus.key, pos + Vec3::Y * 0.05, dir.x.atan2(dir.z), None) else { return };
+            crate::world::ambient(sim, car);
             let driver = seat_driver(sim, car, pos);
             // The next stop ahead along the loop.
             let stop = bl
@@ -773,7 +1005,7 @@ impl Traffic {
                 pilot: false,
                 passing: 0.0,
             };
-            if dist > d.density.full {
+            if dist > d.density.full || !crate::world::ground_loaded(sim, pos) {
                 sim.set_vehicle_kinematic(car, true);
                 agent.tier = Tier::Rail;
             }
@@ -806,7 +1038,7 @@ impl Traffic {
                     .copied()
                     .filter(|&n| {
                         let l = &g.lanes[n as usize];
-                        !l.closed && drivable(l.kind) && l.turn != Turn::UTurn
+                        !l.closed && drivable(l.kind) && l.turn != Turn::UTurn && !dead_end(g, n, 8)
                     })
                     .max_by(|&x, &y| {
                         let reach = |n: u32| {
@@ -822,6 +1054,17 @@ impl Traffic {
                         reach(x).total_cmp(&reach(y)).then(y.cmp(&x))
                     })
                     .or_else(|| pick_next(g, last, rng)),
+                // The player's car on autopilot keeps to roads that go somewhere.
+                (true, None) => {
+                    let mut tries = 0;
+                    loop {
+                        let n = pick_next(g, last, rng);
+                        tries += 1;
+                        if n.is_none_or(|n| !dead_end(g, n, 8)) || tries >= 6 {
+                            break n;
+                        }
+                    }
+                }
                 _ => pick_next(g, last, rng),
             };
             match next {
@@ -863,6 +1106,40 @@ impl Traffic {
             }
             cars.insert(e.id, c);
         }
+        // Cars on sibling lanes where they overlap this one: just into a turn that fans out of the
+        // same approach (they are still in front, whichever way they go), and closing on a merge
+        // (placed by their distance to it, so whoever is nearer goes first).
+        if self.siblings.as_ref().is_none_or(|s| s.lanes != g.lanes.len()) {
+            self.siblings = Some(Arc::new(Siblings::of(g)));
+        }
+        let sibs = self.siblings.clone().unwrap_or_default();
+        let mut seen_from: Vec<(u32, (f32, f32, f32, EntityId))> = Vec::new();
+        for (&l, others) in &sibs.start {
+            for o in others {
+                for &(al, sp, half, id) in occ.get(o).map(|v| v.as_slice()).unwrap_or(&[]) {
+                    if al < 8.0 {
+                        seen_from.push((l, (al, sp, half, id)));
+                    }
+                }
+            }
+        }
+        for (&l, others) in &sibs.end {
+            let len = g.lanes[l as usize].length;
+            for o in others {
+                let olen = g.lanes[*o as usize].length;
+                for &(al, sp, half, id) in occ.get(o).map(|v| v.as_slice()).unwrap_or(&[]) {
+                    if olen - al < 20.0 {
+                        seen_from.push((l, (len - (olen - al), sp, half, id)));
+                    }
+                }
+            }
+        }
+        for (l, e) in seen_from {
+            let list = occ.entry(l).or_default();
+            if !list.iter().any(|x| x.3 == e.3) {
+                list.push(e);
+            }
+        }
         for list in occ.values_mut() {
             list.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.3.cmp(&b.3)));
         }
@@ -885,12 +1162,32 @@ impl Traffic {
                 boxes.entry(j).or_default().push((side, a.car));
             }
         }
+        // Unsignalised junctions: who reaches the line first goes first (in half-second steps, then
+        // by id), so two cars from different sides never both pull out into an empty box.
+        let mut arriving: BTreeMap<u32, Vec<(u8, (i32, EntityId))>> = BTreeMap::new();
+        for a in &self.cars {
+            let l = &g.lanes[a.lane as usize];
+            if let (LaneKind::Street | LaneKind::Avenue | LaneKind::Boulevard, Some(j), Some(side)) =
+                (l.kind, l.junction, l.approach)
+                && g.junctions[j as usize].signal.is_none()
+            {
+                let to_line = l.length - l.stop - a.along;
+                if (-3.0..15.0).contains(&to_line) {
+                    arriving.entry(j).or_default().push((side, (first_come(to_line, a.speed), a.car)));
+                }
+            }
+        }
         // Waiting at a light or behind someone who is: shared one tick late down the queue.
         let held_before: BTreeSet<EntityId> = self.cars.iter().filter(|a| a.held).map(|a| a.car).collect();
         let sirens = m.sirens.clone();
         let gunfire = m.gunfire;
         let near_full = d.density.full;
         let back_rail = d.density.rail;
+        // Cars on rails are moved without the physics (they would shove anything in their way, or
+        // land on it changing lanes): near a car the physics moves, they are back on their wheels.
+        let railed: BTreeSet<EntityId> = self.cars.iter().filter(|a| a.tier == Tier::Rail).map(|a| a.car).collect();
+        let free: Vec<Vec3> =
+            cars.values().filter(|o| !railed.contains(&o.id) && !parked.contains(&o.id)).map(|o| o.center).collect();
         let camera_target = m.camera.target;
         let mut rng = std::mem::replace(&mut sim.state.rng, Rng::new(0));
         for i in 0..self.cars.len() {
@@ -902,13 +1199,27 @@ impl Traffic {
             }
             // Level of detail by distance to the player and to what the camera looks at.
             let near = c.center.distance(m.player).min(c.center.distance(camera_target));
+            let company = |r: f32| free.iter().any(|p| *p != c.center && p.distance(c.center) < r);
             match a.tier {
                 _ if a.pilot => {}
-                Tier::Rail if near < near_full => {
+                // Back on its wheels only on loaded ground and clear of houses and other cars (a car
+                // on rails passes through anything; the physics would throw it out).
+                Tier::Rail
+                    if (near < near_full || company(15.0))
+                        && crate::world::ground_loaded(sim, c.center)
+                        && !m.city.in_building(Vec2::new(c.center.x, c.center.z), 1.5)
+                        && !cars
+                            .values()
+                            .any(|o| o.id != a.car && o.center.distance(c.center) < c.half.z + o.half.z.min(3.0)) =>
+                {
                     sim.set_vehicle_kinematic(a.car, false);
                     a.tier = Tier::Full;
                 }
-                Tier::Full if near > back_rail && a.mood != Mood::Shaken => {
+                // Shaken cars stay on their wheels while near; unloaded ground puts anyone on rails.
+                Tier::Full
+                    if (near > back_rail && a.mood != Mood::Shaken && !company(25.0))
+                        || !crate::world::ground_loaded(sim, c.center) =>
+                {
                     sim.set_vehicle_kinematic(a.car, true);
                     a.tier = Tier::Rail;
                 }
@@ -923,7 +1234,7 @@ impl Traffic {
                     // Knocked off its lane: pick up the nearest lane that goes its way.
                     let fwd = c.forward();
                     let keep = |l: &pav_world::lanes::Lane| !l.closed && drivable(l.kind);
-                    if let Some((lane, along, off2)) = g.nearest(c.feet(), keep)
+                    if let Some((lane, along, off2)) = g.nearest_level(c.feet(), 4.0, keep)
                         && off2 < 7.0
                         && g.lanes[lane as usize].at(along).1.dot(fwd) > 0.3
                     {
@@ -942,6 +1253,21 @@ impl Traffic {
                 }
             }
             self.extend(&mut a, g, &mut rng);
+            // A lane that goes nowhere: over toward one that does, into a gap.
+            if a.route.is_empty()
+                && a.change_t <= 0.0
+                && !goes_on(g, a.lane)
+                && let Some(side) = way_on(g, a.lane)
+            {
+                let s = &g.lanes[side as usize];
+                let at = s.project(c.feet()).0;
+                if gap_beside(occ.get(&side), a.car, at, a.speed) {
+                    a.lane = side;
+                    a.along = at;
+                    self.extend(&mut a, g, &mut rng);
+                    a.change_t = 2.0;
+                }
+            }
             let lane = &g.lanes[a.lane as usize];
             // Moods (the autopilot on the run drives like a fleeing driver).
             if a.pilot {
@@ -1030,7 +1356,9 @@ impl Traffic {
                             continue;
                         }
                         let gap = offset + along - my_half - half;
-                        if offset + along > 0.1 && gap < look {
+                        // Level with it (a merge): the lower id goes first.
+                        let in_front = offset + along > 0.1 || ((offset + along).abs() <= 0.1 && id < a.car);
+                        if in_front && gap < look {
                             consider(gap.max(0.0), speed, held_before.contains(&id), true);
                         }
                     }
@@ -1055,6 +1383,9 @@ impl Traffic {
                         let next = if k < a.route.len() { a.route.get(k).copied() } else { None };
                         let signalled = g.junctions[j as usize].signal.is_some();
                         let busy = boxes.get(&j).is_some_and(|v| v.iter().any(|(s, id)| *s != side && *id != a.car));
+                        let mine = (first_come(to_line, a.speed), a.car);
+                        let after =
+                            arriving.get(&j).is_some_and(|v| v.iter().any(|&(s, o)| s != side && o.1 != a.car && o < mine));
                         let left = next.is_some_and(|n| g.lanes[n as usize].turn == Turn::Left);
                         let opposite = (side + 2) % 4;
                         let oncoming = left
@@ -1069,13 +1400,23 @@ impl Traffic {
                                         && ol.length - o.along < 35.0
                                         && o.speed > 1.5
                                 }));
-                        if (!signalled && busy) || oncoming {
+                        // With lights, green still waits for a straggler from a crossing side.
+                        let straggler = signalled
+                            && boxes
+                                .get(&j)
+                                .is_some_and(|v| v.iter().any(|(s, id)| *s != side && *s != opposite && *id != a.car));
+                        if (!signalled && (busy || after)) || oncoming || straggler {
                             consider(to_line.max(0.0), 0.0, true, false);
                         }
                     }
                 }
                 offset += ln.length;
                 if offset > look || k >= a.route.len() {
+                    // The route runs out where the lane goes nowhere: stop at its end (and wait to
+                    // move over) rather than drive on into what is closed.
+                    if k >= a.route.len() && offset <= look && !goes_on(g, lane_id) {
+                        consider((offset - my_half - 1.0).max(0.0), 0.0, false, false);
+                    }
                     break;
                 }
                 lane_id = a.route[k];
@@ -1105,17 +1446,23 @@ impl Traffic {
                     }
                 }
             }
-            // On the run (through red lights, round cars): anything about to cross the car's path
-            // — nearest approach within 2.5 s closer than the two bodies — is braked for.
-            if a.mood == Mood::Flee && a.tier == Tier::Full {
+            // Anything about to cross the car's path — nearest approach within 2.5 s closer than
+            // the two bodies — is braked for: a car stranded in a junction, one turning across,
+            // and (on the run, through red lights and round cars) everything.
+            {
                 let fwd = c.forward();
                 let flat = |v: Vec3| Vec2::new(v.x, v.z);
+                // On rails the body's velocity is not the car's: its speed along the lane is.
+                let mine = if a.tier == Tier::Rail { fwd * a.speed } else { c.vel };
                 for (&id, o) in cars.range(..) {
                     if id == a.car || o.center.distance(c.center) > 45.0 || (o.center.y - c.center.y).abs() > 3.0 {
                         continue;
                     }
+                    if a.pilot && a.mood == Mood::Flee && m.police.contains(&id) {
+                        continue;
+                    }
                     let p = flat(o.center - c.center);
-                    let v = flat(o.vel - c.vel);
+                    let v = flat(o.vel - mine);
                     let t = (-p.dot(v) / v.length_squared().max(1e-3)).clamp(0.0, 2.5);
                     if t < 0.1 {
                         continue;
@@ -1169,11 +1516,11 @@ impl Traffic {
                 && obstacle.is_some_and(|(gap, sp)| gap < 25.0 && sp < 0.7 * v0)
                 && !held
             {
-                for side in [lane.left, lane.right].into_iter().flatten() {
+                // (Not into a lane that ends short of where this one goes on.)
+                for side in [lane.left, lane.right].into_iter().flatten().filter(|&s| goes_on(g, s) || !goes_on(g, a.lane)) {
                     let s = &g.lanes[side as usize];
                     let at = s.project(c.feet()).0;
-                    let clear = occ.get(&side).is_none_or(|v| v.iter().all(|(al, _, _, _)| *al < at - 12.0 || *al > at + 18.0));
-                    if clear && s.length - at > 30.0 {
+                    if gap_beside(occ.get(&side), a.car, at, a.speed) && s.length - at > 30.0 {
                         a.lane = side;
                         a.along = at;
                         a.route.clear();
@@ -1235,13 +1582,23 @@ impl Traffic {
             let askew = g.lanes[a.lane as usize].at(a.along).1.dot(c.forward()) < 0.6;
             // A fleeing driver does not sit and wait.
             let wait = if askew || a.mood == Mood::Flee { 1.5 } else { d.drive.reverse_after };
-            if a.blocked > wait && a.reverse <= 0.0 && a.tier == Tier::Full {
-                // Back up only into clear road (nothing within 9 m behind on this lane).
+            // (Queued behind another car a calm driver just waits; backing up is for being stuck.)
+            if a.blocked > wait && a.reverse <= 0.0 && a.tier == Tier::Full && (askew || !car_ahead || a.mood == Mood::Flee) {
+                // Back up only into clear road (nothing within 9 m behind on this lane, nothing
+                // at all right behind the bumper); on the run, whatever is there gets shoved.
                 let clear = occ.get(&a.lane).is_none_or(|v| {
                     v.iter().all(|(al, _, half, id)| *id == a.car || *al > a.along || a.along - al - half - c.half.z > 9.0)
                 });
+                let room = cars.values().all(|o| {
+                    let d = o.center - c.center;
+                    let back = -d.dot(c.forward());
+                    o.id == a.car
+                        || back <= 0.0
+                        || back > c.half.z + o.half.z + 3.5
+                        || d.dot(c.left()).abs() > c.half.x + o.half.x + 0.6
+                });
                 let hurry = askew || a.mood == Mood::Flee;
-                if clear || hurry {
+                if (clear || hurry) && (room || a.mood == Mood::Flee) {
                     a.reverse = if hurry { 2.2 } else { 1.6 };
                 }
                 a.blocked = if hurry { 0.0 } else { d.drive.honk_after };

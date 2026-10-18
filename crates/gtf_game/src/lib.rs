@@ -556,7 +556,7 @@ impl Freeway {
                     }
                 }
                 Deed::Jacked { at, driver, car } => {
-                    self.traffic.release(car);
+                    self.traffic.release(sim, car);
                     if let Some(city) = self.city.clone() {
                         self.peds.scare(sim, &city.walk, at, 20.0);
                         self.peds.adopt(sim, &city.walk, driver, at);

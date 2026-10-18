@@ -79,6 +79,7 @@ impl Freeway {
         }
         let look = self.look();
         let Some(city) = self.city.clone() else { return out };
+        crate::world::sweep_unloaded(sim);
         // The player (not in a reference view's still or on the streaming tour's flight; not
         // while wasted or busted).
         let pid = sim.state.player.filter(|_| self.view.is_none() && self.mode != "tour" && alive);
@@ -397,6 +398,7 @@ impl Freeway {
             sirens,
             people: walkers,
             gunfire: res.gunfire,
+            police: self.police.units.iter().map(|u| u.vehicle).collect(),
         };
         // The evasion bot runs from the nearest police unit, or out of the search zone.
         self.traffic.escape = (self.bot.escape && self.heat.stars > 0).then(|| match self.heat.zone() {
@@ -532,6 +534,13 @@ impl Freeway {
         let mut moves = BTreeMap::new();
         let rep = self.police.tick(sim, &pm, inputs, &mut moves);
         out.extend(moves);
+        // Police wrecks join the other wrecks (cleared away once far and out of view).
+        for car in std::mem::take(&mut self.police.wrecks) {
+            for p in crate::traffic::occupants(sim, car) {
+                sim.despawn(p);
+            }
+            self.traffic.loose.push(car);
+        }
         if self.fate.alive() {
             for dmg in &rep.hits {
                 self.combat.hurt_player(*dmg);

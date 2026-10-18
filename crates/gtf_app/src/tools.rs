@@ -59,7 +59,7 @@ pub static TOOLS: &[Tool] = &[
     },
     Tool {
         name: "soak",
-        help: "Runs Paloma Bay unattended (PLAN §7.5): mode traffic (autopilot cruising), peds (standing), roam (autopilot); reports anomaly counters, ms/tick, entity counts.",
+        help: "Runs Paloma Bay unattended (PLAN §7.5): mode traffic (autopilot cruising), peds (standing), roam (the bot drives, gets heat every minute of calm and evades); reports anomaly counters, heat episodes, ms/tick, entity counts.",
         args: &[
             arg("mode", "string", "traffic, peds or roam (default traffic)"),
             arg("seconds", "number", "game seconds to run (default 120)"),
@@ -140,12 +140,26 @@ fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
     pav_tools::call(s, "load", &args)?;
     let cmd = |s: &mut Session, c: &str| s.sim.step(&pav_core::InputFrame { cmds: vec![c.into()], ..Default::default() });
     cmd(s, "time 12:00");
-    if mode != "peds" {
-        cmd(s, "drive fenwick_commuter");
-        cmd(s, "autopilot on");
+    match mode.as_str() {
+        "traffic" => {
+            cmd(s, "drive fenwick_commuter");
+            cmd(s, "autopilot on");
+        }
+        // The bot drives a fast car; a minute without heat and it gets some (1-3 stars, in
+        // turn), then runs — leaving wrecks for other cars — until the police give up (or it is
+        // wasted or busted, and walks to the next car).
+        "roam" => {
+            cmd(s, "drive okami_kaze");
+            cmd(s, "autopilot escape");
+        }
+        _ => {}
     }
+    let (mut episodes, mut escapes, mut wasted, mut busted, mut calm) = (0u32, 0u32, 0u32, 0u32, 0.0f32);
+    let mut was_alive = true;
+    let mut was_wanted = false;
     let ticks = (seconds * 60.0) as u64;
     let (mut nan, mut fell, mut slowest, mut total_ms) = (0u32, 0u32, 0.0f64, 0.0f64);
+    let mut fallen: Vec<(u32, String)> = Vec::new();
     let (mut fewest, mut most) = (usize::MAX, 0usize);
     let start = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(Vec3::ZERO);
     let mut travelled = 0.0f32;
@@ -166,6 +180,9 @@ fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
                     nan += 1;
                 } else if e.pos.y < -40.0 {
                     fell += 1;
+                    if fallen.len() < 12 && !fallen.iter().any(|(id, _)| *id == e.id.0) {
+                        fallen.push((e.id.0, format!("{}#{} at {:.0},{:.0},{:.0}", e.name, e.id.0, e.pos.x, e.pos.y, e.pos.z)));
+                    }
                 }
             }
             let now = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(last);
@@ -173,6 +190,27 @@ fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
             last = now;
         }
         s.sim.drain_events();
+        if mode == "roam" {
+            let g = freeway(s)?;
+            let (alive, stars, fate) = (g.fate.alive(), g.heat.stars, g.fate);
+            if was_alive && !alive {
+                match fate {
+                    gtf_game::fate::Fate::Wasted { .. } => wasted += 1,
+                    gtf_game::fate::Fate::Busted { .. } => busted += 1,
+                    gtf_game::fate::Fate::Alive => {}
+                }
+            } else if alive && was_wanted && stars == 0 && was_alive {
+                escapes += 1;
+            }
+            was_alive = alive;
+            was_wanted = stars > 0;
+            calm = if alive && stars == 0 { calm + 1.0 / 60.0 } else { 0.0 };
+            if calm > 60.0 {
+                calm = 0.0;
+                episodes += 1;
+                cmd(s, &format!("wanted {}", 1 + (episodes - 1) % 3));
+            }
+        }
     }
     let g = freeway(s)?;
     let traffic = g.traffic.summary();
@@ -180,12 +218,19 @@ fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
     let stuck_cars = traffic["stuck_cars"].as_u64().unwrap_or(0);
     let ai_crashes = traffic["ai_crashes"].as_u64().unwrap_or(0);
     let in_view = traffic["spawn_in_view"].as_u64().unwrap_or(0) + traffic["despawn_in_view"].as_u64().unwrap_or(0);
-    let ok = stuck_cars == 0 && ai_crashes <= 3 && in_view == 0 && nan == 0 && fell == 0;
+    let police_in_view = g.police.spawn_in_view;
+    let ok = stuck_cars == 0 && ai_crashes <= 3 && in_view == 0 && police_in_view == 0 && nan == 0 && fell == 0;
+    let heat = json!({
+        "episodes": episodes, "escapes": escapes, "wasted": wasted, "busted": busted,
+        "police_spawned": g.police.spawned, "police_spawn_in_view": police_in_view,
+        "cars_left": g.bot.bailed, "cars_taken": g.bot.taken, "peak": g.heat.peak,
+    });
     Ok(Output::Json(json!({
         "mode": mode, "seconds": seconds, "seed": seed, "ok": ok,
-        "limits": "stuck_cars 0, ai_crashes <= 3, spawn/despawn in view 0, NaN 0, fell through 0",
-        "traffic": traffic, "peds": peds,
+        "limits": "stuck_cars 0, ai_crashes <= 3, spawn/despawn in view 0 (traffic and police), NaN 0, fell through 0",
+        "traffic": traffic, "peds": peds, "heat": heat,
         "nan_positions": nan, "fell_through_world": fell,
+        "fallen": fallen.iter().map(|f| f.1.clone()).collect::<Vec<_>>(),
         "ms_per_tick": (total_ms / ticks.max(1) as f64 * 1000.0).round() / 1000.0,
         "slowest_tick_ms": (slowest * 100.0).round() / 100.0,
         "entities": [fewest, most],

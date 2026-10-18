@@ -103,14 +103,23 @@ impl Bot {
         let st = sim.vehicle_status(car);
         let done = st.as_ref().is_some_and(|s| s.burning || s.flooded || s.health < 0.15);
         // Boxed in: out once the police are not right there (under their guns the car is the
-        // better cover while the autopilot shoves to get free) — or when that is going nowhere.
+        // better cover while the autopilot shoves to get free; on foot at three stars they shoot)
+        // — or when that has gone nowhere for a long while.
         let close = m.threat.is_some_and(|t| t.distance(c.center) < 25.0);
-        let boxed = m.wanted && self.anchor_t > if close { STUCK_AFTER * 2.0 } else { STUCK_AFTER };
+        let boxed = m.wanted && self.anchor_t > if close { STUCK_AFTER * 4.0 } else { STUCK_AFTER };
         if (done || boxed) && self.tap == Tap::Idle {
             self.tap = Tap::Hold;
-            self.left.push(car);
+            self.leave(car);
             self.anchor_t = 0.0;
             self.bailed += 1;
+        }
+    }
+
+    /// Not that car again (the last dozen given up on).
+    fn leave(&mut self, car: EntityId) {
+        self.left.push(car);
+        if self.left.len() > 12 {
+            self.left.remove(0);
         }
     }
 
@@ -128,7 +137,7 @@ impl Bot {
                 self.since_best += m.dt;
             }
             if self.since_best > 1.5 {
-                self.left.push(c.id);
+                self.leave(c.id);
                 self.target = None;
                 self.path.clear();
             }
@@ -183,12 +192,15 @@ impl Bot {
         };
         // Over the sidewalks and crossings (from the nearest walkable tile, to the one nearest the
         // goal), then straight there.
+        // Up on the freeway deck (or anywhere off the street level) the walk map does not reach:
+        // straight there.
         self.replan -= m.dt;
+        let street = (m.feet.y - m.city.ground_y(feet)).abs() < 2.0;
         if self.replan <= 0.0 || self.path.is_empty() {
             self.replan = 1.0;
             let walk = &m.city.walk;
             self.path = match (walk.nearest_walkable(feet, 6), walk.nearest_walkable(goal, 8)) {
-                (Some(a), Some(b)) if a.distance(goal) > 3.0 => {
+                (Some(a), Some(b)) if street && a.distance(goal) > 3.0 => {
                     let mut p = walk.path(a, b, 6000);
                     p.push(goal);
                     p

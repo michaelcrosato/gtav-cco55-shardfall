@@ -527,8 +527,17 @@ impl Peds {
             let feet = Vec3::new(pos.x, m.city.ground_y(pos), pos.y);
             let bench = if sit { self.bench(m.city, feet) } else { None };
             let p = &mut self.list[i];
+            // Knocked off the pavement (into the road): back onto the nearest walkable tile first.
+            let from = if walk.walkable(walk.tile_of(pos)) { pos } else { walk.nearest_walkable(pos, 8).unwrap_or(pos) };
+            let walk_path = |to: Vec2, budget: usize| {
+                let mut path = walk.path(from, to, budget);
+                if from != pos && !path.is_empty() {
+                    path.insert(0, pos);
+                }
+                path
+            };
             if let Some((spot, facing)) = bench {
-                let path = walk.path(pos, Vec2::new(spot.x, spot.z), 3000);
+                let path = walk_path(Vec2::new(spot.x, spot.z), 3000);
                 if path.len() >= 2 {
                     p.path = path;
                     p.next = 1;
@@ -539,8 +548,8 @@ impl Peds {
                     return InputFrame::default();
                 }
             }
-            let to = destination(walk, pos, &mut sim.state.rng);
-            match to.map(|to| walk.path(pos, to, 6000)) {
+            let to = destination(walk, from, &mut sim.state.rng);
+            match to.map(|to| walk_path(to, 6000)) {
                 Some(path) if path.len() >= 2 => {
                     p.path = path;
                     p.next = 1;
@@ -659,6 +668,11 @@ impl Peds {
         if !fill && seen(&m.camera, feet + Vec3::Y) {
             return false;
         }
+        // Only on loaded ground (a body spawned elsewhere falls through).
+        if !crate::world::ground_loaded(sim, feet) {
+            return false;
+        }
+        let rng = &mut sim.state.rng;
         let zone = m.city.zone_at(at).unwrap_or("");
         let fits: Vec<(usize, f32)> = def
             .archetype
@@ -683,6 +697,7 @@ impl Peds {
         let facing = rng.f32() * std::f32::consts::TAU;
         let linger = rng.range(0.0, 3.0);
         let id = sim.spawn_npc(&format!("ped:{}", a.id), feet, facing, puppet, None, None);
+        crate::world::ambient(sim, id);
         if let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut()) {
             c.haste = pace / if a.run { RUN } else { WALK } - 1.0;
         }

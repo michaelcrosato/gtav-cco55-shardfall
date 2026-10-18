@@ -229,6 +229,10 @@ impl Drive {
             .filter(|e| e.pos.distance(feet) < REACH + 8.0)
             .filter_map(|e| {
                 let c = Car::read(sim, e.id)?;
+                // On the same level (not a car on the freeway deck overhead).
+                if (c.center.y - c.half.y - feet.y).abs() > 2.5 {
+                    return None;
+                }
                 let d = c.door_point();
                 let flat = Vec3::new(d.x - feet.x, 0.0, d.z - feet.z).length();
                 // The body's middle counts too, so standing at the bonnet works.
