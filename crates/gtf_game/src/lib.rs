@@ -19,6 +19,7 @@ use serde_json::json;
 
 pub mod about;
 pub mod ambience;
+pub mod anchor;
 pub mod audio;
 pub mod bot;
 pub mod camera;
@@ -34,14 +35,18 @@ pub mod gallery;
 pub mod gps;
 pub mod heat;
 pub mod hud;
+pub mod missions;
 pub mod pad;
 pub mod peds;
+pub mod phone;
 mod play;
 pub mod player;
 pub mod police;
+pub mod progress;
 pub mod protagonists;
 pub mod radio;
 pub mod settings;
+pub mod shops;
 pub mod struck;
 pub mod tour;
 pub mod traffic;
@@ -113,8 +118,8 @@ pub struct Freeway {
     /// Where the host runs (`host.platform`).
     pub web: bool,
     pub touch: bool,
-    /// Save slots the host has (`host.save`).
-    pub saves: Vec<String>,
+    /// The saves the host keeps, by slot (`host.save`).
+    pub saves: BTreeMap<String, String>,
     pub wheel: Option<WheelState>,
     pub weapon: usize,
     pub last_weapon: usize,
@@ -194,6 +199,35 @@ pub struct Freeway {
     /// The camera behind the vehicle being driven.
     #[serde(default)]
     pub chase: camera::ChaseCam,
+    /// The protagonists: who is played, the others' things, switching, the ability.
+    #[serde(default)]
+    pub crew: protagonists::Crew,
+    /// Missions played and the one under way, and the bot that plays them.
+    #[serde(default)]
+    pub missions: missions::Missions,
+    #[serde(default)]
+    pub mbot: missions::bot::MissionBot,
+    #[serde(default)]
+    pub phone: phone::Phone,
+    /// A shop's menu (or the save slots', the replay list's), and the counter the player stands at.
+    #[serde(default)]
+    pub shop: Option<shops::ShopState>,
+    #[serde(default)]
+    pub counter: Option<shops::Counter>,
+    #[serde(default)]
+    pub shop_bought: u32,
+    /// Saving: the newest stamp, the request for the host, a save due after a mission.
+    #[serde(default)]
+    pub save_stamp: u64,
+    #[serde(default)]
+    pub save_serial: u64,
+    #[serde(default)]
+    pub save_req: Option<SaveRequest>,
+    #[serde(default)]
+    pub autosave: bool,
+    /// The shops' doors (looked up once).
+    #[serde(skip)]
+    doors: Option<Vec<(shops::Counter, Option<Vec3>)>>,
     /// The district (rebuilt from its file when missing, e.g. after loading a snapshot; a
     /// cache, so not part of the state).
     #[serde(skip)]
@@ -215,16 +249,22 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         Some(name) => Some(views::find(name)?),
         None => None,
     };
+    // `freeway/mission/<key>`: straight into a mission, in its district.
+    let mission = match mode.strip_prefix("mission/") {
+        Some(key) => Some(missions::get(key)?),
+        None => None,
+    };
+    let dev = mode == "dev" || mission.as_ref().is_some_and(|m| m.district == "dev");
     let city = match &view {
         Some(v) => world::build_scene(sim, world::city()?, Vec2::new(v.target.x, v.target.z), &[v.eye, v.target])?,
-        None if mode == "dev" => world::build_scene(sim, world::dev_city()?, world::flat(world::DEV_SPAWN), &[])?,
+        None if dev => world::build_scene(sim, world::dev_city()?, world::flat(world::DEV_SPAWN), &[])?,
         None => world::build_scene(sim, world::city()?, world::flat(world::SPAWN), &[])?,
     };
     let mode_is_tour = mode == "tour";
     let mut front = Front::default();
     front.page = match mode.as_str() {
         "roam" | "dev" | "tour" => Page::Play,
-        _ if view.is_some() => Page::Play,
+        _ if view.is_some() || mission.is_some() => Page::Play,
         "gallery" => {
             front.back = Page::Title;
             Page::Gallery
@@ -246,7 +286,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         sky.speed = 0.0;
         sky.set_weather(&world, v.weather.as_deref().unwrap_or("clear"), true)?;
     }
-    let game = Freeway {
+    let mut game = Freeway {
         mode,
         time: 0.0,
         ui_time: 0.0,
@@ -256,7 +296,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         settings_serial: 0,
         web: false,
         touch: false,
-        saves: Vec::new(),
+        saves: BTreeMap::new(),
         wheel: None,
         weapon: 0,
         last_weapon: 1,
@@ -290,6 +330,18 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         told_price: false,
         ai_inputs: BTreeMap::new(),
         chase: camera::ChaseCam::default(),
+        crew: protagonists::Crew::new(0),
+        missions: missions::Missions::default(),
+        mbot: missions::bot::MissionBot::default(),
+        phone: phone::Phone::default(),
+        shop: None,
+        counter: None,
+        shop_bought: 0,
+        save_stamp: 0,
+        save_serial: 0,
+        save_req: None,
+        autosave: false,
+        doors: None,
         peds: peds::Peds::default(),
         combat: combat::Combat::default(),
         tour: (mode_is_tour).then(|| Arc::new(tour::Tour::new(&city))),
@@ -297,6 +349,14 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         city: Some(city),
         settings_json: None,
     };
+    // Dez to begin with; switching is open (the story's intro missions will lock it until they
+    // are done).
+    game.crew.unlocked = true;
+    game.load_member(0);
+    game.dress_player(sim);
+    if let Some(m) = &mission {
+        game.start_mission(sim, &m.key, false, true, &mut Vec::new())?;
+    }
     sim.state.play = Some(GameBox::new(game));
     Ok(())
 }
@@ -334,9 +394,10 @@ impl Freeway {
                     Err(e) => log::warn!("kept settings unreadable ({e}); using defaults"),
                 }
             } else if let Some(rest) = c.strip_prefix("host.save ") {
-                let slot = rest.split_whitespace().next().unwrap_or("").to_string();
-                if !slot.is_empty() && !self.saves.contains(&slot) {
-                    self.saves.push(slot);
+                if let Some((slot, json)) = rest.split_once(' ')
+                    && !slot.is_empty()
+                {
+                    self.saves.insert(slot.to_string(), json.to_string());
                 }
             }
         }
@@ -345,11 +406,74 @@ impl Freeway {
     /// World commands (also typed by tests, tools and bots): `time HH:MM`, `clock <speed>`,
     /// `weather <name>` (held until changed), `weather auto`, `radio <station>|off|next|prev`,
     /// `weapon <id or icon>`.
-    fn world_cmds(&mut self, sim: &mut Sim, input: &InputFrame) {
+    fn world_cmds(&mut self, sim: &mut Sim, input: &InputFrame, events: &mut Vec<SimEvent>) {
         let Ok(world) = daytime::def() else { return };
         for c in &input.cmds {
             let mut w = c.split_whitespace();
             match (w.next(), w.next()) {
+                // `mission start|replay <key>`, `mission quit`, `mission fail`, `mission choose <id>`.
+                (Some("mission"), Some(verb)) => {
+                    let arg = w.next().unwrap_or("");
+                    match verb {
+                        "start" | "replay" => {
+                            if let Err(e) = self.start_mission(sim, arg, verb == "replay", true, events) {
+                                log::warn!("{e:#}");
+                            }
+                        }
+                        "quit" => self.quit_mission(sim),
+                        "fail" => {
+                            if let Some(mut run) = self.missions.run.take() {
+                                if run.phase == missions::Phase::Play {
+                                    run.phase = missions::Phase::Failed { t: 0.0 };
+                                    run.reason = "Failed on purpose.".into();
+                                    run.fails += 1;
+                                    run.menu = 0;
+                                    self.missions.failed += 1;
+                                }
+                                self.missions.run = Some(run);
+                            }
+                        }
+                        "choose" => self.missions.bot_choice = (!arg.is_empty()).then(|| arg.to_string()),
+                        _ => log::warn!("mission: start, replay, quit, fail or choose"),
+                    }
+                }
+                // `switch <protagonist>`: the switch, wheel or not.
+                (Some("switch"), Some(who)) => {
+                    if let Some(i) = protagonists::def().ok().and_then(|d| d.index(who)) {
+                        self.begin_switch(sim, i, events);
+                    } else {
+                        log::warn!("switch: no protagonist '{who}'");
+                    }
+                }
+                (Some("meter"), Some(x)) => {
+                    if let (Ok(x), Some(m)) = (x.parse::<f32>(), self.crew.members.get_mut(self.crew.current)) {
+                        m.meter = x.clamp(0.0, 1.0);
+                    }
+                }
+                (Some("give"), Some(id)) => self.give_weapon(id, w.next().and_then(|a| a.parse().ok()).unwrap_or(0)),
+                (Some("cash"), Some(n)) => {
+                    if let Ok(n) = n.parse::<i64>() {
+                        self.pay(n);
+                    }
+                }
+                (Some("save"), Some(slot)) => self.save_game(sim, slot),
+                (Some("load"), Some(slot)) => {
+                    if let Some(json) = self.saves.get(slot).cloned()
+                        && let Err(e) = self.load_game(sim, &json)
+                    {
+                        log::warn!("load {slot}: {e:#}");
+                    }
+                }
+                // The autopilot's destination: `pilot_goal <x> <z> [desire]`, `pilot_goal off`.
+                (Some("pilot_goal"), Some("off")) => self.traffic.pilot_goal(None, 1.0),
+                (Some("pilot_goal"), Some(x)) => {
+                    let z = w.next().and_then(|z| z.parse::<f32>().ok());
+                    let desire = w.next().and_then(|d| d.parse::<f32>().ok()).unwrap_or(1.0);
+                    if let (Ok(x), Some(z), Some(city)) = (x.parse::<f32>(), z, self.city.clone()) {
+                        let p = Vec2::new(x, z);
+                        self.traffic.pilot_goal(Some(Vec3::new(x, city.ground_y(p), z)), desire);
+                    }
+                }
                 (Some("time"), Some(t)) => match daytime::parse_time(t) {
                     Some(h) => self.sky.hour = h,
                     None => log::warn!("time: '{t}' is not HH:MM"),
@@ -426,9 +550,15 @@ impl Freeway {
                     self.car_cmd(sim, key, paint, verb == "drive");
                 }
                 (Some("target"), Some(m)) => self.target_cmd(sim, m.parse().unwrap_or(8.0)),
+                // `weapon <id or icon>`: in hand (given first if not owned).
                 (Some("weapon"), Some(arg)) => {
                     match combat::def().ok().and_then(|d| d.weapon.iter().position(|w| w.id == arg || w.icon == arg)) {
-                        Some(i) => self.weapon = i,
+                        Some(i) => {
+                            if !self.crew.owns(i) {
+                                self.give_weapon(arg, 0);
+                            }
+                            self.weapon = i;
+                        }
                         None => log::warn!("weapon: no weapon '{arg}'"),
                     }
                 }
@@ -648,7 +778,7 @@ impl Freeway {
             (Some(w), false) => {
                 let pick = if w.open_for < WHEEL_DELAY { Some(self.last_weapon) } else { w.focus };
                 self.wheel = None;
-                if let Some(p) = pick.filter(|p| *p != self.weapon) {
+                if let Some(p) = pick.filter(|p| *p != self.weapon && self.crew.owns(*p)) {
                     self.last_weapon = self.weapon;
                     self.weapon = p;
                     let (name, icon, detail) = WEAPONS[p];
@@ -694,6 +824,16 @@ impl Freeway {
         }
         if self.drone_view() {
             return camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0);
+        }
+        // A switch's sky-cam (or quick blend), a mission's cutscene, the phone's camera.
+        if let Some(s) = &self.crew.switch {
+            return s.camera(&OrbitCam::settled(s.dest, s.yaw));
+        }
+        if let Some(c) = self.mission_camera(sim) {
+            return c;
+        }
+        if self.phone.camera() {
+            return self.phone_view(sim);
         }
         if !self.fate.alive() {
             // A slow orbit around the player.
@@ -756,12 +896,13 @@ impl Game for Freeway {
             }
         }
         self.host_cmds(input);
-        self.world_cmds(sim, input);
+        self.world_cmds(sim, input, events);
         if let Ok(world) = daytime::def() {
             self.sky.step(&world, dt, &mut sim.state.rng, events);
         }
         let feet = Self::feet(sim);
-        self.gps.set(self.front.waypoint);
+        let target = self.mission_waypoint(sim).or(self.front.waypoint);
+        self.gps.set(target);
         if let Some(c) = &self.city {
             self.gps.update(c, feet);
         }
@@ -771,10 +912,30 @@ impl Game for Freeway {
             web: self.web,
             player: Vec2::new(feet.x, feet.z),
             now: self.ui_time,
+            on_mission: self.missions.run.is_some(),
         };
         let mut sounds = Vec::new();
         match self.front.step(input, &mut ctx, real, &mut sounds) {
             Some(Action::Play) => self.roam_age = 0.0,
+            Some(Action::Continue) => {
+                self.roam_age = 0.0;
+                if let Some(json) = self.newest_save()
+                    && let Err(e) = self.load_game(sim, &json)
+                {
+                    log::warn!("continue: {e:#}");
+                }
+            }
+            Some(Action::NewGame) => {
+                self.roam_age = 0.0;
+                self.new_game(sim);
+            }
+            Some(Action::Replay) => {
+                self.shop = Some(shops::ShopState { counter: shops::Counter::Replay, focus: 0, nav: Default::default() })
+            }
+            Some(Action::Load) => {
+                self.shop = Some(shops::ShopState { counter: shops::Counter::Load, focus: 0, nav: Default::default() })
+            }
+            Some(Action::QuitMission) => self.quit_mission(sim),
             Some(Action::Settings) => self.settings_changed(),
             Some(Action::Quit) => self.quit = true,
             None => {}
@@ -784,10 +945,56 @@ impl Game for Freeway {
         }
         self.notes.retain(|n| n.age < 6.0);
         self.money_age += real;
+        // The others' clocks; the switch card's.
+        let cur = self.crew.current;
+        for (i, m) in self.crew.members.iter_mut().enumerate() {
+            if i != cur {
+                m.away += dt;
+            }
+        }
+        if let Some(c) = &mut self.crew.card {
+            c.1 += real;
+            if c.1 > protagonists::CARD {
+                self.crew.card = None;
+            }
+        }
         let out = if self.front.page == Page::Play {
-            self.play(sim, input, dt, real, feet, events, &mut sounds)
+            let mut out = BTreeMap::new();
+            self.switch_tick(sim, real, events);
+            // Who has the controls: a switch, a mission's card or cutscene, a menu — or the
+            // player (less what the phone, the switch wheel and a counter's prompt take).
+            let held = self.crew.switch.is_some() || self.mission_holds_controls() || self.shop.is_some();
+            self.shops_tick(sim, input, real, events);
+            if !held {
+                self.phone_tick(sim, input, real, events);
+                if !self.phone.open && self.wheel.is_none() {
+                    self.switch_wheel(sim, input, real, events);
+                }
+            }
+            self.ability_tick(input, real, events);
+            self.mission_tick(sim, input, dt, real, events, &mut out);
+            let held = held || self.shop.is_some();
+            let mut take = 0;
+            if self.phone.open {
+                take |= phone::TAKES;
+            }
+            if self.counter.is_some() {
+                take |= pav_core::input::pad::RIGHT;
+            }
+            let wheel = self.crew.wheel.is_some();
+            let play_input = controls(input, held, take, wheel);
+            let more = self.play(sim, &play_input, dt, real, feet, events, &mut sounds);
+            out.extend(more);
+            self.life_idle(sim);
+            self.mission_bot_tick(sim, real);
+            if self.autosave && self.missions.run.is_none() {
+                self.autosave = false;
+                self.save_game(sim, "auto");
+            }
+            out
         } else {
             self.wheel = None;
+            self.crew.wheel = None;
             BTreeMap::new()
         };
         self.combat.update(sim, dt);
@@ -898,8 +1105,9 @@ impl Game for Freeway {
     }
 
     fn bot(&self, _sim: &Sim) -> InputFrame {
-        // On autopilot: the traffic driver's pedals and wheel, as a controller would give them.
-        let mut f = InputFrame::default();
+        // In a mission: the mission bot's presses and commands. On autopilot: the traffic
+        // driver's pedals and wheel, as a controller would give them.
+        let mut f = if self.missions.run.is_some() { self.mbot.frame.clone() } else { InputFrame::default() };
         if let (Some(vi), Some(_)) = (self.traffic.pilot_input, self.drive.vehicle()) {
             f.pad.r2 = vi.throttle;
             f.pad.l2 = vi.brake;
@@ -915,16 +1123,32 @@ impl Game for Freeway {
     fn time_scale(&self) -> f32 {
         if !self.fate.alive() {
             fate::SLOW
-        } else if self.wheel_open() && self.settings.wheel_slowmo {
+        } else if (self.wheel_open() || self.switch_wheel_open()) && self.settings.wheel_slowmo {
             0.25
         } else {
-            1.0
+            self.ability_time_scale()
         }
     }
 
     fn world_paused(&self) -> bool {
         let f = &self.front;
-        f.page == Page::Pause || (matches!(f.page, Page::Settings | Page::Gallery | Page::About) && f.back == Page::Pause)
+        f.page == Page::Pause
+            || (matches!(f.page, Page::Settings | Page::Gallery | Page::About) && matches!(f.back, Page::Pause | Page::Play))
+            || (f.page == Page::Play && (self.mission_pauses_world() || self.shop.is_some()))
+    }
+
+    fn outcome(&self) -> pav_core::games::Outcome {
+        use pav_core::games::Outcome;
+        if !self.mode.starts_with("mission/") {
+            return Outcome::Playing;
+        }
+        if self.missions.passed > 0 {
+            return Outcome::Won;
+        }
+        match &self.missions.run {
+            Some(r) if matches!(r.phase, missions::Phase::Failed { .. }) => Outcome::Lost,
+            _ => Outcome::Playing,
+        }
     }
 
     fn legacy_controls(&self) -> bool {
@@ -950,9 +1174,24 @@ impl Game for Freeway {
         ui.safe_margin = self.settings.safe_area;
         ui.time = self.ui_time;
         if page != Page::Gallery {
-            ui.screen =
-                self.front.screen(&self.settings, !self.saves.is_empty(), self.web, player, &blips, &self.gps.minimap(feet));
+            let brief = self.missions.run.as_ref().and_then(|r| {
+                let d = missions::get(&r.key).ok()?;
+                let objective = d.step.get(r.step).and_then(|s| s.objective.clone()).unwrap_or_default();
+                Some(TextCard { heading: d.title.to_uppercase(), lines: vec![d.text.clone(), objective] })
+            });
+            ui.screen = self.front.screen(
+                &self.settings,
+                !self.saves.is_empty(),
+                self.web,
+                player,
+                &blips,
+                &self.gps.minimap(feet),
+                self.crew.stat_cards(self.front.stats, self.money),
+                brief,
+                self.missions.run.is_some(),
+            );
         }
+        let mut shop_screen = None;
         if page == Page::Play {
             let heading = sim.player().and_then(|p| p.character.as_ref()).map(|c| c.facing).unwrap_or(0.0);
             let help = if self.drive.vehicle().is_some() {
@@ -966,12 +1205,20 @@ impl Game for Freeway {
                     self.roam_age,
                 ))
             };
+            let ability = (
+                self.crew.me().map_or(0.0, |m| m.meter),
+                protagonists::def()
+                    .ok()
+                    .and_then(|d| d.protagonist.get(self.crew.current).map(|p| p.tint()))
+                    .unwrap_or(pav_core::Color::hex("#ffc145")),
+            );
             let (hud, help, prompts) = hud::hud(&hud::HudInput {
                 player,
                 heading,
                 camera_yaw: self.cam.yaw,
                 money: (self.money, self.money_delta, self.money_age),
                 weapon: self.weapon,
+                ability,
                 help,
                 map_blips: blips.clone(),
                 route: self.gps.minimap(feet),
@@ -1067,9 +1314,37 @@ impl Game for Freeway {
             ui.help = help;
             ui.prompts = prompts;
             ui.markers.extend(markers);
+            let (shop, prompt) = self.shop_ui(sim);
+            if let Some(p) = prompt {
+                ui.prompts.push(p);
+            }
+            shop_screen = shop;
             if self.wheel_open() {
-                ui.wheel = Some(self.wheel.as_ref().unwrap().ui(self.weapon));
+                let mut w = self.wheel.as_ref().unwrap().ui(self.weapon);
+                for (i, slot) in w.slots.iter_mut().enumerate() {
+                    slot.enabled = self.crew.owns(i);
+                }
+                ui.wheel = Some(w);
                 ui.overlay.vignette = 0.45;
+            }
+            if self.switch_wheel_open()
+                && let Some(w) = &self.crew.wheel
+            {
+                ui.wheel = Some(self.crew.wheel_ui(w));
+                ui.overlay.vignette = 0.45;
+            }
+            if let Some(t) = self.ability_tint() {
+                ui.overlay.tint = Some(t);
+                ui.overlay.vignette = ui.overlay.vignette.max(0.35);
+            }
+            if let Some((text, age)) = &self.crew.card {
+                ui.help = Some(Help { text: text.clone(), age: *age });
+            }
+            ui.phone = self.phone_ui(sim);
+            if self.phone.camera()
+                && let Some(h) = &mut ui.hud
+            {
+                h.opacity = 0.0;
             }
             if self.radio_wheel_open() {
                 if let (Some(w), Ok(def)) = (&self.radio_wheel, radio::def()) {
@@ -1117,6 +1392,10 @@ impl Game for Freeway {
         let mut draw = DrawList::default();
         if page == Page::Play {
             draw.ribbons.extend(self.gps.ribbon(feet, 160.0));
+            self.mission_ui(sim, &mut ui, &mut draw);
+            if shop_screen.is_some() {
+                ui.screen = shop_screen;
+            }
         }
         if let Some(c) = &self.city {
             world::signal_lamps(c, self.camera(sim).target, self.time, &mut draw.prims);
@@ -1170,7 +1449,7 @@ impl Game for Freeway {
             map: self.city.as_ref().map(|c| c.map.clone()),
             far: self.city.as_ref().map(|c| c.far.clone()),
             app: AppRequests {
-                save: None,
+                save: self.save_req.clone(),
                 settings: self
                     .settings_json
                     .as_ref()
@@ -1192,4 +1471,60 @@ impl Game for Freeway {
 
 fn round(x: f32) -> f64 {
     (x as f64 * 100.0).round() / 100.0
+}
+
+/// The controls play gets: nothing while something else holds them (`held`; the commands still
+/// pass), less the buttons in `take` (the phone's, a counter's prompt), and no walking while the
+/// switch wheel's stick picks.
+fn controls(input: &InputFrame, held: bool, take: u32, wheel: bool) -> InputFrame {
+    let mut f = input.clone();
+    if held {
+        f.pad = Default::default();
+        f.move_dir = Vec2::ZERO;
+        f.held = 0;
+        f.pressed = 0;
+        f.mouse_delta = Vec2::ZERO;
+        return f;
+    }
+    f.pad.held &= !take;
+    f.pad.pressed &= !take;
+    if take & pav_core::input::pad::R2 != 0 {
+        f.pad.r2 = 0.0;
+    }
+    if wheel {
+        f.pad.stick_l = Vec2::ZERO;
+        f.move_dir = Vec2::ZERO;
+        f.pad.held &= !pav_core::input::pad::DOWN;
+    }
+    f
+}
+
+impl Freeway {
+    /// A new game: everyone as the profiles start them, Dez on Sunset Row, nothing played yet.
+    fn new_game(&mut self, sim: &mut Sim) {
+        if self.missions.run.is_some() {
+            self.end_mission(sim);
+        }
+        self.crew = protagonists::Crew::new(0);
+        self.crew.unlocked = true;
+        self.missions = missions::Missions::default();
+        self.phone = phone::Phone::default();
+        self.load_member(0);
+        self.dress_player(sim);
+        self.heat.clear();
+        self.police.clear(sim);
+        self.put_player(sim, world::SPAWN, std::f32::consts::FRAC_PI_2);
+    }
+
+    /// A protagonist found at a life spot plays its idle until they move.
+    fn life_idle(&mut self, sim: &mut Sim) {
+        if !self.crew.life_idle {
+            return;
+        }
+        let moving = sim.player().and_then(|p| p.character.as_ref()).is_some_and(|c| c.vel.length() > 0.5);
+        if moving {
+            self.crew.life_idle = false;
+            self.dress_player(sim);
+        }
+    }
 }

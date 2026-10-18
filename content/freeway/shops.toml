@@ -1,0 +1,76 @@
+# Shops (PLAN.md §5.6.10), read by `gtf_game::shops`. Each shop sits at a landmark's door: walk
+# up to it (Paloma Customs: drive up) and press D-pad right. Prices in dollars; a gun's `ammo`
+# rounds come in a box for `ammo_price` once the gun is owned.
+
+[gun]
+landmark = "gun_store"
+name = "Bang Bang Bros."
+armor = 500
+
+[[gun.item]]
+weapon = "p9"
+price = 250
+ammo = 24
+ammo_price = 30
+
+[[gun.item]]
+weapon = "buzz"
+price = 1250
+ammo = 60
+ammo_price = 60
+
+[[gun.item]]
+weapon = "pump"
+price = 1800
+ammo = 16
+ammo_price = 50
+
+[[gun.item]]
+weapon = "c4r"
+price = 3500
+ammo = 60
+ammo_price = 80
+
+[[gun.item]]
+weapon = "marksman"
+price = 3000
+ammo = 12
+ammo_price = 100
+
+[[gun.item]]
+weapon = "grenade"
+price = 300
+ammo = 2
+ammo_price = 250
+
+# Paloma Customs: new paint (the police lose the car they were looking for) and repairs priced
+# by the damage, from the first figure (a scratch) to the second (nearly a wreck).
+[mods]
+landmark = "customs"
+name = "Paloma Customs"
+respray = 200
+repair = [150, 500]
+
+[store]
+landmark = "gas"
+name = "Gas-N-Grab"
+
+[[store.item]]
+name = "Choco Log"
+price = 5
+heal = 15
+
+[[store.item]]
+name = "Nacho Cheez Tube"
+price = 9
+heal = 30
+
+[[store.item]]
+name = "Freeway Fuel energy drink"
+price = 12
+heal = 45
+
+[[store.item]]
+name = "Microwave Burrito Supreme"
+price = 20
+heal = 80

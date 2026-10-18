@@ -228,6 +228,13 @@ impl OrbitCam {
         self.yaw = yaw;
         self.placed = false;
     }
+
+    /// Where this camera settles behind someone standing at `feet` facing `facing` (a
+    /// character's yaw): the end of a character switch's sky-cam.
+    pub fn settled(feet: Vec3, facing: f32) -> CameraIntent {
+        let cam = OrbitCam { yaw: wrap(std::f32::consts::PI - facing), target: feet + Vec3::Y * FOOT_LIFT, ..Default::default() };
+        cam.intent()
+    }
 }
 
 /// The chase camera lets go of a right-stick look after this long (s).

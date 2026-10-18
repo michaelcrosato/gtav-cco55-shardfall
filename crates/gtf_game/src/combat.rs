@@ -266,6 +266,15 @@ pub struct Combat {
     pub shots: u32,
     pub hits: u32,
     pub kills: u32,
+    pub headshots: u32,
+    /// The player's special ability this tick (1 = none): damage dealt and taken, the aim
+    /// assist's cone, the fists' shove.
+    pub power: f32,
+    pub tough: f32,
+    pub assist_cone: f32,
+    pub shove: f32,
+    /// Damage the player took since the game last looked (the Overdrive meter fills on it).
+    pub taken: f32,
 }
 
 impl Default for Combat {
@@ -295,6 +304,12 @@ impl Default for Combat {
             shots: 0,
             hits: 0,
             kills: 0,
+            headshots: 0,
+            power: 1.0,
+            tough: 1.0,
+            assist_cone: 1.0,
+            shove: 1.0,
+            taken: 0.0,
         }
     }
 }
@@ -323,6 +338,9 @@ pub struct Outcome {
     pub killed: Vec<(EntityId, Vec3)>,
     /// Vehicles the shots struck.
     pub vehicles: Vec<EntityId>,
+    /// Shots to the head, and the damage done to people.
+    pub headshots: u32,
+    pub dealt: f32,
 }
 
 /// A random direction within `spread` degrees of `dir`.
@@ -497,7 +515,12 @@ impl Combat {
             if let Some(id) = struck {
                 let feet = sim.feet(id).unwrap_or(point);
                 let head = point.y - feet.y > 1.45;
-                let amount = w.damage * if head { w.head } else { 1.0 };
+                let amount = w.damage * if head { w.head } else { 1.0 } * self.power;
+                if head {
+                    self.headshots += 1;
+                    out.headshots += 1;
+                }
+                out.dealt += amount;
                 self.damage(sim, id, point, (point - muzzle).normalize_or(body), amount, w.knockback, events, out);
             } else if let Some(id) = entity.filter(|&id| sim.state.entities.get(id).is_some_and(|e| e.vehicle.is_some())) {
                 // Cars soak up rounds (four or five dozen from a pistol) until they catch fire.
@@ -570,7 +593,8 @@ impl Combat {
             .collect();
         for id in near {
             let at = sim.state.entities.get(id).map_or(chest, |e| e.pos);
-            self.damage(sim, id, at, body, w.damage, w.knockback, events, out);
+            out.dealt += w.damage * self.power;
+            self.damage(sim, id, at, body, w.damage * self.power, w.knockback * self.shove, events, out);
             events.push(sound("melee.hit", at, 1.0));
         }
     }
@@ -668,7 +692,7 @@ impl Combat {
         pose.shoulder = crate::camera::AIM_SHOULDER * pose.side;
         pose.lift = crate::camera::AIM_LIFT;
         pose.target += Vec3::Y * (crate::camera::AIM_LIFT - cam.lift);
-        match self.sight(sim, s, range, 12.0, 35.0) {
+        match self.sight(sim, s, range, 12.0 * self.assist_cone, 35.0) {
             Some(chest) => look_at(&mut pose, chest, 1.0),
             None => {
                 let ahead = pose.target + Vec3::new(pose.yaw.sin(), 0.0, -pose.yaw.cos()) * 20.0;
@@ -688,6 +712,8 @@ impl Combat {
 
     /// The player takes `amount`: armour soaks up 70% of it while it lasts.
     pub fn hurt_player(&mut self, amount: f32) {
+        let amount = amount * self.tough;
+        self.taken += amount;
         let soak = (amount * ARMOR_SHARE).min(self.armor);
         self.armor -= soak;
         self.health = (self.health - (amount - soak)).max(0.0);

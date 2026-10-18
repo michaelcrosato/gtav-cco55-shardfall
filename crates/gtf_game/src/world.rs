@@ -46,9 +46,10 @@ pub fn dev_city() -> Result<Arc<City>> {
     district("dev_district.toml", include_str!("../../../content/freeway/dev_district.toml"))
 }
 
-/// The district a scene mode plays in.
+/// The district a scene mode plays in (a mission scene: its mission's).
 pub fn city_for(mode: &str) -> Result<Arc<City>> {
-    if mode == "dev" { dev_city() } else { city() }
+    let mission = mode.strip_prefix("mission/").and_then(|k| crate::missions::get(k).ok());
+    if mode == "dev" || mission.is_some_and(|m| m.district == "dev") { dev_city() } else { city() }
 }
 
 /// Where the Proving Grounds start: by the main crossroads.

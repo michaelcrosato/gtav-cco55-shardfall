@@ -225,9 +225,10 @@ impl Freeway {
                     Some(_) => self.cover.step(&city, sim, id, input, &self.cam, dt),
                     None => None,
                 };
+                let stamina = self.crew.me().map_or(50.0, |m| m.stats.stamina);
                 let (frame, haste) = match in_cover {
                     Some(f) => (f, 0.0),
-                    None => self.foot.input(input, &self.cam, 50.0, dt),
+                    None => self.foot.input(input, &self.cam, stamina, dt),
                 };
                 let wdef = combat::def().ok();
                 let gun = wdef.as_ref().and_then(|d| d.weapon.get(self.weapon)).is_some_and(|w| w.kind == combat::Kind::Gun);
@@ -456,6 +457,8 @@ impl Freeway {
             };
             self.bot.update(sim, &bm);
         }
+        // The ability meter fills by how the protagonist plays.
+        self.fill_meter(sim, &res, events, real);
         // Death.
         if self.fate.alive() && self.combat.health <= 0.0 && pid.is_some() {
             self.go(sim, Fate::Wasted { t: 0.0 }, events);

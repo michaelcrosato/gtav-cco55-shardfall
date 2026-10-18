@@ -126,6 +126,8 @@ fn the_pause_menu_holds_the_world_still() {
 fn the_weapon_wheel_slows_time_and_picks_a_weapon() {
     let mut s = sim("freeway/roam");
     idle(&mut s, 30);
+    // The wheel offers what the protagonist owns: Dez starts with the pistol; give him the SMG.
+    s.step(&cmd("give buzz"));
     s.step(&press(pad::L1));
     s.run(20, &hold(pad::L1, Vec2::ZERO));
     assert!(game(&s).wheel_open());

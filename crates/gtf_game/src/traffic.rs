@@ -156,6 +156,21 @@ pub struct Agent {
     /// A fleeing car overtaking: seconds left out in the next lane over (oncoming traffic too).
     #[serde(default)]
     pub passing: f32,
+    /// A mission's orders: drive to `goal` along the lanes and stop there (`arrived` once
+    /// stopped by it; `planned` once the route to it is laid), or run from `away` (moved each
+    /// tick by the mission; with a goal too, it drives there like a getaway driver — through
+    /// lights, out past slower cars: a race). A mission's car is never removed by the population
+    /// pass.
+    #[serde(default)]
+    pub goal: Option<Vec3>,
+    #[serde(default)]
+    pub away: Option<Vec3>,
+    #[serde(default)]
+    pub mission: bool,
+    #[serde(default)]
+    pub arrived: bool,
+    #[serde(default)]
+    pub planned: bool,
 }
 
 /// The cars driving around the player, the parked ones and their counters (part of the game's
@@ -164,6 +179,8 @@ pub struct Agent {
 #[serde(default)]
 pub struct Traffic {
     pub cars: Vec<Agent>,
+    /// A mission's share of the usual moving traffic (None: all of it).
+    pub thin: Option<f32>,
     /// Parking spot index → its parked car.
     pub parked: BTreeMap<u32, EntityId>,
     /// Vehicles left behind (abandoned, carjacked, moved from their spot): removed when far and
@@ -531,9 +548,123 @@ impl Traffic {
             bus: None,
             pilot: true,
             passing: 0.0,
+            goal: None,
+            away: None,
+            mission: false,
+            arrived: false,
+            planned: false,
         };
         self.extend(&mut a, g, &mut sim.state.rng);
         self.cars.push(a);
+    }
+
+    /// Puts `car` (with `driver` at the wheel) under a mission's orders: to `goal` along the
+    /// lanes and stop there, or run from `away` (else cruise), at `desire` × the limits. A car
+    /// already in traffic keeps its place and takes the new orders.
+    #[allow(clippy::too_many_arguments)]
+    pub fn command(
+        &mut self,
+        sim: &mut Sim,
+        city: &City,
+        car: EntityId,
+        driver: Option<EntityId>,
+        goal: Option<Vec3>,
+        away: Option<Vec3>,
+        desire: f32,
+    ) {
+        if let Some(a) = self.cars.iter_mut().find(|a| a.car == car) {
+            a.goal = goal;
+            a.away = away;
+            a.desire = desire;
+            a.mission = true;
+            a.arrived = false;
+            a.planned = false;
+            a.route.clear();
+            return;
+        }
+        self.parked.retain(|_, id| *id != car);
+        self.loose.retain(|id| *id != car);
+        let Some(c) = Car::read(sim, car) else { return };
+        let g = &city.lanes;
+        let fwd = c.forward();
+        let keep = |l: &pav_world::lanes::Lane| {
+            !l.closed && drivable(l.kind) && l.points.len() >= 2 && (l.points[1] - l.points[0]).normalize_or_zero().dot(fwd) > 0.3
+        };
+        let any = |l: &pav_world::lanes::Lane| !l.closed && drivable(l.kind);
+        let Some((lane, _, _)) = g.nearest_level(c.feet(), 4.0, keep).or_else(|| g.nearest_level(c.feet(), 4.0, any)) else {
+            return;
+        };
+        let along = g.lanes[lane as usize].project(c.feet()).0;
+        let mut a = Agent {
+            car,
+            driver,
+            key: sim.state.entities.get(car).map(|e| e.name.clone()).unwrap_or_default(),
+            lane,
+            along,
+            route: Vec::new(),
+            speed: c.speed(),
+            desire,
+            tier: Tier::Full,
+            mood: Mood::Cruise,
+            mood_t: 0.0,
+            blocked: 0.0,
+            reverse: 0.0,
+            honk: 0.0,
+            change_t: 0.0,
+            held: false,
+            bus: None,
+            pilot: false,
+            passing: 0.0,
+            goal,
+            away,
+            mission: true,
+            arrived: false,
+            planned: false,
+        };
+        if c.speed().abs() < 0.1 {
+            sim.set_vehicle_kinematic(car, false);
+        }
+        self.extend(&mut a, g, &mut sim.state.rng);
+        self.cars.push(a);
+    }
+
+    /// Moves a mission runner's point to run from (the player, each tick).
+    pub fn run_from(&mut self, car: EntityId, from: Vec3) {
+        if let Some(a) = self.cars.iter_mut().find(|a| a.car == car && a.away.is_some()) {
+            a.away = Some(from);
+        }
+    }
+
+    /// Whether a car under orders has stopped at its destination.
+    pub fn arrived(&self, car: EntityId) -> bool {
+        self.cars.iter().any(|a| a.car == car && a.arrived)
+    }
+
+    /// Takes a car out of the mission's hands (and out of traffic): it stays where it is.
+    pub fn dismiss(&mut self, car: EntityId) {
+        self.cars.retain(|a| a.car != car);
+    }
+
+    /// The player's car on autopilot drives to `goal` and stops there (None: cruises on), at
+    /// `desire` × the limits — above 1.1 in a hurry (through lights, past slower cars).
+    pub fn pilot_goal(&mut self, goal: Option<Vec3>, desire: f32) {
+        if let Some(a) = self.cars.iter_mut().find(|a| a.pilot) {
+            a.away = goal.filter(|_| desire > 1.1);
+            if a.goal.is_some_and(|g| goal.is_some_and(|n| n.distance(g) < 1.0)) {
+                a.desire = desire;
+                return;
+            }
+            a.goal = goal;
+            a.desire = desire;
+            a.arrived = false;
+            a.planned = false;
+            a.route.clear();
+        }
+    }
+
+    /// Whether the player's car on autopilot has stopped at its destination.
+    pub fn pilot_arrived(&self) -> bool {
+        self.cars.iter().any(|a| a.pilot && a.arrived)
     }
 
     /// A parked car taken from its spot (the player got in): no longer kept at the curb.
@@ -743,7 +874,7 @@ impl Traffic {
         let first = !self.filled;
         // Leave: moving cars beyond the radius, parked and loose ones beyond theirs.
         let mut gone = Vec::new();
-        for a in self.cars.iter().filter(|a| !a.pilot) {
+        for a in self.cars.iter().filter(|a| !a.pilot && !a.mission) {
             let Some(e) = sim.state.entities.get(a.car) else { continue };
             let far = e.pos.distance(player) > d.density.despawn;
             let stuck = a.blocked > d.drive.give_up && !seen(&m.camera, e.pos);
@@ -876,7 +1007,8 @@ impl Traffic {
             }
         }
         // Moving traffic: the hour's share of the cap.
-        let want = (d.density.max as f32 * crate::peds::time_share(m.hour, d.density.night)).round() as usize;
+        let want =
+            (d.density.max as f32 * crate::peds::time_share(m.hour, d.density.night) * self.thin.unwrap_or(1.0)).round() as usize;
         let buses = self.cars.iter().filter(|a| a.bus.is_some()).count();
         let loop_ok = self.bus_loop.as_ref().is_some_and(|b| !b.lanes.is_empty());
         if loop_ok && buses < d.bus.count {
@@ -885,7 +1017,7 @@ impl Traffic {
         let tries = if first { 120 } else { 6 };
         let kinds = ambient_kinds();
         for _ in 0..tries {
-            if self.cars.iter().filter(|a| !a.pilot).count() >= want + buses || kinds.is_empty() {
+            if self.cars.iter().filter(|a| !a.pilot && !a.mission).count() >= want + buses || kinds.is_empty() {
                 break;
             }
             let rng = &mut sim.state.rng;
@@ -939,6 +1071,11 @@ impl Traffic {
                 bus: None,
                 pilot: false,
                 passing: 0.0,
+                goal: None,
+                away: None,
+                mission: false,
+                arrived: false,
+                planned: false,
             };
             self.extend(&mut agent, g, &mut sim.state.rng);
             if pos.distance(player) > d.density.full || !crate::world::ground_loaded(sim, pos) {
@@ -1008,6 +1145,11 @@ impl Traffic {
                 bus: Some(BusState { stop, dwell: 0.0 }),
                 pilot: false,
                 passing: 0.0,
+                goal: None,
+                away: None,
+                mission: false,
+                arrived: false,
+                planned: false,
             };
             if dist > d.density.full || !crate::world::ground_loaded(sim, pos) {
                 sim.set_vehicle_kinematic(car, true);
@@ -1032,9 +1174,29 @@ impl Traffic {
             }
             return;
         }
+        // A mission's destination: the lanes there, then nothing more (it stops at the end) —
+        // laid again whenever the route runs out short of the goal's lane (a lane change to
+        // pass or pull over clears it).
+        if let Some(goal) = a.goal {
+            let keep = |l: &pav_world::lanes::Lane| !l.closed && drivable(l.kind) && l.kind != LaneKind::Connector;
+            let end = || g.nearest_level(goal, 4.0, keep).or_else(|| g.nearest(goal, keep)).map(|x| x.0);
+            if !a.planned || (a.route.is_empty() && end() != Some(a.lane)) {
+                a.planned = true;
+                let start = *a.route.last().unwrap_or(&a.lane);
+                if let Some(end) = end() {
+                    let path = g.route_lanes(start, end);
+                    if path.first() == Some(&start) {
+                        a.route.extend_from_slice(&path[1..]);
+                    }
+                }
+            }
+            return;
+        }
+        // Running: from the chasers (the player's car on the run), or from what a mission says.
+        let from = if a.pilot { self.escape } else { a.away };
         while a.route.len() < 4 {
             let last = *a.route.last().unwrap_or(&a.lane);
-            let next = match (a.pilot, self.escape) {
+            let next = match (a.pilot || a.away.is_some(), from) {
                 // Running: the turn whose road leads farthest from the chasers.
                 (true, Some(from)) => g.lanes[last as usize]
                     .next
@@ -1273,9 +1435,13 @@ impl Traffic {
                 }
             }
             let lane = &g.lanes[a.lane as usize];
-            // Moods (the autopilot on the run drives like a fleeing driver).
+            // Moods (the autopilot on the run drives like a fleeing driver, as does a mission's
+            // runner).
             if a.pilot {
-                a.mood = if self.escape.is_some() { Mood::Flee } else { Mood::Cruise };
+                a.mood = if self.escape.is_some() || a.away.is_some() { Mood::Flee } else { Mood::Cruise };
+                a.mood_t = 1.0;
+            } else if a.away.is_some() {
+                a.mood = Mood::Flee;
                 a.mood_t = 1.0;
             }
             a.mood_t -= dt;
@@ -1317,6 +1483,8 @@ impl Traffic {
             // The limit: this lane's and the next one's within braking reach (turns are slower).
             let look = (a.speed.max(0.0) * 4.0).clamp(25.0, 90.0);
             let mut limit = turn_speed(lane);
+            // (The turns ahead alone: a driver in a hurry still takes them at a safe speed.)
+            let mut curve = if lane.turn == Turn::Straight || lane.turn == Turn::None { f32::MAX } else { limit };
             {
                 let mut dist = lane.length - a.along;
                 for &n in a.route.iter().take(3) {
@@ -1325,7 +1493,11 @@ impl Traffic {
                     }
                     // Slow down in time for a turn ahead (comfortable braking over the distance).
                     let v = turn_speed(&g.lanes[n as usize]);
-                    limit = limit.min((v * v + 2.0 * 2.0 * dist).sqrt());
+                    let brake = (v * v + 2.0 * 2.0 * dist).sqrt();
+                    limit = limit.min(brake);
+                    if g.lanes[n as usize].turn != Turn::Straight && g.lanes[n as usize].turn != Turn::None {
+                        curve = curve.min(brake);
+                    }
                     dist += g.lanes[n as usize].length;
                 }
             }
@@ -1336,6 +1508,11 @@ impl Traffic {
                 _ => 1.0,
             };
             let mut v0 = limit * a.desire * haste;
+            // Under a mission's orders (a race, a drive somewhere), hurrying never takes a turn
+            // much faster than it can be taken.
+            if a.goal.is_some() {
+                v0 = v0.min(curve * 1.15);
+            }
             // Obstacles: the nearest car ahead, a light, a junction box, people on the road.
             let mut obstacle: Option<(f32, f32)> = None;
             let mut held = false;
@@ -1425,6 +1602,18 @@ impl Traffic {
                 }
                 lane_id = a.route[k];
                 k += 1;
+            }
+            // A mission's destination on this lane (the route used up): stop there.
+            if let Some(goal) = a.goal
+                && a.planned
+                && a.route.is_empty()
+            {
+                let (gal, _) = lane.project(goal);
+                let gap = gal - a.along - my_half * 0.5;
+                consider(gap.max(0.0), 0.0, true, false);
+                if a.speed.abs() < 0.8 && (gap < 4.0 || c.feet().distance(goal) < 9.0) {
+                    a.arrived = true;
+                }
             }
             // People on the road ahead: along the path the car will take, so a turn sees the
             // crossing it turns into.

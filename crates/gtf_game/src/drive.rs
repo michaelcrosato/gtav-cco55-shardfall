@@ -202,6 +202,8 @@ pub struct Drive {
     /// The car the player was last in, and seconds since its card (name, station) appeared.
     pub last: Option<EntityId>,
     pub card: f32,
+    /// Extra tyre grip from the driver's ability (Slipstream), as a share of the tyres' own.
+    pub grip: f32,
 }
 
 impl Drive {
@@ -498,6 +500,7 @@ impl Drive {
                 handbrake: p.held & pad::R1 != 0 && p.held & pad::L1 == 0 && !c.heli,
                 horn,
                 siren: self.siren && c.siren,
+                grip: self.grip,
             },
         ));
     }

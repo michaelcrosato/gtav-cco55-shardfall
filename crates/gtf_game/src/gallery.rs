@@ -246,6 +246,7 @@ pub fn wheel_page(player: Vec2) -> UiModel {
         camera_yaw: 0.0,
         money: (12_480, 0, 10.0),
         weapon: 1,
+        ability: (0.8, pav_core::Color::hex("#6fe28a")),
         help: None,
         map_blips: lot_blips(),
         route: Vec::new(),

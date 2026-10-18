@@ -142,3 +142,71 @@ text = "MISSIONS | gtf play cmd=mission start dev_test"
 [[sign]]
 at = [13.0, 13.4]
 text = "UI GALLERY & AUDIO | freeway/gallery, gtf audio_capture"
+
+# Named spots for the test missions and the protagonists (map cell coordinates; `yaw` degrees
+# from north).
+[[spot]]
+name = "dez_home"
+at = [3.5, 3.4]
+yaw = 180.0
+
+[[spot]]
+name = "mack_home"
+at = [11.5, 5.4]
+yaw = 180.0
+
+[[spot]]
+name = "roxy_home"
+at = [11.5, 9.4]
+yaw = 180.0
+
+[[spot]]
+name = "test_start"
+at = [10.5, 13.4]
+yaw = 180.0
+
+[[spot]]
+name = "test_car"
+at = [3.5, 5.5]
+yaw = 90.0
+
+[[spot]]
+name = "test_yard"
+at = [11.5, 10.5]
+yaw = 90.0
+
+[[spot]]
+name = "test_store"
+at = [3.5, 2.4]
+yaw = 180.0
+
+[[spot]]
+name = "test_range"
+at = [11.5, 2.0]
+yaw = 0.0
+
+[[spot]]
+name = "test_park"
+at = [11.5, 5.8]
+yaw = 0.0
+
+[[spot]]
+name = "test_far"
+at = [14.0, 14.0]
+yaw = 270.0
+
+# The first test mission's wagon, rival and goon, set facing the way the player will drive.
+[[spot]]
+name = "t1_lead"
+at = [14.0, 12.5]
+yaw = 90.0
+
+[[spot]]
+name = "t1_rival"
+at = [15.5, 3.0]
+yaw = 0.0
+
+[[spot]]
+name = "t1_goon"
+at = [5.5, 3.5]
+yaw = 270.0
