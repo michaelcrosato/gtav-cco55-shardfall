@@ -229,6 +229,74 @@ fn a_pass_pays_keeps_the_record_texts_and_autosaves() {
 }
 
 #[test]
+fn walking_into_a_mission_marker_starts_it() {
+    let mut s = sim("freeway/dev", 1);
+    s.run(30, &InputFrame::default());
+    let open: Vec<String> = game(&s).open_missions().into_iter().map(|m| m.0).collect();
+    assert_eq!(open, ["dev_test", "dev_test2"], "both test missions wait at the MISSIONS station");
+    let ui = s.present().unwrap().ui;
+    let letters = ui
+        .hud
+        .unwrap()
+        .minimap
+        .unwrap()
+        .blips
+        .iter()
+        .filter(|b| matches!(b.icon, pav_core::present::BlipIcon::Letter('T')))
+        .count();
+    assert_eq!(letters, 2, "their letters are on the radar");
+    let (_, at) = game(&s).open_missions().into_iter().next().unwrap();
+    let pid = s.state.player.unwrap();
+    s.set_position(pid, at + glam::Vec3::Y * 0.05);
+    s.run(3, &InputFrame::default());
+    let st = game(&s).mission_status();
+    assert_eq!(st["key"], "dev_test", "{st}");
+    assert_eq!(st["phase"], "intro", "the title card first");
+    let screen = s.present().unwrap().ui.screen.unwrap();
+    assert_eq!(screen.id, "mission/intro");
+    assert!(s.world_paused(), "the world waits on the title card");
+}
+
+#[test]
+fn passed_missions_can_be_replayed_from_the_pause_menu() {
+    let mut s = sim("freeway/dev", 1);
+    s.run(30, &InputFrame::default());
+    s.state
+        .play
+        .as_mut()
+        .unwrap()
+        .get_mut::<Freeway>()
+        .unwrap()
+        .missions
+        .records
+        .insert("dev_test2".into(), missions::Record { passed: true, ..Default::default() });
+    // Options, the GAME tab (where the menu opens), down to Replay Mission.
+    s.step(&press(pad::START));
+    s.step(&InputFrame::default());
+    let items = |s: &Sim| {
+        let screen = s.present().unwrap().ui.screen.unwrap();
+        let pav_core::present::ScreenBody::Menu(m) = screen.body else { panic!("a menu: {}", screen.id) };
+        (m.items.iter().map(|i| i.id.clone()).collect::<Vec<_>>(), m.focus)
+    };
+    let (ids, _) = items(&s);
+    assert_eq!(ids[..3], ["resume", "replay", "load"], "{ids:?}");
+    s.step(&press(pad::DOWN));
+    s.step(&InputFrame::default());
+    s.step(&press(pad::SOUTH));
+    s.step(&InputFrame::default());
+    let screen = s.present().unwrap().ui.screen.unwrap();
+    assert_eq!(screen.id, "shop/replay");
+    let (ids, _) = items(&s);
+    assert_eq!(ids, ["dev_test2"], "only what has been passed");
+    s.step(&cmd("ui.accept dev_test2"));
+    s.run(2, &InputFrame::default());
+    let g = game(&s);
+    assert_eq!(g.mission_status()["key"], "dev_test2");
+    assert!(g.missions.run.as_ref().unwrap().replay, "a replay pays nothing");
+    assert_eq!(g.crew.key(), "mack", "played as its protagonist");
+}
+
+#[test]
 #[ignore = "exploratory: prints the bot's progress (cargo test -p gtf_game --test missions -- --ignored --nocapture)"]
 fn bot_progress_report() {
     for scene in ["freeway/mission/dev_test", "freeway/mission/dev_test2"] {

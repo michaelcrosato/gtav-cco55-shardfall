@@ -464,6 +464,34 @@ impl Freeway {
                         log::warn!("load {slot}: {e:#}");
                     }
                 }
+                // `phone <app>|home|close` (captures, tools); `menu gun|mods|store|save|load|replay`.
+                (Some("phone"), Some(app)) => {
+                    if app == "close" {
+                        self.phone.open = false;
+                    } else if app == "home" || phone::APPS.iter().any(|a| a.0 == app) {
+                        self.phone.open = true;
+                        self.phone.app = app.into();
+                        self.phone.focus = phone::APPS.iter().position(|a| a.0 == app).unwrap_or(0);
+                        self.phone.reading = None;
+                    } else {
+                        log::warn!("phone: home, close or an app ({})", phone::APPS.map(|a| a.0).join(", "));
+                    }
+                }
+                (Some("menu"), Some(which)) => {
+                    let c = match which {
+                        "gun" => Some(shops::Counter::Gun),
+                        "mods" => Some(shops::Counter::Mods),
+                        "store" => Some(shops::Counter::Store),
+                        "save" => Some(shops::Counter::Save),
+                        "load" => Some(shops::Counter::Load),
+                        "replay" => Some(shops::Counter::Replay),
+                        _ => None,
+                    };
+                    match c {
+                        Some(c) => self.shop = Some(shops::ShopState::new(c, true)),
+                        None => log::warn!("menu: gun, mods, store, save, load or replay"),
+                    }
+                }
                 // The autopilot's destination: `pilot_goal <x> <z> [desire]`, `pilot_goal off`.
                 (Some("pilot_goal"), Some("off")) => self.traffic.pilot_goal(None, 1.0),
                 (Some("pilot_goal"), Some(x)) => {
@@ -929,12 +957,8 @@ impl Game for Freeway {
                 self.roam_age = 0.0;
                 self.new_game(sim);
             }
-            Some(Action::Replay) => {
-                self.shop = Some(shops::ShopState { counter: shops::Counter::Replay, focus: 0, nav: Default::default() })
-            }
-            Some(Action::Load) => {
-                self.shop = Some(shops::ShopState { counter: shops::Counter::Load, focus: 0, nav: Default::default() })
-            }
+            Some(Action::Replay) => self.shop = Some(shops::ShopState::new(shops::Counter::Replay, true)),
+            Some(Action::Load) => self.shop = Some(shops::ShopState::new(shops::Counter::Load, true)),
             Some(Action::QuitMission) => self.quit_mission(sim),
             Some(Action::Settings) => self.settings_changed(),
             Some(Action::Quit) => self.quit = true,
@@ -1334,17 +1358,25 @@ impl Game for Freeway {
                 ui.overlay.vignette = 0.45;
             }
             if let Some(t) = self.ability_tint() {
+                // The ability's grade: its colour over a half-washed-out picture, the edges dark.
                 ui.overlay.tint = Some(t);
-                ui.overlay.vignette = ui.overlay.vignette.max(0.35);
+                ui.overlay.desaturate = ui.overlay.desaturate.max(0.35);
+                ui.overlay.vignette = ui.overlay.vignette.max(0.6);
             }
             if let Some((text, age)) = &self.crew.card {
                 ui.help = Some(Help { text: text.clone(), age: *age });
             }
             ui.phone = self.phone_ui(sim);
-            if self.phone.camera()
-                && let Some(h) = &mut ui.hud
-            {
-                h.opacity = 0.0;
+            if self.phone.camera() {
+                // The viewfinder: no HUD or tips over the picture, the shutter and back buttons.
+                if let Some(h) = &mut ui.hud {
+                    h.opacity = 0.0;
+                }
+                ui.help = None;
+                ui.prompts = vec![
+                    Prompt { button: PadButton::South, label: "Take photo".into(), hold: None },
+                    Prompt { button: PadButton::East, label: "Back".into(), hold: None },
+                ];
             }
             if self.radio_wheel_open() {
                 if let (Some(w), Ok(def)) = (&self.radio_wheel, radio::def()) {
@@ -1395,6 +1427,15 @@ impl Game for Freeway {
             self.mission_ui(sim, &mut ui, &mut draw);
             if shop_screen.is_some() {
                 ui.screen = shop_screen;
+            }
+            // A card or a menu over play (a mission's cards, a counter): the HUD, the tips and the
+            // play prompts make way for it.
+            if ui.screen.is_some() {
+                if let Some(h) = &mut ui.hud {
+                    h.opacity = 0.0;
+                }
+                ui.help = None;
+                ui.prompts.clear();
             }
         }
         if let Some(c) = &self.city {

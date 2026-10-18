@@ -407,7 +407,7 @@ impl Freeway {
             Vec::new()
         };
         let rows = if app == "camera" {
-            vec![PhoneRow { title: "~btn:south~ Take a photo".into(), detail: format!("{} taken", self.phone.photos) }]
+            vec![PhoneRow { title: "Take a photo".into(), detail: format!("{} taken", self.phone.photos) }]
         } else if app == "home" {
             Vec::new()
         } else {

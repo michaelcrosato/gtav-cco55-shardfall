@@ -90,7 +90,7 @@ pub(crate) fn actor_at(sim: &Sim, run: &Run, id: &str) -> Option<(Vec3, f32)> {
 
 impl Freeway {
     /// The player's point: their vehicle's when in one, else their feet.
-    pub(crate) fn player_point(&self, sim: &Sim) -> Vec3 {
+    pub fn player_point(&self, sim: &Sim) -> Vec3 {
         match self.drive.vehicle().and_then(|c| crate::drive::Car::read(sim, c)) {
             Some(c) => c.feet(),
             None => Self::feet(sim),
@@ -1776,7 +1776,7 @@ impl Freeway {
     }
 
     /// The missions that may be picked up in this district now, and where.
-    pub(crate) fn open_missions(&self) -> Vec<(String, Vec3)> {
+    pub fn open_missions(&self) -> Vec<(String, Vec3)> {
         let Some(city) = self.city.as_ref() else { return Vec::new() };
         let district = if self.mode == "dev" { "dev" } else { "" };
         super::all()
@@ -1851,15 +1851,18 @@ impl Freeway {
                 if let Some(h) = &mut ui.hud {
                     h.opacity = 0.0;
                 }
+                ui.help = None;
+                ui.prompts.clear();
                 return;
             }
             Phase::Failed { t } => {
+                // The banner first; the card takes over as it goes, the reason under Retry.
                 ui.banners.push(Banner {
                     kind: BannerKind::Failed,
                     title: "MISSION FAILED".into(),
                     subtitle: Some(run.reason.clone()),
                     age: *t,
-                    duration: FAIL_BANNER + 0.5,
+                    duration: FAIL_BANNER,
                 });
                 ui.overlay.desaturate = (t / 1.0).clamp(0.0, 0.8);
                 if *t > FAIL_BANNER {
@@ -1870,7 +1873,11 @@ impl Freeway {
                             label: (*label).into(),
                             value: ItemValue::Button,
                             enabled: true,
-                            note: (*id == "skip").then(|| "Move on to the next part".into()),
+                            note: match *id {
+                                "retry" => Some(run.reason.clone()),
+                                "skip" => Some("Move on to the next part".into()),
+                                _ => None,
+                            },
                         })
                         .collect();
                     ui.screen = Some(Screen {
@@ -1886,6 +1893,8 @@ impl Freeway {
                 if let Some(h) = &mut ui.hud {
                     h.opacity = 0.0;
                 }
+                ui.help = None;
+                ui.prompts.clear();
                 return;
             }
             Phase::Passed { t } => {
@@ -1899,12 +1908,12 @@ impl Freeway {
                     title: "MISSION PASSED".into(),
                     subtitle: medal.map(|m| format!("{m} medal")),
                     age: *t,
-                    duration: PASS_BANNER + 0.5,
+                    duration: PASS_BANNER,
                 });
                 if *t > PASS_BANNER {
                     let mut rows = vec![("Time".to_string(), clock_text(run.elapsed))];
                     for (m, ok) in def.medals.iter().zip(&run.met) {
-                        rows.push((m.text.clone(), if *ok { "✓".into() } else { "✗".into() }));
+                        rows.push((m.text.clone(), if *ok { "Done".into() } else { "Missed".into() }));
                     }
                     rows.truncate(5);
                     ui.screen = Some(Screen {
@@ -1925,6 +1934,8 @@ impl Freeway {
                 if let Some(h) = &mut ui.hud {
                     h.opacity = 0.0;
                 }
+                ui.help = None;
+                ui.prompts.clear();
                 return;
             }
             Phase::Play => {}

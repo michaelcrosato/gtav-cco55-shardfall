@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Freeway;
 use crate::pad::Nav;
+use crate::protagonists::money_text;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -104,6 +105,15 @@ pub struct ShopState {
     pub counter: Counter,
     pub focus: usize,
     pub nav: Nav,
+    /// Opened this tick from another menu (the press that opened it is not for this one).
+    #[serde(default)]
+    pub fresh: bool,
+}
+
+impl ShopState {
+    pub fn new(counter: Counter, fresh: bool) -> ShopState {
+        ShopState { counter, focus: 0, nav: Nav::default(), fresh }
+    }
 }
 
 /// How near a door the player must stand on foot (m), and Paloma Customs' door in a car.
@@ -166,12 +176,17 @@ impl Freeway {
                 if c == Counter::Save && self.heat.stars > 0 {
                     self.note("heat", "Not now", "You can't save while the police are after you.");
                 } else {
-                    self.shop = Some(ShopState { counter: c, focus: 0, nav: Nav::default() });
+                    self.shop = Some(ShopState::new(c, false));
                     events.push(SimEvent::Sound { cue: "ui.accept".into(), pos: None, gain: 1.0, pitch: 1.0 });
                 }
             }
             return;
         };
+        if shop.fresh {
+            shop.fresh = false;
+            self.shop = Some(shop);
+            return;
+        }
         let lines = self.counter_lines(sim, shop.counter);
         let (_, dy) = shop.nav.step(input, real);
         let before = shop.focus;
@@ -208,7 +223,7 @@ impl Freeway {
     fn counter_lines(&self, sim: &Sim, c: Counter) -> Vec<Line> {
         let Ok(d) = def() else { return Vec::new() };
         let money = self.money;
-        let price = |p: i64| format!("${p}");
+        let price = |p: i64| format!("{} · you have {}", money_text(p), money_text(money));
         match c {
             Counter::Gun => {
                 let wd = crate::combat::def().ok();
