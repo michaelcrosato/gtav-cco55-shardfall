@@ -4,11 +4,15 @@
 Auto V*: a third-person open-world crime caper in **Paloma Bay**, a sun-bleached coastal district of
 the fictional city of San Paloma, built on the **Pavilion engine** (the Shardfall repository).
 
-> **Status: in development.** Milestones M0–M2 are done: the engine is vendored and extended, and
-> Paloma Bay is generated, streamed, lit and dressed, with time of day and weather. M3–M5 are
-> partly done: on-foot play, cameras, vehicles in the engine, pedestrians, the radio and on-foot
-> combat. The game is built by executing [`PLAN.md`](PLAN.md). Progress is tracked in
-> [`PROGRESS.md`](PROGRESS.md), and the next steps are in [`HANDOFF.md`](HANDOFF.md).
+> **Status: in development.** Milestones M0–M6 are done: the engine is vendored and extended;
+> Paloma Bay is generated, streamed, lit and dressed, with time of day and weather; you walk,
+> drive, fly, fight and flee the police through living traffic and crowds; and the game's
+> structure works end to end — data-driven missions a bot can finish, three switchable
+> protagonists with special abilities, the phone, shops and saves. M7 (the story missions, the
+> heist and the activities) is next. The game is built by executing [`PLAN.md`](PLAN.md).
+> Progress is tracked in [`PROGRESS.md`](PROGRESS.md), and the next steps are in
+> [`HANDOFF.md`](HANDOFF.md); missions are written as described in
+> [`docs/gtf/MISSIONS.md`](docs/gtf/MISSIONS.md).
 
 ## Build and run
 - `cargo run --release -p gtf_app --bin grand_theft_freeway` starts the game (a WebGPU-capable GPU

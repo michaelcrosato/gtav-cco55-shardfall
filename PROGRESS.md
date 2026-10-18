@@ -5,24 +5,24 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase (2026-10-18, session 2):** M0-M5 done; M6 (missions, protagonists, phone, economy,
-  save) is next. Read `HANDOFF.md` first, then this file.
-- **Session 2 so far:** driving (get in and out, carjacking, locked cars, pad driving, chase and
-  cinematic cameras, vehicle and radio audio, the helicopter); `LIB/gtf_vehicles` (13 bodies and
-  a wheel); traffic (lane-graph routes, IDM following, lights, junction boxes, lane changes,
-  buses, parked cars, struck people, rails beyond 130 m); the wanted level, the police (cars,
-  vans, SPPD Air with a searchlight, roadblocks, spikes, PITs), Wasted and Busted; cover and
-  grenades; armed opponents (cover by lines of sight, peeks, flanks, grenades, retreats); the
-  WORKSHOP clips; `LIB/gtf_weapons` held in hand with aim and reload poses; drive-bys; the
-  respray and the car swap; the evasion bot; the map's edge, turnarounds and the freeway's
-  closed north end; population that never falls through the world.
+- **Phase (2026-10-18, end of session 2):** M0-M6 done; **M7 (content: the vertical slice) is
+  next**. Read `HANDOFF.md` first, then this file. The session ended at the user's request after
+  M6 ("finish M6, then wrap up for a handoff"); nothing is running and the tree is clean.
+- **Session 2:** M3-M5 (driving, traffic, `LIB/gtf_vehicles`, heat and the police, cover,
+  grenades, armed opponents, WORKSHOP clips, guns in hand, drive-bys, the respray and car swap,
+  the evasion bot, the map's edge) and M6: the mission DSL with its validator, runtime and bot
+  (`docs/gtf/MISSIONS.md`), two test missions using all 25 step kinds, the three protagonists
+  (switch wheel, sky-cam, abilities, life spots), the phone (nine apps, texts, the camera), the
+  shops (Bang Bang Bros., Paloma Customs, Gas-N-Grab), saves (three slots, autosave, Continue)
+  and two engine additions (district `[[spot]]`s, `VehicleInput.grip`).
 - **Soaks (release `gtf`):** traffic 600 s seeds 1-2 and peds 600 s pass every limit; roam
   900 s seeds 2-3 pass, seed 1 gives up one stuck car at a dead-end turnaround (open issue).
 - **Perf:** `gtf perf view=all` (release) passes every budget with traffic and crowds (downtown:
   110 vehicles, 94 people, 2.8-3.2 ms to build a frame, 1.4-2.2 ms a tick).
-- **Tests:** pav_core 305, pav_view 44, pav_world 11, gtf_game 74 (+6 ignored reports), all
-  green; clippy -D warnings clean on the touched crates.
-- **Helpers:** none running (the clips and weapons helpers' worktrees are merged).
+- **Tests:** pav_core 305, pav_view 44, pav_world 11, gtf_game 98 (+8 ignored reports), all
+  green; clippy -D warnings clean on the touched crates; `cargo check --workspace --all-targets`
+  clean.
+- **Helpers:** none running.
 - **Branch / PR:** `claude/keen-cerf-g5vksy`, draft PR #2.
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)
@@ -59,8 +59,27 @@ resumed or compacted session reads first.
       3★ night captures looked at — `out/m5/night3_sheet.png`, `night3_012s.png` and
       `night3_030s.png` show the searchlight's pool on the street and the vision cones on the
       radar.
-- [ ] **M6 Structure** — mission DSL + runtime + bots, protagonists + switching + abilities, phone,
-      economy and shops, save/load.
+- [x] **M6 Structure** — mission DSL + runtime + bots, protagonists + switching + abilities, phone,
+      economy and shops, save/load. *Acceptance:* `tests/missions.rs` — the bot finishes both
+      test missions on seeds 1-3 (`dev_test` drives: goto, enter_vehicle, drive_to, follow,
+      race, escape, lose_heat, deliver; `dev_test2` on foot and story: kill, collect,
+      photograph, interact, stealth, holdup, chase, choose, branch, survive, switch, parallel,
+      defend) and the loud way; every step kind used; fail → retry → skip after three fails;
+      quit; pass pays, texts and autosaves; markers start missions; replay from the pause menu;
+      the validator reports file:line. `tests/protagonists.rs` (switching keeps each one's
+      cash, weapons and place; the wheel and the sky-cam; abilities slow time, change damage,
+      drain), `tests/phone.rs` (tiles, the map waypoint, the camera catches who is centred),
+      `tests/economy.rs` (gun store, snacks, customs, a save round trip into a fresh game,
+      Continue loads the newest, the safehouse bed). Release `gtf`: `play bot=true` passes
+      `dev_test2` in 218.7 s of game time (gold). Captures looked at (`out/m6/`): phone home and
+      camera, the switch wheel, the sky-cam over the district, Mack landed, Deadeye's grade
+      (`deadeye_compare.png`), the intro card, objective and subtitle, MISSION FAILED and its
+      card, MISSION PASSED, the results screen, the gun store. Fixed after looking: the HUD,
+      tips and play prompts now give way to any card or menu (the minimap showed through the
+      shop's price box), the camera app shows its buttons as prompts (its row printed raw
+      glyph markup), the ability grade was too faint, the fail card lost "failed" once the
+      banner faded, the results printed ✓/✗ in a font without them, `dev_test2` started behind a
+      parked SUV.
 - [ ] **M7 Content** — final district, landmarks, interiors, all vehicles and props, missions m1–m3,
       s1–s3, h0, h1 (Loud + Smart), activities, radio stations, completion.
 - [ ] **M8 Frontend and attract** — title, menus, settings, About, loading cards, attract director,
@@ -75,11 +94,11 @@ resumed or compacted session reads first.
 |---|---|---|
 | D1 Builds and checks | ☐ | |
 | D2 The district | ☐ | |
-| D3 Player | ◐ | M3: feel ranges for all 13 road archetypes, driving/carjack/bail-out/helicopter tests, on-foot camera with wall handling; protagonists and abilities come in M6 |
+| D3 Player | ◐ | M3: feel ranges for all 13 road archetypes, driving/carjack/bail-out/helicopter tests, on-foot camera with wall handling; M6: three protagonists with their own cash, weapons and places, the switch wheel and sky-cam, abilities (`tests/protagonists.rs`); final looks and animation polish wait for M7/M9 |
 | D4 Living city | ◐ | M4: traffic and pedestrian soaks within limits, buses, parked cars, struck people, witnesses; roam soak open issue (one stuck car in 2,700 s) |
 | D5 Heat | ◐ | M5: `tests/heat.rs` (reporting, arrest, Wasted, respray, car swap, evasion), police never spawn in view, 3★ night captures |
-| D6 Missions and activities | ☐ | |
-| D7 UI | ☐ | |
+| D6 Missions and activities | ◐ | M6: the mission system end to end — DSL, validator (file:line), runtime, checkpoints, fail/retry/skip, medals, results, replay, the bot that finishes both test missions on 3 seeds (`tests/missions.rs`, `docs/gtf/MISSIONS.md`); the story missions, heist and activities are M7 |
+| D7 UI | ◐ | M1 kit + M6 screens: intro card, objectives, subtitles, fail card, results, switch wheel, phone (9 apps), shop menus, save slots, captured with HUD (`out/m6/`); the 10-foot review is M9 |
 | D8 Frontend | ☐ | |
 | D9 Attract mode | ☐ | |
 | D10 Audio | ☐ | |
@@ -193,12 +212,44 @@ resumed or compacted session reads first.
   - `gtf perf` times the median of five frames; far wheels (> 60 m) are plain cylinders; drawn
     assets tally a frame's meshes once (a hundred cars cost 9 ms a frame before).
 
+- 2026-10-18 — **M6 decisions:**
+  - Switching is open from the start (`crew.unlocked`): the story's introductions arrive with
+    M7's missions. A step's `switch = [...]` limits whom the wheel offers while it runs.
+  - Missions thin traffic (`{ traffic = 0.35 }`) and cap the heat (`{ heat_cap = 0 }`) where a
+    set piece needs it: the bot's drive legs stalled in junction queues at full density, and the
+    police killed Mack at 3★ after the range shootout.
+  - The mission bot acts only through its input frame (pad presses plus the commands a player's
+    tools send: `autopilot on|escape|off`, `pilot_goal x z desire`, `weapon <id>`), so replays
+    and snapshots include it and nothing reaches into game state.
+  - Checkpoints re-stage the mission's actors (every actor still up, with its behaviour) and put
+    back the flags, heat, health, clock and the player's place and car, instead of snapshotting
+    the whole sim. Skip after three fails fast-forwards to the next checkpoint: its steps are
+    done for the player and their targets cleared.
+  - Cars with a goal (mission drivers, the autopilot's `pilot_goal`) corner at no more than 1.15×
+    the curve speed (they slid into the edge wall), and replan when a lane change leaves their
+    route empty short of the goal lane; mission cars are left out of the population's counts.
+  - Abilities: Slipstream (Dez, at the wheel: time 0.5, +40% tyre grip through the new
+    `VehicleInput.grip`), Deadeye (Mack, on foot: time 0.35, aim-assist cone ×2, damage ×1.5),
+    Overdrive (Roxy: damage ×2, taken ×0.5, fists' shove ×2); each washes the screen in its
+    colour, half desaturated, with a vignette. Meters fill by play style (`protagonists.toml`).
+  - Saves are JSON (`SaveData`, version 1) handed to the host through `AppRequests.save` and kept
+    by the M1 host store (native files, web localStorage); `host.save` hands them back at boot.
+    Three slots at the safehouses plus `auto` after each pass; Continue loads the newest.
+  - Results rows read "Done" / "Missed": the UI fonts have no ✓ or ✗.
+  - Engine (upstreamable, `bf15e85`): districts name `[[spot]]`s (a place and a facing) for
+    missions and life spots; `VehicleInput.grip` adds tyre grip (0..2) for abilities.
+
 ## Open issues
 - Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround (limit 0);
   roam AI crashes 0-3 per 900 s with buses turning at junctions the most common. M9 polish.
 - Evasion bot from a standstill: 2/8 seeds (Wasted after being pinned by a PIT; it will not drive
   through the officers who get out). M9: fast-road routing, not stopping for armed officers.
 - DualSense button mapping through gilrs on the user's Windows machine (a user check).
+- Dense traffic can lock a junction box into a queue that never clears (why missions thin
+  traffic). M7/M9: give way by arrival order inside the box, or let the tail re-route.
+- `dev_test` takes the bot about 395 s of game time (long drive legs at a safe pace); the whole
+  missions suite runs in about a minute in the dev build. M7's missions should keep drive legs
+  short or use `traffic` thinning.
 
 ## Log
 - 2026-10-17 — Planning: engine studied at `0098196`; measured starter bot (3/3 wins), Drift Circuit
@@ -263,3 +314,8 @@ resumed or compacted session reads first.
   U-turns bulging into buildings, kinematic cars launching others, traffic flowing through the
   freeway's barrier. Evidence as in the milestone entries above; captures in `out/m3`,
   `out/m5`; soak JSON in `out/soak`.
+- 2026-10-18 — **M6 done; session 2 ends (handoff).** Engine: district spots and
+  `VehicleInput.grip` (`bf15e85`); game: missions (DSL, validator, runtime, bot), protagonists,
+  phone, shops and saves (`e1d2832`); the tests, `docs/gtf/MISSIONS.md` and the fixes made
+  after looking at the captures (this commit). Evidence in the M6 milestone entry; captures in
+  `out/m6/` (not committed). `HANDOFF.md` rewritten for the next session (M7).
