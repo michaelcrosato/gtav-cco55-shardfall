@@ -35,6 +35,10 @@ pub struct DistrictDef {
     pub jump: Vec<Jump>,
     #[serde(default)]
     pub sign: Vec<Sign>,
+    /// Named points for games: where scripted scenes begin, safehouse doors, spots where people
+    /// pass the time.
+    #[serde(default)]
+    pub spot: Vec<Spot>,
     /// Facade materials by building style (`MAT/...`; `podium` for towers' podiums): the
     /// block's colour stays its base colour, and windows light up at night. A style without
     /// one draws its plain colour.
@@ -254,6 +258,17 @@ fn jump_width() -> f32 {
 
 fn jump_height() -> f32 {
     2.0
+}
+
+/// A named point (map cell coordinates, fractions allowed) and a facing (degrees, 0 = north,
+/// 90 = east).
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Spot {
+    pub name: String,
+    pub at: [f32; 2],
+    #[serde(default)]
+    pub yaw: f32,
 }
 
 /// Words on a post (the developer district's station signs, street furniture text).

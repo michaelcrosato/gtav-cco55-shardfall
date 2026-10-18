@@ -226,6 +226,17 @@ impl City {
         self.grid.corner(c) + Vec2::splat(self.grid.cell * 0.5)
     }
 
+    /// A named spot from the district file: its world point (x, z) and its facing as a yaw
+    /// (radians, `atan2(x, z)` of the direction faced: the convention of vehicles and people).
+    pub fn spot(&self, name: &str) -> Option<(Vec2, f32)> {
+        let s = self.def.spot.iter().find(|s| s.name == name)?;
+        let p = self.grid.origin + Vec2::new(s.at[0], s.at[1]) * self.grid.cell;
+        // Degrees from north (map up, -z), clockwise toward east (+x).
+        let a = s.yaw.to_radians();
+        let dir = Vec2::new(a.sin(), -a.cos());
+        Some((p, dir.x.atan2(dir.y)))
+    }
+
     /// A chunk's content (tools and tests).
     pub fn bin(&self, x: i32, z: i32) -> Option<&Bin> {
         self.bins.get(&(x, z))

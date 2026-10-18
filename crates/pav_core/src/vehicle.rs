@@ -556,6 +556,10 @@ pub struct VehicleInput {
     /// The siren and light bar (vehicles with `siren`), on while true.
     #[serde(default)]
     pub siren: bool,
+    /// Extra tyre grip this tick as a share of the tyres' own (0 = as built, 0.4 = 40% more):
+    /// a game's driving ability or tuning.
+    #[serde(default)]
+    pub grip: f32,
 }
 
 /// A vehicle's state for a HUD, the audio and tools ([`Vehicle::status`]).
