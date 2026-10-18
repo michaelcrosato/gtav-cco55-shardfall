@@ -21,6 +21,7 @@ pub static TOOLS: &[Tool] = &[
         args: &[
             arg("view", "string", "a view name or all (default all)"),
             arg("ticks", "integer", "sim ticks to time per view (default 300)"),
+            arg("split", "boolean", "also time the frame without the vehicles and without the people"),
         ],
         run: t_perf,
     },
@@ -321,15 +322,61 @@ fn t_perf(s: &mut Session, a: &Args) -> Result<Output> {
         args.insert("scene".into(), json!(format!("freeway/view/{}", v.name)));
         pav_tools::call(s, "load", &args)?;
         s.step(5);
-        // Warm the view's caches, then measure a frame.
+        // Warm the view's caches, then measure frames (the median of five: one frame's time
+        // swings with whatever else the machine is doing).
         s.render_timed(960, 540)?;
-        let (_, view_ms) = s.render_timed(960, 540)?;
+        let mut times = Vec::new();
+        for _ in 0..5 {
+            times.push(s.render_timed(960, 540)?.1);
+        }
+        times.sort_by(f64::total_cmp);
+        let view_ms = times[2];
+        // Where the frame's time goes: the median of five frames as it is, without the vehicles,
+        // and without the people too (the scene is put back afterwards).
+        let split = if a.get("split").and_then(Value::as_bool).unwrap_or(false) {
+            let median = |s: &mut Session| -> Result<f64> {
+                let mut t = Vec::new();
+                for _ in 0..5 {
+                    t.push(s.render_timed(960, 540)?.1);
+                }
+                t.sort_by(f64::total_cmp);
+                Ok((t[2] * 100.0).round() / 100.0)
+            };
+            let all = median(s)?;
+            let keep = s.sim.state.clone();
+            let cars: Vec<_> = s.sim.state.entities.iter().filter(|e| e.vehicle.is_some()).map(|e| e.id).collect();
+            for id in &cars {
+                s.sim.despawn(*id);
+            }
+            let without_vehicles = median(s)?;
+            let people: Vec<_> = s
+                .sim
+                .state
+                .entities
+                .iter()
+                .filter(|e| e.character.is_some() && Some(e.id) != s.sim.state.player)
+                .map(|e| e.id)
+                .collect();
+            for id in &people {
+                s.sim.despawn(*id);
+            }
+            let without_people = median(s)?;
+            s.sim.state = keep;
+            Some(
+                json!({ "median": all, "vehicles": cars.len(), "without_vehicles": without_vehicles, "people": people.len(), "without_people_too": without_people }),
+            )
+        } else {
+            None
+        };
         let mut stats = pav_tools::tools::render_stats(s)?;
         let t = std::time::Instant::now();
         s.step(ticks);
         let sim_ms = t.elapsed().as_secs_f64() * 1000.0 / ticks as f64;
         stats["view_ms"] = json!((view_ms * 100.0).round() / 100.0);
         stats["sim_ms"] = json!((sim_ms * 1000.0).round() / 1000.0);
+        if let Some(split) = split {
+            stats["view_ms_split"] = split;
+        }
         let relaxed = v.name == "hills_vista";
         let mut over = Vec::new();
         for (k, budget, wide) in BUDGETS {
@@ -349,7 +396,7 @@ fn t_perf(s: &mut Session, a: &Args) -> Result<Output> {
         "ok": failed.is_empty(),
         "views": rows,
         "failed": failed,
-        "note": "debug build; view_ms is CPU time to build one frame; sim_ms covers the city without population yet",
+        "note": "view_ms: CPU time to build a frame (the median of five after a warm one; build gtf with --release for the budgets); sim_ms: per tick, traffic and people included",
     })))
 }
 
