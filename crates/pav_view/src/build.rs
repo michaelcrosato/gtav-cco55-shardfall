@@ -1342,7 +1342,8 @@ impl ViewBuilder {
                 // the night lights, which each frame dims by the street-light level.
                 let mut baked = Scene { street_lights: 1.0, ..Scene::default() };
                 let mut prop_lights = Vec::new();
-                let mut generated = GeneratedMeshes { built: std::mem::take(&mut self.generated.built), sent: HashSet::new() };
+                let mut generated =
+                    GeneratedMeshes { built: std::mem::take(&mut self.generated.built), sent: HashSet::new(), synced: (0, 0) };
                 for (index, p) in chunk.props.iter().enumerate() {
                     let Some(parts) = p.parts() else { continue };
                     let id = baked_id(*key, index);
@@ -2047,6 +2048,9 @@ pub(crate) struct GeneratedMeshes {
     pub(crate) built: HashMap<u64, Arc<MeshData>>,
     /// Keys this frame's scene already carries.
     pub(crate) sent: HashSet<u64>,
+    /// (frame serial, how many of the scene's custom meshes `sent` has seen): the asset path's
+    /// running tally.
+    pub(crate) synced: (u64, usize),
 }
 
 impl GeneratedMeshes {
