@@ -52,6 +52,8 @@ pub struct OrbitCam {
     pub target: Vec3,
     /// Seconds since the player last turned the camera.
     pub idle: f32,
+    /// How far out to the shoulder a wall beside the player lets the pivot go (m).
+    pub room: f32,
     /// False until the first update (the first one snaps to the player).
     placed: bool,
 }
@@ -69,6 +71,7 @@ impl Default for OrbitCam {
             lift: FOOT_LIFT,
             target: Vec3::ZERO,
             idle: 0.0,
+            room: FOOT_SHOULDER,
             placed: false,
         }
     }
@@ -117,9 +120,10 @@ impl OrbitCam {
         Vec2::new(w.x, w.z)
     }
 
-    /// The point the camera orbits: the target, moved out to the shoulder.
+    /// The point the camera orbits: the target, moved out to the shoulder (as far as a wall
+    /// beside the player allows).
     fn pivot(&self) -> Vec3 {
-        self.target + self.axes().1 * self.shoulder
+        self.target + self.axes().1 * self.shoulder.signum() * self.shoulder.abs().min(self.room)
     }
 
     /// From the pivot toward the eye (unit).
@@ -182,11 +186,16 @@ impl OrbitCam {
         } else {
             self.target += (aim - self.target) * (1.0 - (-14.0 * dt).exp());
         }
+        // A wall beside the player on the shoulder's side: the pivot keeps out of it (rays cast
+        // from inside a wall would find nothing, or pin the camera to the player's back).
+        let (_, right) = self.axes();
+        let out = right * self.shoulder.signum();
+        let room = hit(self.target, out, self.shoulder.abs() + SKIN).map_or(self.shoulder.abs(), |d| (d - SKIN).max(0.0));
+        self.room = if room < self.room { room } else { self.room + (room - self.room) * (1.0 - (-3.0 * dt).exp()) };
         // Walls: rays from the pivot toward the eye (the middle and four around it, a stand-in
         // for a sphere cast) pull the camera in at once; it eases back out when they clear.
         let pivot = self.pivot();
         let back = self.back();
-        let (_, right) = self.axes();
         let up = right.cross(back).normalize_or(Vec3::Y);
         let mut free = self.distance;
         for off in [Vec3::ZERO, right * 0.18, -right * 0.18, up * 0.18, -up * 0.18] {
@@ -498,6 +507,20 @@ mod tests {
             cam.update(&InputFrame::default(), feet, Look::default(), Moving::default(), DT, &open);
         }
         assert!((cam.reach - FOOT_DISTANCE).abs() < 0.05, "back out: {}", cam.reach);
+    }
+
+    #[test]
+    fn a_wall_beside_the_player_keeps_the_shoulder_out_of_it() {
+        let mut cam = OrbitCam::default();
+        let feet = Vec3::ZERO;
+        // A wall 0.3 m to the right (east) of a north-facing player: only rays heading east meet it.
+        let wall = |from: Vec3, dir: Vec3, _: f32| (dir.x > 0.5).then(|| ((0.3 - from.x) / dir.x).max(0.0));
+        for _ in 0..30 {
+            cam.update(&InputFrame::default(), feet, Look::default(), Moving::default(), DT, &wall);
+        }
+        let c = cam.intent();
+        assert!(c.eye.x < 0.3, "the eye stays on the player's side of the wall: {c:?}");
+        assert!((cam.reach - FOOT_DISTANCE).abs() < 0.05, "and keeps its distance: {}", cam.reach);
     }
 
     #[test]
