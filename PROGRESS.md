@@ -5,9 +5,12 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase (2026-10-18, end of session 2):** M0-M6 done; **M7 (content: the vertical slice) is
-  next**. Read `HANDOFF.md` first, then this file. The session ended at the user's request after
-  M6 ("finish M6, then wrap up for a handoff"); nothing is running and the tree is clean.
+- **Phase (2026-10-19, session 3 start):** M0-M6 done; **M7 (content: the vertical slice) is
+  next**, then M8-M10. Read `HANDOFF.md` first, then this file. Session 2 ended at the user's
+  request after M6; session 3 so far only checked the environment (Log, 2026-10-18/19) and
+  recorded two findings under Open issues: wasm clippy (D1) fails on four lines of vendored
+  engine code, and this container builds frames about 1.6× slower than session 2's, so
+  downtown misses the perf budget here with or without M6. Nothing is running; the tree is clean.
 - **Session 2:** M3-M5 (driving, traffic, `LIB/gtf_vehicles`, heat and the police, cover,
   grenades, armed opponents, WORKSHOP clips, guns in hand, drive-bys, the respray and car swap,
   the evasion bot, the map's edge) and M6: the mission DSL with its validator, runtime and bot
@@ -17,8 +20,9 @@ resumed or compacted session reads first.
   and two engine additions (district `[[spot]]`s, `VehicleInput.grip`).
 - **Soaks (release `gtf`):** traffic 600 s seeds 1-2 and peds 600 s pass every limit; roam
   900 s seeds 2-3 pass, seed 1 gives up one stuck car at a dead-end turnaround (open issue).
-- **Perf:** `gtf perf view=all` (release) passes every budget with traffic and crowds (downtown:
-  110 vehicles, 94 people, 2.8-3.2 ms to build a frame, 1.4-2.2 ms a tick).
+- **Perf:** `gtf perf view=all` (release) passed every budget with traffic and crowds in session
+  2 (downtown: 110 vehicles, 94 people, 2.8-3.2 ms to build a frame, 1.4-2.2 ms a tick). On the
+  session 3 container the same view takes 4.7-5.4 ms and 2.8-3.6 ms (open issue).
 - **Tests:** pav_core 305, pav_view 44, pav_world 11, gtf_game 98 (+8 ignored reports), all
   green; clippy -D warnings clean on the touched crates; `cargo check --workspace --all-targets`
   clean.
@@ -250,6 +254,20 @@ resumed or compacted session reads first.
 - `dev_test` takes the bot about 395 s of game time (long drive legs at a safe pace); the whole
   missions suite runs in about a minute in the dev build. M7's missions should keep drive legs
   short or use `traffic` thinning.
+- **D1: wasm clippy is not clean** (`cargo clippy -p pav_app -p gtf_app --target
+  wasm32-unknown-unknown -- -D warnings`, found 2026-10-18). There are four wasm-only lints in
+  vendored engine code (`689142b`), and no earlier session recorded this check as passing.
+  `clippy::drop_non_drop` fires at `pav_tools/src/animation_tools.rs:287`, `asset_tools.rs:95`
+  and `creature_tools.rs:662` (on wasm `std::fs::File` has no `Drop`).
+  `clippy::default_constructed_unit_structs` fires at `pav_app/src/asset_watch.rs:48` (the wasm
+  `AssetWatcher` is a unit struct). With those two lints allowed, the rest is clean. Fix them in
+  one `engine:` commit (a block scope instead of `drop`, and `Self` for the unit struct).
+- **Perf on the session 3 container:** `gtf perf view=downtown_street` (release) builds a frame
+  in 4.7-5.4 ms (budget 4; outliers to 7) and runs a tick in 2.8-3.6 ms (budget 3). A release
+  build of the last commit before M6 (`fbe56bf`) gives the same numbers on this machine, so this
+  is the container (about 1.6× slower than session 2's), not a regression. Judge perf changes
+  by A/B against a baseline build on the same machine. D12 needs margin: M9's performance pass
+  should bring downtown well under 4 ms here.
 
 ## Log
 - 2026-10-17 — Planning: engine studied at `0098196`; measured starter bot (3/3 wins), Drift Circuit
@@ -319,3 +337,18 @@ resumed or compacted session reads first.
   phone, shops and saves (`e1d2832`); the tests, `docs/gtf/MISSIONS.md` and the fixes made
   after looking at the captures (this commit). Evidence in the M6 milestone entry; captures in
   `out/m6/` (not committed). `HANDOFF.md` rewritten for the next session (M7).
+- 2026-10-18/19 — **Session 3: environment check** (no code changes). The container was ready:
+  toolchain 1.98.1 with the wasm32 and windows-gnu targets, wasm-bindgen 0.2.129, the
+  SessionStart hook's packages and debug `pav`/`gtf` built, lavapipe, mingw + Wine (a
+  cross-built `.exe` runs), Node 22 + Playwright + Chromium (`scripts/check-wgsl.sh DIR` compiles
+  WGSL in Tint), the shardfall MCP server connected. `cargo fmt --all --check` clean;
+  `cargo test -p gtf_game` 98 passed, 8 ignored (3 min 40 s); host clippy `-D warnings` clean for
+  `gtf_game` and `gtf_app`; wasm clippy fails (Open issues); release `gtf` built cold in 9 min
+  51 s; captures of `freeway/dev`, `freeway/roam` and `freeway/view/downtown_street` with the HUD
+  looked at; perf as in Open issues. Notes for later sessions: the MCP server's
+  `cargo run -p pav_tools --bin pav` resolves features differently from the hook's combined
+  `pav` + `gtf` build, so it compiles the dependency graph a second time at startup (a few
+  minutes, harmless). A worktree must not share the main tree's target dir: path crates hash
+  relative to the workspace root and `pav_core`'s build script bakes in `CARGO_MANIFEST_DIR`, so
+  the worktree's build overwrites the main tree's artifacts. The fix is `cargo clean --release -p`
+  for the ten workspace crates, then a rebuild.

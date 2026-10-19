@@ -1,4 +1,4 @@
-# HANDOFF — Grand Theft Freeway-BX, end of session 2 (2026-10-18)
+# HANDOFF — Grand Theft Freeway-BX, end of session 2 (2026-10-18; checked in session 3, 2026-10-19)
 
 For the next implementing session (or this one after a compaction). Read `CLAUDE.md` (it imports
 `docs/DOCTRINE.md`), then this page, then `PROGRESS.md` → "Now", then `PLAN.md` §0–§4 and §10
@@ -16,6 +16,9 @@ truth; this page says where things stand and what to do next.
 - **Health:** pav_core 305, pav_view 44, pav_world 11, gtf_game 98 (+8 ignored reports) green;
   clippy `-D warnings` clean on the touched crates; `gtf perf view=all` (release) within every budget
   with traffic and crowds; soaks as in `PROGRESS.md` → Now.
+- **Session 3 (2026-10-18/19)** only checked the environment. Everything is installed;
+  `gtf_game` is still 98 green. It found two issues, listed below: wasm clippy is not clean, and
+  this container is slower, so the downtown perf budget fails here.
 
 ## The M6 systems (where to look)
 - **Missions** — `crates/gtf_game/src/missions/`: `mod.rs` (the DSL types, the validator with
@@ -66,6 +69,13 @@ truth; this page says where things stand and what to do next.
 - Sun through thin cloud: the patch is saved at `docs/gtf/patches/cloud_through.patch`.
 - `citymap`, `lanes`, `soak`, `traffic`, `peds` live in `gtf_app/src/tools.rs` (they read the
   game's city).
+- **Wasm clippy (D1) fails** on four wasm-only lints in vendored engine code: `drop_non_drop` in
+  `pav_tools` (`animation_tools.rs:287`, `asset_tools.rs:95`, `creature_tools.rs:662`) and
+  `default_constructed_unit_structs` in `pav_app/src/asset_watch.rs:48`. Fix them in one
+  `engine:` commit (details in `PROGRESS.md` → Open issues).
+- **Perf on the session 3 container:** downtown takes 4.7-5.4 ms to build a frame (budget 4) and
+  2.8-3.6 ms a tick (budget 3). The pre-M6 build measures the same, so the machine is slower,
+  not the code. Compare against a baseline build on the same machine; M9 needs margin.
 
 ## Working notes
 - **Builds:** 4 vCPU, fixed disk allowance; `CARGO_BUILD_JOBS=4`. Soaks, perf and quick looks
@@ -87,7 +97,34 @@ truth; this page says where things stand and what to do next.
   `sim.state.rng`; snapshots, rewind and replay are exact (tests cover them with traffic,
   pedestrians and missions).
 - **Helpers:** run them in git worktrees (`.claude/worktrees/…`), each with its own `target/`;
-  merge with `--no-ff`; never hard-link one tree's `target` into another.
+  merge with `--no-ff`; never hard-link one tree's `target` into another, and never point a
+  worktree's `CARGO_TARGET_DIR` at the main tree's. Cargo hashes path crates relative to the
+  workspace root, so the two trees share artifacts, and `pav_core`'s build script bakes in its
+  `CARGO_MANIFEST_DIR`. If that happens, run `cargo clean --release -p` for the ten workspace
+  crates, then rebuild.
+- **Startup:** the shardfall MCP server (`.mcp.json`) runs `cargo run -p pav_tools --bin pav`.
+  That build resolves features differently from the hook's combined `pav` + `gtf` build, so it
+  compiles the dependency graph a second time before it connects (a few minutes, harmless).
+
+## The `/goal` prompt to finish (M7–M10)
+`PLAN.md` Appendix A is the original prompt for the whole run (M0→M10). To resume from here:
+```
+/goal Finish Grand Theft Freeway-BX: complete PLAN.md milestones M7→M10 on this branch (M0–M6 are
+done). Read CLAUDE.md, HANDOFF.md and PROGRESS.md (Now, Open issues), PLAN.md §0–§4 and §10 once,
+then only the sections each milestone names. First fix the D1 wasm-clippy lints (one engine:
+commit). Then M7 in PLAN §2's order of value: the heist path first (m1–m3, s1–s3, the h0 board, h1
+Loud and Smart in the mission DSL, each with bot tests on 3 seeds), then activities, radio
+stations, completion and stats, the final district, interiors and vehicle bodies. Then M8
+(frontend, the attract director and its 30-minute soak, touch = attract only), M9 (polish, perf
+with margin judged by A/B on this machine, the open issues) and M10 (builds, docs, final
+verification, delivery). Keep each milestone green: fmt, clippy -D warnings and the tests of
+touched crates before each push; the workspace tests, wasm clippy and the acceptance commands at
+milestone ends. Look at every capture. Push often, keep the draft PR current, record evidence and
+decisions in PROGRESS.md, escalate only what PLAN §10.6 lists. Done = every D1–D16 item in PLAN §2
+checked in PROGRESS.md with evidence; dist/GrandTheftFreeway-BX.html and the zipped Windows .exe
+built and sent to me; README.md with the Source Information block; docs/gtf/ENGINE_ANALYSIS.md and
+docs/gtf/HANDOFF.md written; and a final report per PLAN §12.4.
+```
 
 ## Source Information (also in `README.md`)
 Initial date 2026-10-17; SOURCE *Grand Theft Auto V*; GAME ENGINE Pavilion (Shardfall,
