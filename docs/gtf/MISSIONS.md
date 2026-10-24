@@ -21,14 +21,16 @@ missions (`dev_test`, `dev_test2`) use every step kind and are the worked exampl
 ```toml
 key = "m1_repo_man"            # = the file name
 title = "Repo Man"
-protagonist = "dez"            # who plays it (switched to at the start)
+protagonist = "dez"            # who plays it (switched to at the start; "" in an activity: whoever is played)
 district = ""                  # "" Paloma Bay, "dev" the Proving Grounds
 text = "Steal back a Stallion."  # the phone's Jobs app and the replay list
 contact = "mack"               # calling them on the phone starts it (optional)
 blip = { letter = "D", at = "spot:los_mirados_driveway" }   # the map letter and the marker
+                               # (an activity: icon = "race" or "activity" instead of a letter)
 start = "at:-30,-26"           # where the player stands when it is played straight away
 unlock = ["m0_intro"]          # missions to pass first
-activity = false               # true: an activity (the race, a hold-up), counted as one for completion
+activity = false               # true: an activity (the race, a hold-up), counted as one for completion;
+                               # its board choices (a bet) are for that run, not kept in the story
 time = { at = "17:30", lock = true }   # the clock (held while it runs)
 weather = "clear"
 reward = { cash = 1500, unlock = ["switch"], text = ["mack", "Nice work, kid."] }
@@ -109,11 +111,11 @@ start and shows a countdown).
 | `photograph` | `targets` | each caught in a phone photo (centred within 12°, near, in sight) | phone up, the camera tile, aims, ✕ |
 | `interact` | `target`, `prompt`, `seconds` (1.5), `radius` (2.2) | D-pad right held that long there | walks there, holds → |
 | `switch` | `to` (a protagonist) | the player plays them | holds D-pad down toward them |
-| `race` | `gates` (anchors), `laps` (1), `racers` (vehicle actors with drivers), `radius` (12) | every gate in order, every lap; fails if a racer finishes first | autopilot gate to gate, in a hurry |
+| `race` | `gates` (anchors), `laps` (1), `racers` (vehicle actors with drivers), `radius` (12) | every gate in order, every lap; fails if a racer finishes first. The HUD shows the lap and the place; racers drive through each gate toward the next, easing off when well ahead of the player and pushing when well behind (moderate rubber-banding) | autopilot through each gate toward the next, in a hurry |
 | `stealth` | `target`, `watchers`, `radius` (3) | there without a watcher's meter filling (18 m, 100° cone, half crouched) | crouches, walks |
 | `deliver` | `target`, `vehicle` actor, `radius` (7) | that vehicle there and the player out of it | drives there, stops, △ |
 | `holdup` | `target` (the clerk), `seconds` (6) | the bag fills while a gun is aimed at them (twice as fast within 4 m) | walks up, aims |
-| `choose` | `options` (`id`, `title`, `lines`) | an option is picked: its `id` becomes a flag (kept in the story) | `mission choose <id>`, else the first |
+| `choose` | `options` (`id`, `title`, `lines`, `cost`: cash it takes, greyed out without it) | an option is picked: its `id` becomes a flag (kept in the story; an activity's only for the run) | `mission choose <id>`, else the first it can pay for |
 | `branch` | `flag`, `to` (a label), `otherwise` | at once: to `to` when the flag is set | — |
 | `parallel` | `steps` (`[[step.steps]]`, each with `who`) | every sub-step done, each by its protagonist (the wheel switches between them) | does its own, then switches |
 | `jump` | `gates` = [run-up, lip], `target` (the landing), `radius` (16), `vehicle` (optional) | the vehicle has been airborne and stands near the landing | autopilot to the run-up, then straight over the lip flat out |
@@ -131,6 +133,7 @@ moving traffic until the mission ends), `{ flag = "x" }`, `{ unflag = "x" }`, `{
 armour on the player), `{ cash = 500 }`,
 `{ pay = { who = "dez", cash = 54000 } }` (to one of the crew, played or not),
 `{ text = { from = "mack", body = "..." } }`, `{ note = { title = "...", body = "..." } }`,
+`{ loot = [200, 900] }` (cash, a random amount in that range: a till's takings),
 `{ help = "..." }`, `{ time = "21:00" }`, `{ weather = "rain" }`,
 `{ lock = { actor = "id", locked = true } }`, `{ teleport = "anchor" }`, `{ alert = true }`,
 `{ explode = "id" }`, `{ unlock = "switch" }`.
@@ -158,3 +161,9 @@ done for the player (put where it ends, its targets cleared) and play goes on th
   shootout should not bring the police.
 - Keep on-foot targets on walkable ground (the anchor snaps them there; check the snapped place
   with `bot_trace`).
+- Race gates on a ramp or a deck: put ramp gates at a ramp's ends (street level) and deck gates
+  as `deck:` anchors (the autopilot finds a goal's lane at its height); leave room after a gate
+  before a turn the next gate needs.
+- A getaway starts better from a car at the door than from one round the corner (`[[spawn]]` it
+  there, then `enter_vehicle`), and a cap on the heat (`{ heat_cap = 2 }`) keeps a small crime
+  from ending in a shootout.
