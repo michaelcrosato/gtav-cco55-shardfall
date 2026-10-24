@@ -753,7 +753,6 @@ pub fn render_events(events: &[(f32, SimEvent)], duration: f32, sample_rate: f32
     out
 }
 
-/// Writes interleaved stereo f32 samples as a 16-bit PCM WAV file.
 /// Renders a run tick by tick: each tick's events, then the loops, radio and bus its audio scene
 /// asks for (a hook game's `PlayFrame::audio`), then `tail` seconds more. Interleaved stereo.
 pub fn render_run(
@@ -763,7 +762,20 @@ pub fn render_run(
     sample_rate: f32,
     l: &Listener,
 ) -> Vec<f32> {
+    render_run_with(Arc::new(Bank::engine()), ticks, dt, tail, sample_rate, l)
+}
+
+/// [`render_run`] with its own sound bank (a game's cues over the engine's).
+pub fn render_run_with(
+    bank: Arc<Bank>,
+    ticks: &[(Vec<SimEvent>, Option<pav_core::present::AudioScene>)],
+    dt: f32,
+    tail: f32,
+    sample_rate: f32,
+    l: &Listener,
+) -> Vec<f32> {
     let mut mixer = Mixer::new(sample_rate);
+    mixer.bank = bank;
     let per = (dt * sample_rate).round().max(1.0) as usize;
     let mut out = Vec::with_capacity((ticks.len() * per + (tail * sample_rate) as usize) * 2);
     let mut buf = vec![0.0f32; per * 2];
@@ -792,6 +804,7 @@ pub fn render_run(
     out
 }
 
+/// Writes interleaved stereo f32 samples as a 16-bit PCM WAV file.
 pub fn write_wav(path: &std::path::Path, samples: &[f32], sample_rate: u32) -> std::io::Result<()> {
     let data_len = (samples.len() * 2) as u32;
     let mut b = Vec::with_capacity(44 + data_len as usize);
