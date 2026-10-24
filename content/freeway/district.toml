@@ -915,12 +915,14 @@ asset = "LIB/gtf_city/street_lamp"
 at = [20, 32]
 y = 10.2
 yaw = 90
+solid = false
 
 [[landmark.prop]]
 asset = "LIB/gtf_city/street_lamp"
 at = [50, 32]
 y = 10.2
 yaw = 270
+solid = false
 
 [[landmark.sign]]
 text = "P"
@@ -993,11 +995,13 @@ yaw = 90
 asset = "LIB/gtf_city/floodlight_mast"
 at = [2, 2]
 yaw = 135
+solid = false
 
 [[landmark.prop]]
 asset = "LIB/gtf_city/floodlight_mast"
 at = [62, 62]
 yaw = 315
+solid = false
 
 [[landmark.sign]]
 text = "SPPD IMPOUND  /  CITY OF SAN PALOMA"
@@ -1740,6 +1744,7 @@ asset = "LIB/gtf_city/street_lamp_double"
 at = [45, 32]
 count = 2
 step = [14, 0]
+solid = false
 
 [[landmark.room]]
 rect = [62, 6, 78, 24]
@@ -1859,16 +1864,19 @@ yaw = 0
 asset = "LIB/gtf_city/floodlight_mast"
 at = [2, 2]
 yaw = 135
+solid = false
 
 [[landmark.prop]]
 asset = "LIB/gtf_city/floodlight_mast"
 at = [78, 2]
 yaw = 225
+solid = false
 
 [[landmark.prop]]
 asset = "LIB/gtf_city/floodlight_mast"
 at = [2, 62]
 yaw = 45
+solid = false
 
 [[landmark.sign]]
 text = "IRONCLAD TRANSIT"
@@ -2045,16 +2053,19 @@ kerbs = false
 asset = "LIB/gtf_city/floodlight_mast"
 at = [2, 2]
 yaw = 135
+solid = false
 
 [[landmark.prop]]
 asset = "LIB/gtf_city/floodlight_mast"
 at = [78, 2]
 yaw = 225
+solid = false
 
 [[landmark.prop]]
 asset = "LIB/gtf_city/floodlight_mast"
 at = [2, 78]
 yaw = 45
+solid = false
 
 [[landmark.sign]]
 text = "SAN PALOMA PUBLIC WORKS  -  CITY YARD 7"
@@ -2338,6 +2349,7 @@ asset = "LIB/gtf_city/street_lamp_double"
 at = [48, 4]
 count = 3
 step = [0, 18]
+solid = false
 
 [[landmark.wheel]]
 at = [48, 76]
@@ -2531,6 +2543,7 @@ color = "#f4f1ea"
 [[landmark]]
 key = "dez_apartment"
 name = "Dez's apartment"
+crowds = false
 cells = [[10, 15], [11, 16]]
 ground = "#c9c4b8"
 
@@ -2599,12 +2612,14 @@ color = "#2b2a28"
 [[landmark.prop]]
 asset = "LIB/gtf_city/palm_short"
 at = [4, 22]
+solid = false
 
 # Mack: a modern house on Mirador Drive, glass to the south over the city, a pool deck and a
 # carport for the SUV.
 [[landmark]]
 key = "mack_house"
 name = "Mack's house"
+crowds = false
 cells = [[19, 10], [21, 11]]
 level = true
 ground = "#bdb6a6"
@@ -2682,11 +2697,13 @@ always = true
 asset = "LIB/gtf_city/palm_tall"
 at = [3, 26]
 scale = 0.7
+solid = false
 
 [[landmark.prop]]
 asset = "LIB/gtf_city/palm_tall"
 at = [36, 28]
 scale = 0.6
+solid = false
 
 # Roxy: a single-wide trailer on a fenced gravel lot in The Flats, a picnic table and a grill, a
 # kicker ramp for practice, tyres.

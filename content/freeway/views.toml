@@ -155,8 +155,8 @@ time = "11:00"
 [[view]]
 name = "sppd_central"
 about = "SPPD Central's entrance, the radio mast and the patrol cars behind the fence"
-eye = [-300.0, 2.5, -110.0]
-target = [-322.0, 6.0, -80.0]
+eye = [-290.0, 3.0, -105.0]
+target = [-326.0, 5.0, -92.0]
 time = "10:30"
 
 [[view]]
