@@ -1,0 +1,69 @@
+# Hold-up: Gas-N-Grab (PLAN.md §5.6.11). Up to the counter, a gun on the clerk until the bag is
+# full (closer is quicker), out of the door into two stars, into the getaway car outside,
+# then lose them. Whoever is played.
+
+key = "act_holdup_gas"
+title = "Hold-up: Gas-N-Grab"
+protagonist = ""
+activity = true
+text = "Gas-N-Grab on Sunset Row keeps the day's takings in the till."
+blip = { icon = "activity", at = "at:-37,-209" }
+unlock = ["m1_repo_man"]
+
+[[medals]]
+id = "fast"
+text = "In and clear within 2:00"
+time_under = 120.0
+
+[[medals]]
+id = "unhurt"
+text = "Finish with three quarters of your health"
+health_over = 0.75
+
+[[spawn]]
+id = "clerk"
+ped = "worker"
+at = "spot:gas_clerk"
+behaviour = "idle"
+name = "Clerk"
+
+# The getaway car, at the kerb across the forecourt.
+[[spawn]]
+id = "getaway"
+vehicle = "okami_kaze"
+at = "at:-37,-233.8"
+yaw = 90.0
+paint = 2
+blip = "vehicle"
+name = "Getaway"
+
+[[step]]
+kind = "goto"
+target = "spot:gas_counter"
+radius = 2.5
+objective = "Walk up to the ~y~counter~s~."
+
+[[step]]
+kind = "holdup"
+target = "actor:clerk"
+seconds = 6.0
+objective = "Aim at the ~r~clerk~s~ until the bag is full."
+help = "Hold ~btn:l2~ to aim. Closer fills the bag faster."
+on_done = [{ loot = [200, 600] }]
+
+[[step]]
+kind = "goto"
+target = "at:-37,-209"
+radius = 3.0
+objective = "Get ~y~out~s~ with the bag."
+on_done = [{ heat = 2 }, { heat_cap = 2 }]
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:getaway"
+objective = "Get in the ~b~getaway car~s~."
+
+[[step]]
+kind = "lose_heat"
+stars = 0
+objective = "Lose the ~b~cops~s~."

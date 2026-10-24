@@ -303,8 +303,9 @@ vehicle = "kaze"
 checkpoint = true
 objective = "Floor it off the ~y~broken ramp~s~ onto the harbor road."
 help = "Straight and fast: the broken end is a ramp to the street below."
-on_done = [{ dispatch = true }, { heat = 0 }, { heat = 2 }]
+on_done = [{ dispatch = true }, { heat = 0 }, { heat = 1 }]
 
+# (The jump shook off all but one unit.)
 [[step]]
 kind = "lose_heat"
 stars = 0
