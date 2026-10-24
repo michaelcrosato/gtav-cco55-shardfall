@@ -137,6 +137,9 @@ pub struct Svf {
     a2: f32,
     a3: f32,
     k: f32,
+    /// The cutoff and resonance the coefficients are for.
+    fc: f32,
+    q: f32,
 }
 
 impl Svf {
@@ -146,8 +149,14 @@ impl Svf {
         f
     }
 
-    /// Sets the cutoff (Hz) and resonance (Q: 0.5 soft .. 10 ringing).
+    /// Sets the cutoff (Hz) and resonance (Q: 0.5 soft .. 10 ringing). Cheap when nothing
+    /// moved: a sweep recomputes only every 0.4% of cutoff (a fifteenth of a semitone).
     pub fn set(&mut self, cutoff: f32, q: f32, dt: f32) {
+        if q == self.q && (cutoff - self.fc).abs() <= self.fc * 0.004 {
+            return;
+        }
+        self.fc = cutoff;
+        self.q = q;
         let g = (PI * (cutoff * dt).clamp(1e-5, 0.49)).tan();
         self.k = 1.0 / q.max(0.3);
         self.a1 = 1.0 / (1.0 + g * (g + self.k));

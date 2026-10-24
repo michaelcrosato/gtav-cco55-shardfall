@@ -119,11 +119,17 @@ pub(crate) fn tom(s: f32, f: f32, dec: f32) -> f32 {
     sine(dsp::glide_phase(s, f * 1.3, f, 0.02)) * decay(s, dec)
 }
 
-/// An electric piano tine (two-operator FM: the bell fades into a round tone).
-pub(crate) fn ep(s: f32, f: f32) -> f32 {
+/// Electric piano tines (two-operator FM: the bell fades into a round tone), one per note of
+/// `keys` (their envelopes shared), `wow` bending them all.
+pub(crate) fn ep(s: f32, keys: &[i32], wow: f32) -> f32 {
     let index = 1.5 * decay(s, 0.3) + 0.2;
-    let car = (TAU * f * s + index * (TAU * f * s).sin()).sin();
-    car * decay(s, 1.8) + (TAU * 7.03 * f * s).sin() * decay(s, 0.05) * 0.12
+    let (body, tine) = (decay(s, 1.8), decay(s, 0.05) * 0.12);
+    keys.iter()
+        .map(|&k| {
+            let w = TAU * freq(k as f32) * wow * s;
+            (w + index * w.sin()).sin() * body + (7.03 * w).sin() * tine
+        })
+        .sum()
 }
 
 /// A bell or a marimba bar: a sine and its inharmonic partials.
@@ -252,10 +258,7 @@ pub(crate) fn play(genre: Genre, ch: Chan, note: &Note, s: f32, n: u64, t: f32, 
         (Genre::Boombap, Chan::Keys | Chan::Lead) => {
             // The electric piano, warbling a little (the record's wow), panned by its tremolo.
             let wow = 1.0 + 0.003 * (TAU * 0.55 * t).sin();
-            let mut x = 0.0;
-            for &k in &note.keys[..note.n as usize] {
-                x += ep(s, freq(k as f32) * wow);
-            }
+            let x = ep(s, &note.keys[..note.n as usize], wow);
             let y = m.a.lp(x, OnePole::coef(2600.0, dt)) * held(0.002, 0.3);
             let trem = 0.3 * (TAU * 4.2 * s).sin();
             let g = if ch == Chan::Lead { 0.2 } else { 0.095 } * v;
@@ -395,10 +398,7 @@ pub(crate) fn play(genre: Genre, ch: Chan, note: &Note, s: f32, n: u64, t: f32, 
             mono(y * v * 0.18, 0.0, 0.0)
         }
         (Genre::Smooth, Chan::Keys) => {
-            let mut x = 0.0;
-            for &k in &note.keys[..note.n as usize] {
-                x += ep(s, freq(k as f32));
-            }
+            let x = ep(s, &note.keys[..note.n as usize], 1.0);
             let y = m.a.lp(x, OnePole::coef(3200.0, dt)) * held(0.002, 0.35);
             let trem = 0.35 * (TAU * 3.6 * s).sin();
             let g = 0.09 * v;
