@@ -265,14 +265,15 @@ pub(crate) fn play(genre: Genre, ch: Chan, note: &Note, s: f32, n: u64, t: f32, 
         // Surf: a driving acoustic kit, a plucked bass, guitars through a spring.
         (Genre::Surf, Chan::Kick) => mono((kick(s, 58.0, 110.0, 0.18, n) + noise(n) * decay(s, 0.01) * 0.2) * v * 0.3, 0.0, 0.0),
         (Genre::Surf, Chan::Snare) => {
-            m.f.set(1500.0, 0.7, dt);
-            let body = sine(210.0 * s) * decay(s, 0.08);
-            let x = body * 0.5 + m.f.high(noise(n)) * decay(s, 0.13) * 0.9;
-            mono(x * v * 0.45, 0.0, 0.15)
+            // A tight crack: a band of noise round 2.2 kHz over a firm body.
+            m.f.set(2200.0, 0.75, dt);
+            let body = sine(205.0 * s) * decay(s, 0.07) + sine(330.0 * s) * decay(s, 0.04) * 0.4;
+            let x = body * 0.75 + m.f.band(noise(n)) * decay(s, 0.09) * 1.1;
+            mono(x * v * 0.5, 0.0, 0.15)
         }
         (Genre::Surf, Chan::Hat) => {
             m.f.set(6500.0, 0.7, dt);
-            mono(m.f.high(metal(s * 1.1) * 0.5 + noise(n) * 0.4) * decay(s, 0.07) * v * 0.8, 0.3, 0.0)
+            mono(m.f.high(metal(s * 1.1) * 0.5 + noise(n) * 0.4) * decay(s, 0.05) * v * 0.8, 0.3, 0.0)
         }
         (Genre::Surf, Chan::Perc) => {
             m.f.set(4000.0, 0.7, dt);

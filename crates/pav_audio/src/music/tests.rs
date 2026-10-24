@@ -114,8 +114,8 @@ fn peak_phase(x: &[f32], offset: f32, spb: f32, window: (f32, f32)) -> f32 {
 fn levels() {
     for (g, _) in BANDS {
         let t = target(g, 0.0);
-        for part in [Part::Intro, Part::Verse, Part::Chorus] {
-            let at = start_of(&t, part) + 1.0;
+        for section in [Part::Intro, Part::Verse, Part::Chorus] {
+            let at = start_of(&t, section) + 1.0;
             let mut whole = MusicVoice::new(&MusicTarget { offset: at, ..t.clone() }, SR);
             whole.gain = 1.0;
             let x: Vec<f32> = (0..(4.0 * SR) as usize).map(|_| whole.next(1.0 / SR).0).collect();
@@ -126,9 +126,16 @@ fn levels() {
                 v.solo = Some(ch);
                 let y: Vec<f32> = (0..(4.0 * SR) as usize).map(|_| v.next(1.0 / SR).0).collect();
                 parts.push(format!("{part:?} {:.3}", rms(&y)));
+                // The chorus's stems for a closer listen (`PAV_STEMS=<dir>`).
+                if let Ok(dir) = std::env::var("PAV_STEMS")
+                    && section == Part::Chorus
+                {
+                    let stereo: Vec<f32> = y.iter().flat_map(|v| [*v, *v]).collect();
+                    let _ = crate::write_wav(&std::path::Path::new(&dir).join(format!("{g}_{part:?}.wav")), &stereo, SR as u32);
+                }
             }
             let peak = x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
-            eprintln!("{g} {part:?}: rms {:.3} peak {peak:.2} | {}", rms(&x), parts.join(", "));
+            eprintln!("{g} {section:?}: rms {:.3} peak {peak:.2} | {}", rms(&x), parts.join(", "));
         }
         let from = start_of(&t, Part::Chorus);
         let out = mono(&render(&MusicTarget { offset: from, ..t.clone() }, 12.0, SR));
