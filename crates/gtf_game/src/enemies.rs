@@ -132,6 +132,10 @@ pub struct Enemy {
     pub anchor: Vec3,
     pub stuck: f32,
     pub best: f32,
+    /// The health it was first seen with (a mission may start it below its side's full): hurt
+    /// means less than this.
+    #[serde(default)]
+    pub start: f32,
 }
 
 /// Everyone fighting the player (part of the game's state).
@@ -242,6 +246,7 @@ impl Enemies {
             anchor: feet,
             stuck: 0.0,
             best: f32::MAX,
+            start: 0.0,
         });
         Some(id)
     }
@@ -316,7 +321,12 @@ impl Enemies {
             let dist = feet.distance(m.player);
             let sees = dist < NOTICE && (clear(sim, eye, chest, e.id) || clear(sim, eye, chest + Vec3::Y * 0.5, e.id));
             let full = sim.state.entities.get(e.id).map_or(100.0, |x| crate::combat::max_hp(&x.name));
-            let health = hp.get(&e.id.0).copied().unwrap_or(full) / full;
+            let now = hp.get(&e.id.0).copied().unwrap_or(full);
+            if e.start <= 0.0 {
+                e.start = now;
+            }
+            // The share of its health left.
+            let health = now / e.start.max(1.0);
             // Awareness: seen, heard or hurt.
             if !e.aware && (sees || health < 1.0 || m.gunfire.is_some_and(|g| g.distance(feet) < 60.0)) {
                 e.aware = true;
