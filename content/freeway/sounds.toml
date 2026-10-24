@@ -120,14 +120,19 @@ layers = [
     { wave = "noise", freq = 1, decay = 0.07, volume = 0.2, cutoff = 1600, cutoff_end = 300 },
 ]
 
-# The police scanner under everything at two stars and up: a squelch, then garbled talk.
+# The police scanner under everything at two stars and up: a squelch and a beep as dispatch
+# keys up; the dispatcher's babble is a `voice.radio` loop while their line is on air (its words
+# in radio.toml's [scanner]); then a beep and the squelch as they let go.
 [cue."police.scanner"]
 layers = [
     { wave = "noise", freq = 1, decay = 0.08, volume = 0.05, cutoff = 4200, cutoff_end = 2400 },
     { wave = "square", freq = 1240, decay = 0.05, volume = 0.03, duty = 0.5, cutoff = 3000, delay = 0.08 },
-    { wave = "noise", freq = 1, attack = 0.02, decay = 0.6, sustain = 0.5, hold = 0.9, release = 0.1, volume = 0.05, cutoff = 1500, cutoff_end = 900, delay = 0.15 },
-    { wave = "square", freq = 210, freq_end = 260, glide = 0.4, attack = 0.02, decay = 0.5, sustain = 0.4, hold = 0.8, release = 0.1, volume = 0.02, duty = 0.3, cutoff = 1200, delay = 0.18 },
-    { wave = "square", freq = 1240, decay = 0.05, volume = 0.03, duty = 0.5, cutoff = 3000, delay = 1.25 },
+]
+
+[cue."police.scanner_out"]
+layers = [
+    { wave = "square", freq = 1240, decay = 0.05, volume = 0.03, duty = 0.5, cutoff = 3000 },
+    { wave = "noise", freq = 1, attack = 0.005, decay = 0.12, volume = 0.045, cutoff = 3800, cutoff_end = 1800, delay = 0.05 },
 ]
 
 # Into cover: a scuff and a soft thud against the wall.

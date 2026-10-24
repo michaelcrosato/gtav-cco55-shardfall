@@ -68,3 +68,296 @@ seed = 1040
 dj = "Brock Hardwell"
 title_words = ["Traffic", "Weather", "Markets", "Outrage", "Hour", "Report", "Panel", "Update", "Exclusive"]
 artist_words = ["Newsdesk", "Anchor", "Panel", "Desk", "Live"]
+
+# ---------------------------------------------------------------------------------------------
+# The DJs between songs ([dj.<station id>]): a babble voice (pitch in Hz, formant scale,
+# syllables a second, energy 0..1, radio 0..1) and what they say after a song: `{title}` and
+# `{artist}` name the song just played, `{station}` the station. The line shows on the radio
+# card while they talk. `talks`: the breaks in a hundred they talk in.
+
+[dj.freeway_fm]
+voice = { pitch = 205.0, formant = 1.16, rate = 5.3, energy = 0.75, radio = 0.1 }
+talks = 75
+lines = [
+    "That was {title} by {artist}. Freeway FM: the only thing on Route 404 that moves.",
+    "{artist}, everybody. Hands at ten and two, hair at eleven.",
+    "Tarmac Tina on {station}. If you're doing a hundred, you're doing it right. Kidding.",
+    "{title}. Window down, volume up, smog optional.",
+    "Freeway FM 104.04: synthesizers, sunsets, and absolutely no brakes.",
+    "That was {artist}. The sun is low, the neon's on, the lanes are yours.",
+    "Merge like you mean it, Paloma Bay. This is Tarmac Tina.",
+    "{title} by {artist}: a song about a car, like every good song.",
+]
+
+[dj.westside_99]
+voice = { pitch = 98.0, formant = 0.97, rate = 4.6, energy = 0.55, radio = 0.1 }
+talks = 65
+lines = [
+    "Westside 99. That was {artist}, '{title}'. Low and slow, Paloma Bay.",
+    "MC Lowrider in your speakers. If your car don't bounce, it ain't listening.",
+    "That's {title}. Crate-dug, dust and all.",
+    "Westside 99: beats for the stoop, the porch and the traffic jam.",
+    "{artist} with the loop of the year. Respect the sample.",
+    "Lowrider here. Keep it steady, keep it swung, keep it Westside.",
+    "That was {title}. Shout-out to everybody stuck on Sunset Row.",
+]
+
+[dj.k_surf]
+voice = { pitch = 225.0, formant = 1.18, rate = 6.0, energy = 0.95, radio = 0.1 }
+talks = 75
+lines = [
+    "K-SURF 101.5! {title} by {artist}! Surf's up, traffic's down!",
+    "Wipeout Wendy here: if you can hear this, you're too far from the beach.",
+    "That was {artist}. Wax your board, check your mirrors, hang ten.",
+    "{title}! Reverb so wet it needs a towel. K-SURF!",
+    "K-SURF: the sound of Palisade Beach, now in your parking lot.",
+    "Shout-out to the Pier crew. That was {title}. Paddle out, people.",
+    "Wendy on K-SURF. Gnarly swell at Palisade, gnarlier traffic on 404.",
+]
+
+[dj.radio_sol]
+voice = { pitch = 195.0, formant = 1.14, rate = 5.6, energy = 0.85, radio = 0.1 }
+talks = 70
+lines = [
+    "Radio Sol 92.3, con La Reina Rosa. {title}, de {artist}. ¡Baila, Paloma Bay!",
+    "Radio Sol: más ritmo, menos tráfico.",
+    "Eso fue {artist}. Move those hips, but keep your eyes on the road.",
+    "{title}. Para los que bailan en el semáforo.",
+    "La Reina Rosa aquí. The heat is high and so is the güiro.",
+    "Radio Sol, the sunniest station in Paloma Bay, even in the fog.",
+    "Eso fue {title}. ¡Arriba Los Mirados!",
+]
+
+[dj.smooth_88]
+voice = { pitch = 92.0, formant = 0.95, rate = 3.9, energy = 0.3, radio = 0.1 }
+talks = 70
+lines = [
+    "Smooth 88.8. That was {artist} with {title}. Mmm.",
+    "Velvet Vance with you through the rush hour. Breathe in. Merge gently.",
+    "{title}. Let that saxophone drive for a while.",
+    "Smooth 88.8: music to sit in traffic to, beautifully.",
+    "That was {artist}. Slower now. Slower. Perfect.",
+    "Velvet Vance here. Dim the dash lights. Unclench.",
+    "{title} by {artist}. Like a candle in a cupholder.",
+]
+
+# ---------------------------------------------------------------------------------------------
+# SPNN 1040 AM, news and talk ([talk.<station id>]): each slot runs the rundown, its lines picked
+# from the station's seed and the slot. Blocks: `sounder` (the news chimes), `intro`, `headline`
+# (the anchor; the subtitles show it), `ad` (an ad's lines over a jingle), `traffic` (from the
+# Sky Copter: what the police are doing about the player, worked out as it goes on air),
+# `weather` (the weather now), `call` (a call-in), `signoff`. `{station}` and `{anchor}` fill in.
+
+[talk.spnn]
+rundown = [
+    "sounder", "intro", "headline", "headline", "headline", "ad", "traffic", "weather",
+    "headline", "headline", "call", "ad", "headline", "headline", "traffic", "call", "ad",
+    "headline", "signoff", "sounder",
+]
+intro = [
+    "This is {station}: news, traffic and weather on the fours. I'm {anchor}.",
+    "Good evening, Paloma Bay. {station}, the news that never sleeps, mostly because of the traffic.",
+    "{station}. Here is what happened while you were stuck on Route 404.",
+    "From the SPNN newsroom high above Sunset Row, I'm {anchor}.",
+]
+headlines = [
+    "Route 404 widened to 47 lanes; commute unchanged.",
+    "City council votes to study whether to study the pothole on Sunset Row.",
+    "Local startup raises forty million dollars to reinvent the bicycle. It has five wheels.",
+    "SPPD unveils its new slogan: 'We'll Get Back To You.'",
+    "Harbor Gate seagull elected to the port authority. It promises more chips.",
+    "Study finds Paloma Bay drivers use turn signals mostly as decoration.",
+    "Artisanal kale smoothie bar opens inside another artisanal kale smoothie bar.",
+    "Mirador Hills homeowners petition to make the sunset private.",
+    "Luxe Motors recalls its new sedan: the cupholders were too honest.",
+    "Freeway Diner coffee legally reclassified as a road surface.",
+    "Paloma Savings & Trust reports record profits and thanks customers for their patience.",
+    "Ironclad Transit's armored trucks get a new paint job that reads 'Please Don't.'",
+    "City Hall installs a suggestion box. It is towed within the hour.",
+    "Influencer stuck on the PALOMA sign says the view is, quote, content.",
+    "Mayor's office clarifies that the new bike lane is aspirational.",
+    "Local man finds a parking spot downtown. Experts urge caution.",
+    "Gas-N-Grab introduces premium air for tires, with notes of citrus.",
+    "St. Brigid Medical opens a waiting room for its waiting room.",
+    "Survey: nine in ten residents believe they are the tenth.",
+    "Smog lifts over downtown; residents report seeing some kind of mountain.",
+    "Los Mirados listing describes a closet as a cozy one-bedroom with potential.",
+    "Fire in The Flats turns out to be a very enthusiastic barbecue.",
+    "Council approves a budget for a new sign explaining the old sign.",
+    "The Ditch voted best place to film a car commercial for the ninth year running.",
+    "LifeHakr app adds a feature that reminds you to close LifeHakr.",
+    "Palisade Pier's Big Wheel completes one full turn. Engineers call it a milestone.",
+    "Traffic engineers propose a second Route 404, directly on top of the first.",
+    "Paloma Bay named the most Paloma Bay city in the region, again.",
+    "Police helicopter noise complaints will now be handled by a police helicopter.",
+    "Weather service apologizes for yesterday's weather.",
+]
+signoff = [
+    "That's {station}. Stay tuned, stay informed, stay in your lane.",
+    "{station}: we report, you merge. I'm {anchor}. Good night.",
+    "News on the fours, traffic on the fives, regrets on the hour. {station}.",
+]
+ads = [
+    { name = "LifeHakr Pro", lines = ["Tired of being just you? Try LifeHakr Pro.", "It optimizes your sleep, your breakfast and your friends.", "LifeHakr Pro: be more you, but faster."] },
+    { name = "Paloma Customs", lines = ["Hot car? Hot paint! Paloma Customs, on Sunset Row.", "New paint, no questions. We really mean the no questions.", "Paloma Customs. Drive in, cool off."] },
+    { name = "Freeway Diner", lines = ["Freeway Diner: pie so good, you'll forget you're under a freeway.", "Open twenty-five hours a day. Ask about our extra hour.", "Freeway Diner. Exit now. Or never."] },
+    { name = "Gas-N-Grab", lines = ["Gas. Grab. Go.", "Gas-N-Grab: forty kinds of jerky, and one kind of fruit.", "Gas-N-Grab. Always open, mostly."] },
+    { name = "Luxe Motors", lines = ["You can't buy happiness, but at Luxe Motors you can lease it for eighty-four months.", "Luxe Motors. Feel expensive."] },
+    { name = "Kale Kingdom", lines = ["Kale Kingdom smoothies taste like a lawn, because they basically are.", "Now with twice the kale and half the smoothie.", "Kale Kingdom. Chew responsibly."] },
+    { name = "Paloma Savings & Trust", lines = ["Your money is safe with Paloma Savings & Trust.", "Our vault has never been robbed. Today.", "Paloma Savings & Trust. It's in the name."] },
+    { name = "SkyPal", lines = ["SkyPal drone delivery: your burrito arrives before you're hungry.", "SkyPal. The sky's the limit, legally."] },
+    { name = "Mirador Realty", lines = ["Mirador Realty: homes so high up the hill, you can see your mortgage from there.", "Mirador Realty. Look down on everyone, affordably."] },
+]
+calls = [
+    { host = "Line two, you're on SPNN. What's on your mind?", caller = "Brock, my GPS told me to turn left into the harbor.", reply = "And did you? Don't answer that. Next caller." },
+    { host = "SPNN talk line, go ahead.", caller = "Why are there forty-seven lanes and I'm still in the slow one?", reply = "Because you're in it, caller. That's how lanes work." },
+    { host = "You're on the air.", caller = "I saw a car chase on the news go past my window, then on the news again.", reply = "That's live television, sir. Congratulations." },
+    { host = "Caller, you have thirty seconds.", caller = "The seagulls at Harbor Gate have unionized.", reply = "Good for them. Back after this." },
+    { host = "SPNN, you're on.", caller = "I just want to say the smog smells better this year.", reply = "Thank you, Councilman. Next." },
+    { host = "Go ahead, caller.", caller = "My smoothie has a crunch. Is that normal?", reply = "In this city? Absolutely. Stay hydrated." },
+]
+
+# Traffic from the SPNN Sky Copter, by the player's heat: `quiet` (nobody wanted; `{at}`
+# somewhere), `pursuit` (in sight: where the player is), `search` (where the police are
+# looking), `manhunt` (four stars and up). `{stars}` reads "three-star".
+[talk.spnn.traffic]
+quiet = [
+    "SPNN traffic from the Sky Copter: things are moving {at}, which is suspicious.",
+    "A fender-bender {at} has drivers filming instead of driving.",
+    "Route 404 is a parking lot again. Bring snacks.",
+    "Traffic is light {at}. Enjoy it, it won't last.",
+    "There's a couch in the left lane {at}. Nobody is sitting on it. Yet.",
+]
+pursuit = [
+    "Breaking from the Sky Copter: a police pursuit {at}. Avoid the area, or at least film it.",
+    "We have a {stars} police chase {at}. Officers are in pursuit, and so, apparently, is everyone else.",
+    "Police are chasing a suspect {at}. Expect delays, sirens and poor decisions.",
+    "A police pursuit is under way {at}. Drivers, pull over. Suspect, please stop waving.",
+]
+search = [
+    "Police are searching {at} for a suspect who was, quote, right here a second ago.",
+    "SPPD units are combing {at}. If you see something, tell us before you tell them.",
+    "A {stars} search is under way {at}. Helicopters are circling, and so are the rumors.",
+]
+manhunt = [
+    "This is a {stars} manhunt {at}. Every SPPD unit is out. Stay indoors, Paloma Bay.",
+    "SPPD has closed off everything {at}. Helicopters, roadblocks and a very tired spokesperson.",
+    "A massive police response {at}. Officials describe the suspect as, quote, a lot.",
+]
+
+[talk.spnn.weather]
+clear = [
+    "SPNN weather: sunny skies over Paloma Bay, with a high chance of more sunny skies.",
+    "Clear and warm tonight. Perfect weather to sit in traffic with the windows down.",
+]
+hazy = [
+    "Weather: hazy. The smog is back, and it brought friends.",
+    "Visibility is low today; the mountains are presumed to exist.",
+]
+overcast = [
+    "Overcast over Paloma Bay. The sun is on a break.",
+    "Gray skies today. Influencers are advised to use a filter.",
+]
+rain = [
+    "Rain over Paloma Bay, and drivers have forgotten how. Leave early, then earlier.",
+    "It's raining. Repeat: it is raining. Panic responsibly.",
+]
+storm = [
+    "A storm is rolling in off the bay: lightning, thunder and the usual drama.",
+    "Storm warning for Paloma Bay. Secure your patio furniture and your opinions.",
+]
+fog = [
+    "Thick fog along the coast. If you can see your own hood, you're doing better than most.",
+    "Fog over the harbor. The Big Wheel is still there, we're told.",
+]
+
+[talk.spnn.voices]
+anchor = { name = "Brock Hardwell", voice = { pitch = 108.0, formant = 0.98, rate = 4.7, energy = 0.35, radio = 0.25 } }
+traffic = { name = "Skye Lane", voice = { pitch = 215.0, formant = 1.17, rate = 5.4, energy = 0.6, radio = 0.45 } }
+ads = { name = "Announcer", voice = { pitch = 150.0, formant = 1.05, rate = 6.2, energy = 0.95, radio = 0.2 } }
+caller = { name = "Caller", voice = { pitch = 165.0, formant = 1.08, rate = 5.0, energy = 0.7, radio = 0.75 } }
+
+# ---------------------------------------------------------------------------------------------
+# The police scanner at two stars and up: a squelch and a beep (`police.scanner` in
+# sounds.toml), the dispatcher's babble through a two-way radio (`pitch` 1 = 120 Hz), these
+# words on screen, the closing squelch (`police.scanner_out`). `{code}`, `{unit}` and `{at}`
+# (where the police last saw the player) fill in; from three stars, now and then an `air` line.
+[scanner]
+name = "SPPD DISPATCH"
+pitch = 1.65
+energy = 0.3
+codes = ["10-80", "10-31", "Code 3", "10-71", "Code 2", "10-38"]
+units = ["Paloma-7", "Lincoln-4", "Harbor-12", "Mirador-3", "Sunset-9", "Central-1"]
+lines = [
+    "All units, {code}, suspect last seen {at}.",
+    "{unit}, {code} {at}. Proceed with caution.",
+    "{unit} responding, {code}, {at}.",
+    "Dispatch to all units: suspect {at}, considered armed.",
+    "{unit}, be advised: {code} in progress {at}.",
+    "Units in the area {at}, {code}. Respond.",
+]
+air = [
+    "Air-1 over {at}, searchlight up.",
+    "Air-1, we have eyes on the suspect {at}.",
+    "Air-2 en route {at}.",
+]
+
+# ---------------------------------------------------------------------------------------------
+# Where things happen, as phrases for reports and the scanner: named areas first (map cells,
+# inclusive; a `wide` one gives way to the landmarks along it), then up on the freeway, then
+# within `reach` metres of a landmark ("near <name>", or its phrase here), then the zone around.
+[places]
+reach = 40.0
+freeway = "on Route 404"
+elsewhere = "in Paloma Bay"
+
+[places.zones]
+residential = "in Los Mirados"
+commercial = "on Sunset Row"
+downtown = "downtown"
+industrial = "in The Flats"
+docks = "at Harbor Gate"
+park = "in Mirador Park"
+beach = "on Palisade Beach"
+water = "off Palisade Beach"
+hills = "in Mirador Hills"
+wild = "up in the hills"
+corridor = "under Route 404"
+
+[places.landmarks]
+bank = "outside Paloma Savings & Trust"
+city_hall = "at City Hall Plaza"
+police = "right outside SPPD Central"
+hospital = "outside St. Brigid Medical"
+gun_store = "outside Bang Bang Bros."
+customs = "at Paloma Customs"
+gas = "at the Gas-N-Grab"
+diner = "at the Freeway Diner"
+luxe_motors = "at Luxe Motors"
+depot = "at the Ironclad depot"
+pier = "on Palisade Pier"
+sign = "under the PALOMA sign"
+lookout = "at Lookout Point"
+
+[[places.area]]   # The Pretzel: Route 404's ramps down to Sunset Row
+at = "near the Pretzel"
+cells = [[58, 9], [63, 38]]
+
+[[places.area]]   # The Ditch: the storm channel from The Flats to the harbor
+at = "in the Ditch"
+cells = [[44, 40], [45, 63]]
+
+[[places.area]]   # Sunset Row: the boulevard and its frontage
+at = "on Sunset Row"
+cells = [[0, 22], [57, 27]]
+wide = true
+
+[[places.area]]   # Auto row, east of downtown
+at = "on auto row"
+cells = [[36, 28], [58, 38]]
+wide = true
+
+[[places.area]]   # The shops behind the beach
+at = "by the beach shops"
+cells = [[10, 46], [33, 47]]
+wide = true
