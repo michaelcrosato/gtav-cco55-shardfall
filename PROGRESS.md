@@ -5,12 +5,12 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase (2026-10-19, session 3 start):** M0-M6 done; **M7 (content: the vertical slice) is
-  next**, then M8-M10. Read `HANDOFF.md` first, then this file. Session 2 ended at the user's
-  request after M6; session 3 so far only checked the environment (Log, 2026-10-18/19) and
-  recorded two findings under Open issues: wasm clippy (D1) fails on four lines of vendored
-  engine code, and this container builds frames about 1.6× slower than session 2's, so
-  downtown misses the perf budget here with or without M6. Nothing is running; the tree is clean.
+- **Phase (2026-10-24, session 4):** M0-M6 done; **M7 (content: the vertical slice) is next**,
+  then M8-M10. Read `HANDOFF.md` first, then this file. **Remaining work** (below the
+  milestones) lists everything M7-M10 still needs, from a gap inventory of the code against
+  PLAN. Sessions 3 and 4 only checked the environment (Log). Wasm clippy (D1) still fails on
+  vendored engine code (Open issues). The `.mcp.json` server now runs `gtf mcp`; the old `pav`
+  command timed out at startup. Nothing is running.
 - **Session 2:** M3-M5 (driving, traffic, `LIB/gtf_vehicles`, heat and the police, cover,
   grenades, armed opponents, WORKSHOP clips, guns in hand, drive-bys, the respray and car swap,
   the evasion bot, the map's edge) and M6: the mission DSL with its validator, runtime and bot
@@ -22,7 +22,8 @@ resumed or compacted session reads first.
   900 s seeds 2-3 pass, seed 1 gives up one stuck car at a dead-end turnaround (open issue).
 - **Perf:** `gtf perf view=all` (release) passed every budget with traffic and crowds in session
   2 (downtown: 110 vehicles, 94 people, 2.8-3.2 ms to build a frame, 1.4-2.2 ms a tick). On the
-  session 3 container the same view takes 4.7-5.4 ms and 2.8-3.6 ms (open issue).
+  session 3 container the same view took 4.7-5.4 ms and 2.8-3.6 ms. On session 4's it passes
+  all ten views (downtown 3.6-3.9 ms and 2.0-2.1 ms; thin margin, open issue).
 - **Tests:** pav_core 305, pav_view 44, pav_world 11, gtf_game 98 (+8 ignored reports), all
   green; clippy -D warnings clean on the touched crates; `cargo check --workspace --all-targets`
   clean.
@@ -216,6 +217,13 @@ resumed or compacted session reads first.
   - `gtf perf` times the median of five frames; far wheels (> 60 m) are plain cylinders; drawn
     assets tally a frame's meshes once (a hundred cars cost 9 ms a frame before).
 
+- 2026-10-24 — **The MCP server runs `gtf mcp`** (`.mcp.json`; the key stays `shardfall`, so the
+  tools are still `mcp__shardfall__*`). The engine's `cargo run -p pav_tools --bin pav` resolved
+  features differently from the SessionStart hook's combined `pav` + `gtf` build. It rebuilt the
+  dependency graph and timed out after 600 s. `cargo run -p gtf_app --bin gtf` is fresh after the
+  hook (0.6 s to answer `initialize`) and serves 86 tools, the game's included. The engine docs
+  still describe upstream's `pav mcp`.
+
 - 2026-10-18 — **M6 decisions:**
   - Switching is open from the start (`crew.unlocked`): the story's introductions arrive with
     M7's missions. A step's `switch = [...]` limits whom the wheel offers while it runs.
@@ -262,12 +270,21 @@ resumed or compacted session reads first.
   `clippy::default_constructed_unit_structs` fires at `pav_app/src/asset_watch.rs:48` (the wasm
   `AssetWatcher` is a unit struct). With those two lints allowed, the rest is clean. Fix them in
   one `engine:` commit (a block scope instead of `drop`, and `Self` for the unit struct).
-- **Perf on the session 3 container:** `gtf perf view=downtown_street` (release) builds a frame
-  in 4.7-5.4 ms (budget 4; outliers to 7) and runs a tick in 2.8-3.6 ms (budget 3). A release
-  build of the last commit before M6 (`fbe56bf`) gives the same numbers on this machine, so this
-  is the container (about 1.6× slower than session 2's), not a regression. Judge perf changes
-  by A/B against a baseline build on the same machine. D12 needs margin: M9's performance pass
-  should bring downtown well under 4 ms here.
+- **Perf depends on the container.** `gtf perf view=downtown_street` (release) builds a frame
+  in 4.7-5.4 ms (budget 4; outliers to 7) and runs a tick in 2.8-3.6 ms (budget 3) on session
+  3's container. A release build of the last commit before M6 (`fbe56bf`) gave the same numbers
+  there, so the cause was the machine, not a regression. On session 4's container, `perf
+  view=all` passes every view: downtown builds a frame in 3.6-3.9 ms and ticks in 2.0-2.1 ms.
+  Judge perf changes by A/B against a baseline build on the same machine. D12 needs margin:
+  M9's performance pass should bring downtown well under 4 ms on any of these containers.
+- **Earlier evidence is not on disk.** `out/` is ignored by Git and containers reset, so the
+  M0-M6 captures, filmstrips and soak JSON cited above are gone. M10's final verification
+  re-runs the D1-D13/D16 commands and looks at fresh captures.
+- **Small inconsistencies found in session 4:** a billboard reads "FREEWAY FM 99.4"
+  (`pav_world/src/dress.rs:27`) but the station is 104.04 (`radio.toml`). The `beach_sunset`
+  view's `about` names the Big Wheel, which is not built yet. The About screen says every model,
+  sound and song is generated, but the walk clips come from motion libraries. Fix them with
+  M7/M8.
 
 ## Log
 - 2026-10-17 — Planning: engine studied at `0098196`; measured starter bot (3/3 wins), Drift Circuit
@@ -352,3 +369,14 @@ resumed or compacted session reads first.
   relative to the workspace root and `pav_core`'s build script bakes in `CARGO_MANIFEST_DIR`, so
   the worktree's build overwrites the main tree's artifacts. The fix is `cargo clean --release -p`
   for the ten workspace crates, then a rebuild.
+- 2026-10-24 — **Session 4: environment check and gap inventory** (no game code changed).
+  Toolchain 1.98.1 with the wasm32 and windows-gnu targets, wasm-bindgen 0.2.129, lavapipe
+  (llvmpipe, LLVM 20), mingw + Wine 9.0 (a cross-built `.exe` runs), Node 22 with Playwright
+  1.63.0 and Chromium 153 (a WebGPU adapter with `web-check.mjs`'s flags), Xvfb, ImageMagick,
+  25 GB of disk free. `cargo fmt --all --check` was clean. Wasm clippy fails on the same three
+  `pav_tools` lines (Open issues). The release `gtf` built cold in 6 min 33 s. `gtf perf
+  view=all` passes all ten views (Now). The debug `gtf` captured `freeway/dev` with the HUD,
+  and the capture was looked at: the Proving Grounds' signal station sign, traffic, the
+  minimap and the prompts. The shardfall MCP server timed out at startup, so `.mcp.json` now
+  runs `gtf mcp` (Decisions). Two read-only audits of the code against PLAN §2, §5 and §9 gave
+  **Remaining work**. `HANDOFF.md` now has a shorter `/goal` prompt.

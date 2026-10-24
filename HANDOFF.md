@@ -1,4 +1,4 @@
-# HANDOFF — Grand Theft Freeway-BX, end of session 2 (2026-10-18; checked in session 3, 2026-10-19)
+# HANDOFF — Grand Theft Freeway-BX, end of session 2 (2026-10-18; environment checked in sessions 3 and 4, 2026-10-19 and 2026-10-24)
 
 For the next implementing session (or this one after a compaction). Read `CLAUDE.md` (it imports
 `docs/DOCTRINE.md`), then this page, then `PROGRESS.md` → "Now", then `PLAN.md` §0–§4 and §10
@@ -16,9 +16,11 @@ truth; this page says where things stand and what to do next.
 - **Health:** pav_core 305, pav_view 44, pav_world 11, gtf_game 98 (+8 ignored reports) green;
   clippy `-D warnings` clean on the touched crates; `gtf perf view=all` (release) within every budget
   with traffic and crowds; soaks as in `PROGRESS.md` → Now.
-- **Session 3 (2026-10-18/19)** only checked the environment. Everything is installed;
-  `gtf_game` is still 98 green. It found two issues, listed below: wasm clippy is not clean, and
-  this container is slower, so the downtown perf budget fails here.
+- **Sessions 3 and 4 (2026-10-19, 2026-10-24)** only checked the environment and took stock
+  (no game code changed). Everything is installed. Wasm clippy is still not clean (below). On
+  the session 4 container every reference view is within budget again, but downtown's margin is
+  thin. The shardfall MCP server timed out at startup; `.mcp.json` now runs `gtf mcp`. The
+  gap inventory of everything M7–M10 still needs is in `PROGRESS.md` → Remaining work.
 
 ## The M6 systems (where to look)
 - **Missions** — `crates/gtf_game/src/missions/`: `mod.rs` (the DSL types, the validator with
@@ -71,11 +73,16 @@ truth; this page says where things stand and what to do next.
   game's city).
 - **Wasm clippy (D1) fails** on four wasm-only lints in vendored engine code: `drop_non_drop` in
   `pav_tools` (`animation_tools.rs:287`, `asset_tools.rs:95`, `creature_tools.rs:662`) and
-  `default_constructed_unit_structs` in `pav_app/src/asset_watch.rs:48`. Fix them in one
-  `engine:` commit (details in `PROGRESS.md` → Open issues).
-- **Perf on the session 3 container:** downtown takes 4.7-5.4 ms to build a frame (budget 4) and
-  2.8-3.6 ms a tick (budget 3). The pre-M6 build measures the same, so the machine is slower,
-  not the code. Compare against a baseline build on the same machine; M9 needs margin.
+  `default_constructed_unit_structs` in `pav_app/src/asset_watch.rs:48`. Session 4 got the same
+  three `pav_tools` errors. Fix them in one `engine:` commit (details in `PROGRESS.md` → Open
+  issues).
+- **Perf depends on the container:** downtown built a frame in 2.8-3.2 ms in session 2,
+  4.7-5.4 ms in session 3 (budget 4) and 3.6-3.9 ms in session 4. Ticks took 1.4-2.2,
+  2.8-3.6 and 2.0-2.1 ms (budget 3). Judge changes by A/B against a baseline build on the
+  same machine. M9 must leave margin.
+- **Earlier evidence is not on disk:** `out/` is ignored by Git and containers reset, so the
+  captures and soak JSON cited for M0-M6 are gone. The final verification (M10) re-runs and
+  looks at them.
 
 ## Working notes
 - **Builds:** 4 vCPU, fixed disk allowance; `CARGO_BUILD_JOBS=4`. Soaks, perf and quick looks
@@ -102,9 +109,11 @@ truth; this page says where things stand and what to do next.
   workspace root, so the two trees share artifacts, and `pav_core`'s build script bakes in its
   `CARGO_MANIFEST_DIR`. If that happens, run `cargo clean --release -p` for the ten workspace
   crates, then rebuild.
-- **Startup:** the shardfall MCP server (`.mcp.json`) runs `cargo run -p pav_tools --bin pav`.
-  That build resolves features differently from the hook's combined `pav` + `gtf` build, so it
-  compiles the dependency graph a second time before it connects (a few minutes, harmless).
+- **Startup:** the shardfall MCP server (`.mcp.json`) runs `cargo run -p gtf_app --bin gtf --
+  mcp`: every engine tool plus the game's, as `mcp__shardfall__*`. The hook's combined `pav` +
+  `gtf` build leaves it fresh, so it starts in under a second. The old `pav` command resolved
+  features differently, rebuilt the dependency graph and timed out after 10 minutes in session 4.
+  If the server still fails to connect, use the `gtf` CLI; it has the same tools.
 
 ## The `/goal` prompt to finish (M7–M10)
 `PLAN.md` Appendix A is the original prompt for the whole run (M0→M10). To resume from here:
