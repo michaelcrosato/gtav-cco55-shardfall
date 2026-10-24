@@ -80,7 +80,8 @@ crates/
               assets.rs (`emit_asset`: a library asset drawn from game state each frame),
               interpolation between ticks, visual settings (ViewSettings)
   pav_audio   synthesized sound: oscillators/noise/envelopes/filters, event -> sound bank,
-              cpal output (optional), offline .wav rendering
+              loops with live parameters, radio music by genre and talk (music/), babble
+              voices (voice.rs), cpal output (optional), offline .wav rendering
   pav_tools   agent layer: tool registry + `pav` CLI (one-shot, REPL) + MCP stdio server +
               live bridge client (bridge.rs), and the motion importer (mocap/: glTF and FBX
               libraries, CMU's ASF/AMC, BVH; Rigify, Unreal, Mixamo/MotionBuilder, 100STYLE and
@@ -474,6 +475,29 @@ it sinks and the engine drowns.
   +x); busts in taken seats; smoke and fire by damage. Without a body prop: the box, a cabin,
   wheels and lamps. `pav_view::assets::emit_asset_tweaked` draws any asset with per-part
   turns, offsets and glow.
+
+## Radio and voices
+A station is data (`pav_core::radio::StationDef`: genre, tempo range, seed, slot length, title
+and artist words, DJ); `radio::at(st, clock)` gives the song on air and the seconds into its
+slot, live on the clock the game keeps. The game hands the host `present::Music` (station, song,
+offset, volume, muffle, `segments`) in its `AudioScene`; `pav_audio::music` renders it.
+- **Genres:** `synthwave` (gated snares, arpeggios, saw leads), `boombap` (swung sixteenths,
+  vinyl, electric piano, sub bass), `surf` (driving drums, driven square guitars through a
+  spring, tremolo picking), `cumbia` (güiro, accordions, bouncing bass), `smooth` (brushes and
+  ride, seventh chords, a filtered-saw sax with vibrato), `talk` (no songs). Songs have
+  sections (`music::sections`: intro, verses, choruses, a bridge in longer songs, outro); each
+  note is a function of the time since it began, so a song plays from any offset. After the
+  song the station's ident (its own motif and key, from its seed) and a quiet bed.
+- **Talk:** `radio::Segment { kind, start, seconds, voice, seed }` laid on a slot: `voice`
+  (babble), `chime` (the station's sounder), `jingle` (a short bed under an ad). The music dips
+  under a voice; a talk station plays a news bed under its voices. The game shows the words
+  (subtitles, cards); `radio::speech_seconds(text, rate)` says how long a line takes.
+- **Voices:** `radio::Voice { pitch, formant, rate, energy, radio }` → `pav_audio::voice::Babble`
+  (formants gliding between vowels, consonant noise, syllables in phrases with a falling pitch,
+  `radio` band-limits and drives it like a two-way set). As a loop: cues `voice` and
+  `voice.radio` (`pitch` 1 = 120 Hz, `param` liveliness), e.g. a police scanner.
+- **Mix:** `AudioScene.ducking` is the decibels the radio and the ambience beds duck by
+  (dialogue, menus); the mixer glides to it.
 
 ## Urban kit (pav_world)
 `pav_world` turns a district file (TOML) into an immutable `City` (`City::from_toml`, a pure

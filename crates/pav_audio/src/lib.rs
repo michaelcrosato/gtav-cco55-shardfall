@@ -9,9 +9,11 @@ use glam::Vec3;
 use pav_core::SimEvent;
 
 pub mod bank;
+pub mod dsp;
 pub mod fx;
 pub mod loops;
 pub mod music;
+pub mod voice;
 
 pub use bank::Bank;
 pub use loops::{LoopKind, LoopTarget};
@@ -156,8 +158,10 @@ pub struct Mixer {
     /// Reverb send (0 = dry, which also skips its cost) and room size.
     pub reverb_mix: f32,
     pub room: f32,
-    /// 0..1: ambience beds duck under dialogue and menus.
+    /// Decibels the radio and the ambience beds duck by (dialogue, menus): 0 for none.
     pub duck: f32,
+    /// The ducked level now (gliding to `duck`'s).
+    duck_gain: f32,
     pub sample_rate: f32,
     pub master: f32,
     /// The cues `SimEvent::Sound` plays (offline renders; the live output resolves cues itself).
@@ -185,6 +189,7 @@ impl Mixer {
             reverb_mix: 0.0,
             room: 0.5,
             duck: 0.0,
+            duck_gain: 1.0,
             sample_rate,
             master: 0.8,
             bank: Arc::new(Bank::engine()),
@@ -282,6 +287,7 @@ impl Mixer {
             (Some(t), Some(v)) if same(v, t) => {
                 v.target_gain = t.volume;
                 v.target_muffle = t.muffle;
+                v.set_segments(&t.segments);
                 if (v.t - t.offset as f64).abs() > 0.75 {
                     v.t = t.offset as f64;
                 }
@@ -304,8 +310,11 @@ impl Mixer {
     /// Renders into an interleaved stereo buffer (overwrites).
     pub fn render(&mut self, out: &mut [f32]) {
         let dt = 1.0 / self.sample_rate;
-        let duck = 1.0 - self.duck.clamp(0.0, 1.0) * 0.7;
+        let duck_to = dsp::db(-self.duck.clamp(0.0, 60.0));
+        let glide = 1.0 - (-dt / 0.08).exp();
         for frame in out.chunks_mut(2) {
+            self.duck_gain += (duck_to - self.duck_gain) * glide;
+            let duck = self.duck_gain;
             let (mut l, mut r) = (0.0, 0.0);
             for v in &mut self.voices {
                 let s = v.next(dt);
@@ -705,6 +714,7 @@ pub fn music_target(scene: &pav_core::present::AudioScene) -> Option<music::Musi
         offset: m.offset,
         volume: m.volume,
         muffle: m.muffle,
+        segments: Vec::new(),
     })
 }
 
@@ -883,7 +893,8 @@ impl AudioOut {
         let _ = self.tx.send(Cmd::Loops(targets));
     }
 
-    /// The effects bus: reverb send and room size, and how much the beds duck.
+    /// The effects bus: reverb send and room size, and the decibels the radio and the beds
+    /// duck by.
     pub fn set_bus(&self, reverb: f32, room: f32, duck: f32) {
         let _ = self.tx.send(Cmd::Bus { reverb, room, duck });
     }

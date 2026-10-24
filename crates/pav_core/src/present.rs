@@ -1039,7 +1039,7 @@ pub struct AudioScene {
     pub listener: Option<Listener>,
     pub loops: Vec<LoopSource>,
     pub music: Option<Music>,
-    /// 0..1: duck music and beds (dialogue, menus).
+    /// Decibels the radio and the ambience beds duck by (dialogue, menus): 0 for none.
     pub ducking: f32,
     /// 0..1: reverb amount (tunnels, interiors).
     pub reverb: f32,
