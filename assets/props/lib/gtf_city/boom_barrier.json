@@ -1,0 +1,13 @@
+{"format":2,"name":"boom_barrier","unit":"cm",
+"description":"A gate barrier raised open: a yellow post with its red-and-white striped arm straight up.",
+"tags":["barrier","gate","boom","security","parking"],
+"category":"town",
+"materials":{
+"post":{"base":"MAT/gtf/painted_metal","color":"#f2c230"},
+"red":{"color":"#d23a2c"},
+"white":{"color":"#f4f2ec"}},
+"parts":{
+"arm":{"type":"box","size":[11,60,11],"pos":[8,288,0],"mat":"white","array":{"count":5,"step":[0,60,0],"cycle":["red","white"]}},
+"cap":{"type":"box","size":[40,10,40],"pos":[0,115,0],"mat":"post"},
+"pivot":{"type":"cylinder","radius":10,"height":30,"pos":[8,128,0],"axis":"z","mat":"post"},
+"post":{"type":"box","size":[34,110,34],"pos":[0,55,0],"mat":"post"}}}

@@ -1,0 +1,12 @@
+{"format":2,"name":"bbq_grill","unit":"cm",
+"description":"A black kettle barbecue on three legs with a lid handle, by a trailer or in a yard.",
+"tags":["bbq","grill","barbecue","yard","cook"],
+"category":"tool",
+"materials":{
+"black":{"base":"MAT/gtf/painted_metal","color":"#1d1f22"},
+"chrome":{"color":"#c9cdd1"}},
+"parts":{
+"bowl":{"type":"ellipsoid","size":[58,34,58],"pos":[0,72,0],"mat":"black"},
+"handle":{"type":"box","size":[14,3,3],"pos":[0,100,0],"mat":"chrome"},
+"leg":{"type":"cylinder","radius":1.6,"from":[0,0,26],"to":[0,62,10],"mat":"black","radial":{"count":3,"radius":0}},
+"lid":{"type":"ellipsoid","size":[56,30,56],"pos":[0,84,0],"mat":"black"}}}

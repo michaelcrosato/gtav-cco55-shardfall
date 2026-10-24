@@ -1,0 +1,16 @@
+{"format":2,"name":"office_chair","unit":"cm",
+"description":"A black swivel office chair: a five-star base, gas post, padded seat and back (the back toward -z).",
+"tags":["chair","office","seat","swivel","desk"],
+"category":"furniture",
+"materials":{
+"black":{"color":"#1d1f22"},
+"metal":{"base":"MAT/gtf/chrome","color":"#8e9399"}},
+"parts":{
+"back":{"type":"rounded_box","size":[46,52,7],"radius":3,"pos":[0,80,-24],"mat":"black"},
+"leg":{"type":"box","size":[5,4,30],"pos":[0,6,15],"mat":"metal","radial":{"count":5,"radius":0}},
+"post":{"type":"cylinder","radius":3,"from":[0,8,0],"to":[0,42,0],"mat":"metal"},
+"seat":{"type":"rounded_box","size":[48,9,46],"radius":3,"pos":[0,46.5,0],"mat":"black"},
+"strut":{"type":"box","size":[6,26,4],"pos":[0,56,-22],"mat":"metal"},
+"wheel":{"type":"sphere","radius":3.5,"pos":[0,3.5,0],"mat":"black","radial":{"count":5,"radius":28}}},
+"sockets":{
+"sit":{"pos":[0,50,0]}}}

@@ -1,0 +1,12 @@
+{"format":2,"name":"pipe_stack","unit":"cm",
+"description":"Three concrete culvert pipes, 2.4 m long, stacked two and one on timber chocks: a public works yard.",
+"tags":["pipe","concrete","culvert","yard","construction"],
+"category":"town",
+"materials":{
+"hole":{"color":"#3c3b38"},
+"pipe":{"base":"MAT/gtf/concrete","color":"#a9a69f"},
+"wood":{"color":"#8a6a44"}},
+"parts":{
+"chock":{"type":"box","size":[200,12,14],"pos":[0,6,90],"mat":"wood","mirror":"z"},
+"low":{"type":"tube","radius":45,"thickness":9,"height":240,"pos":[-48,57,0],"axis":"z","mat":"pipe","mirror":"x"},
+"top":{"type":"tube","radius":45,"thickness":9,"height":240,"pos":[0,135,0],"axis":"z","mat":"pipe"}}}

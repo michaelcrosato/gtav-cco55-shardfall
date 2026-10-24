@@ -1,0 +1,16 @@
+{"format":2,"name":"car_lift","unit":"cm",
+"description":"A two-post car lift, 3.8 m between red posts with a top beam; yellow carriages and arms down for a car to drive on.",
+"tags":["lift","garage","workshop","car","mechanic"],
+"category":"town",
+"materials":{
+"dark":{"color":"#2b2f33"},
+"plate":{"base":"MAT/gtf/painted_metal","color":"#5a5f64"},
+"red":{"base":"MAT/gtf/painted_metal","color":"#d23a2c"},
+"yellow":{"base":"MAT/gtf/painted_metal","color":"#f2c230"}},
+"parts":{
+"arm":{"type":"box","size":[110,8,14],"pos":[104,10,36],"yaw":20,"mat":"yellow","mirror":["x","z"]},
+"beam":{"type":"box","size":[416,20,30],"pos":[0,314,0],"mat":"red"},
+"carriage":{"type":"box","size":[40,60,44],"pos":[152,34,0],"mat":"yellow","mirror":"x"},
+"control":{"type":"box","size":[22,32,14],"pos":[216,130,12],"mat":"dark"},
+"plate":{"type":"box","size":[60,4,60],"pos":[190,2,0],"mat":"plate","mirror":"x"},
+"post":{"type":"box","size":[36,300,36],"pos":[190,154,0],"mat":"red","mirror":"x"}}}

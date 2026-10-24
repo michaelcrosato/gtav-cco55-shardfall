@@ -1,0 +1,23 @@
+{"format":2,"name":"big_wheel_car","unit":"cm",
+"description":"A Ferris wheel car, 1.8 m: coloured lower body (by seed), tinted glass, white roof, hanger to a pivot 2.7 m up.",
+"tags":["ferris","wheel","gondola","pier","ride"],
+"category":"town",
+"materials":{
+"dark":{"color":"#3a3d40"},
+"glass":{"base":"MAT/gtf/tinted_glass","color":"#4d6575"},
+"steel":{"color":"#c9cdd1"},
+"white":{"base":"MAT/gtf/painted_metal","color":"#f2f0ea"}},
+"parts":{
+"floor":{"type":"box","size":[184,10,154],"pos":[0,5,0],"mat":"dark"},
+"glass":{"type":"box","size":[176,100,146],"pos":[0,150,0],"mat":"glass"},
+"hanger":{"type":"box","size":[10,54,10],"pos":[0,243,0],"mat":"steel"},
+"pin":{"type":"cylinder","radius":6,"height":30,"pos":[0,268,0],"axis":"z","mat":"steel"},
+"post":{"type":"box","size":[6,104,6],"pos":[89,150,74],"mat":"white","mirror":["x","z"]},
+"roof":{"type":"box","size":[190,16,160],"pos":[0,208,0],"mat":"white"},
+"shell":{"pick":1,"parts":{
+  "s0":{"type":"box","size":[180,90,150],"pos":[0,55,0],"color":"#ff5e7e"},
+  "s1":{"type":"box","size":[180,90,150],"pos":[0,55,0],"color":"#3ec5f0"},
+  "s2":{"type":"box","size":[180,90,150],"pos":[0,55,0],"color":"#ffd166"},
+  "s3":{"type":"box","size":[180,90,150],"pos":[0,55,0],"color":"#6fe28a"},
+  "s4":{"type":"box","size":[180,90,150],"pos":[0,55,0],"color":"#b28dff"},
+  "s5":{"type":"box","size":[180,90,150],"pos":[0,55,0],"color":"#ff9a3c"}}}}}

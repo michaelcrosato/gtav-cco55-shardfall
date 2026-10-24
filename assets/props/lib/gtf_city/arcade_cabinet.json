@@ -1,0 +1,18 @@
+{"format":2,"name":"arcade_cabinet","unit":"cm",
+"description":"An upright arcade cabinet: purple sides, a lit marquee and screen facing +z, a control panel with buttons.",
+"tags":["arcade","game","cabinet","pier","screen"],
+"category":"furniture",
+"materials":{
+"body":{"color":"#1d1f24"},
+"marquee":{"color":"#ff3ea5","look":"unlit","emissive":0.5},
+"panel":{"color":"#c9cdd1"},
+"screen":{"color":"#3ef0ff","look":"unlit","emissive":0.45},
+"side":{"color":"#7a3fd1"}},
+"parts":{
+"body":{"type":"box","size":[66,180,76],"pos":[0,90,0],"mat":"body"},
+"button":{"type":"cylinder","radius":2.5,"height":3,"pos":[10,104,47],"color":"#ff3e3e","array":{"count":3,"step":[8,0,0]}},
+"marquee":{"type":"box","size":[64,18,4],"pos":[0,169,39],"mat":"marquee"},
+"panel":{"type":"box","size":[64,6,26],"pos":[0,100,46],"pitch":15,"mat":"panel"},
+"screen":{"type":"box","size":[54,44,2],"pos":[0,132,37],"pitch":-10,"mat":"screen"},
+"side":{"type":"box","size":[3,180,78],"pos":[34.5,90,0],"mat":"side","mirror":"x"},
+"stick":{"type":"cylinder","radius":1.2,"height":9,"pos":[-16,106,46],"color":"#16181b"}}}

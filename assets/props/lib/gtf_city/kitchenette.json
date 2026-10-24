@@ -1,0 +1,22 @@
+{"format":2,"name":"kitchenette","unit":"cm",
+"description":"A 2.4 m kitchen run against a wall (-z): cream cabinets, dark worktop, sink and tap, a hob, wall cupboards.",
+"tags":["kitchen","cabinet","sink","stove","apartment"],
+"category":"furniture",
+"materials":{
+"cab":{"color":"#e7e2d8"},
+"hob":{"color":"#1b1c1e"},
+"ring":{"color":"#4a4a4c"},
+"steel":{"base":"MAT/gtf/chrome","color":"#a9aeb3"},
+"top":{"color":"#3a3d40"}},
+"parts":{
+"base":{"type":"box","size":[240,86,58],"pos":[0,43,0],"mat":"cab"},
+"burner":{"type":"cylinder","radius":8,"height":1,"pos":[55,91.5,4],"mat":"ring","grid":{"count":[2,2],"step":[28,24]}},
+"handle":{"type":"box","size":[12,2,2],"pos":[0,76,30],"mat":"steel","array":{"count":6,"step":[38,0,0]}},
+"hob":{"type":"box","size":[60,1,50],"pos":[55,90.5,4],"mat":"hob"},
+"sink":{"type":"box","size":[50,1,36],"pos":[-55,90.5,4],"mat":"steel"},
+"splash":{"type":"box","size":[240,60,2],"pos":[0,120,-28],"color":"#d9d2c5"},
+"spout":{"type":"cylinder","radius":1.4,"from":[-55,116,-20],"to":[-55,116,-6],"mat":"steel"},
+"tap":{"type":"cylinder","radius":1.6,"from":[-55,90,-20],"to":[-55,116,-20],"mat":"steel"},
+"top":{"type":"box","size":[244,4,62],"pos":[0,88,1],"mat":"top"},
+"upper":{"type":"box","size":[240,70,34],"pos":[0,185,-12],"mat":"cab"},
+"upper_handle":{"type":"box","size":[2,12,2],"pos":[0,160,6],"mat":"steel","array":{"count":6,"step":[38,0,0]}}}}
