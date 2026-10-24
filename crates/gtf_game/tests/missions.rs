@@ -1,5 +1,6 @@
 //! M6: missions. Every mission file validates against its district; the bot finishes both test
-//! missions (every step kind, both ways through the choice) on three seeds; a failed mission
+//! missions (every step kind, both ways through the choice) on three seeds, and (ignored, long)
+//! every story mission and both heist approaches on three seeds; a failed mission
 //! retries from its checkpoint, offers Skip after three fails, and Skip moves on; a pass pays,
 //! keeps the record and autosaves.
 
@@ -123,6 +124,75 @@ fn the_bot_takes_the_loud_way_too() {
     assert_eq!(o, Outcome::Won, "{st}");
     let flags: Vec<String> = serde_json::from_value(st["flags"].clone()).unwrap();
     assert!(flags.contains(&"loud".to_string()), "the loud way was taken: {flags:?}");
+}
+
+/// The bot plays story mission `key` on seeds 1-3 (after the `before` commands) and wins each.
+fn story(key: &str, before: &[&str]) {
+    let scene = format!("freeway/mission/{key}");
+    let lost: Vec<String> = (1..=3)
+        .filter_map(|seed| {
+            let (o, st) = bot_run(&scene, seed, 700, before);
+            (o != Outcome::Won).then(|| format!("{key} {before:?} seed {seed}: {o:?} {st}"))
+        })
+        .collect();
+    assert!(lost.is_empty(), "{}", lost.join("\n"));
+}
+
+// The story, three seeds each (minutes apiece; in parallel with
+// `cargo test --release -p gtf_game --test missions -- --ignored story_`).
+#[test]
+#[ignore = "long: the story missions, three seeds each"]
+fn story_m1_repo_man() {
+    story("m1_repo_man", &[]);
+}
+
+#[test]
+#[ignore = "long: the story missions, three seeds each"]
+fn story_m2_midlife() {
+    story("m2_midlife", &[]);
+}
+
+#[test]
+#[ignore = "long: the story missions, three seeds each"]
+fn story_m3_overdrive() {
+    story("m3_overdrive", &[]);
+}
+
+#[test]
+#[ignore = "long: the story missions, three seeds each"]
+fn story_s1_rush_hour() {
+    story("s1_rush_hour", &[]);
+}
+
+#[test]
+#[ignore = "long: the story missions, three seeds each"]
+fn story_s2_heavy_metal_quiet_and_loud() {
+    story("s2_heavy_metal", &[]);
+    story("s2_heavy_metal", &["mission choose loud"]);
+}
+
+#[test]
+#[ignore = "long: the story missions, three seeds each"]
+fn story_s3_test_drive() {
+    story("s3_test_drive", &[]);
+}
+
+#[test]
+#[ignore = "long: the story missions, three seeds each"]
+fn story_h0_board() {
+    story("h0_board", &[]);
+}
+
+#[test]
+#[ignore = "long: the story missions, three seeds each"]
+fn story_h1_freeway_job_loud() {
+    story("h1_freeway_job", &[]);
+}
+
+#[test]
+#[ignore = "long: the story missions, three seeds each"]
+fn story_h1_freeway_job_smart() {
+    story("h1_freeway_job", &["mission story smart"]);
 }
 
 /// Plays `scene` with the bot until the mission reaches step `n`.
