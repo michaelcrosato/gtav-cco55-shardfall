@@ -31,9 +31,17 @@ const CELL: f32 = 16.0;
 const SPACING: f32 = 1.5;
 
 impl Cover {
-    pub fn build(buildings: &[Building], walk: &WalkMap, channels: &[ChannelGeom], freeways: &[FreewayGeom]) -> Cover {
+    /// Cover along `buildings` and the `extra` boxes (low walls, big props) where they face
+    /// walkable ground, the channels' walls and the freeways' barriers.
+    pub fn build(
+        buildings: &[Building],
+        extra: &[Building],
+        walk: &WalkMap,
+        channels: &[ChannelGeom],
+        freeways: &[FreewayGeom],
+    ) -> Cover {
         let mut c = Cover::default();
-        for b in buildings {
+        for b in buildings.iter().chain(extra) {
             let edges = [
                 (Vec2::new(b.min.x, b.min.y), Vec2::new(b.max.x, b.min.y), Vec2::NEG_Y),
                 (Vec2::new(b.max.x, b.min.y), Vec2::new(b.max.x, b.max.y), Vec2::X),
@@ -42,7 +50,7 @@ impl Cover {
             ];
             for (a, e, n) in edges {
                 let len = a.distance(e);
-                if len < 2.5 {
+                if len < 1.6 {
                     continue;
                 }
                 let mut t = 0.9;

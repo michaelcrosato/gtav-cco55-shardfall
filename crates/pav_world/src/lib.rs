@@ -14,7 +14,7 @@ use std::sync::Arc;
 use glam::{IVec2, Vec2, Vec3};
 use pav_core::present::{FarMesh, FarView, MapImage};
 use pav_core::region::{RegionFill, RegionProvider};
-use pav_core::statics::{Block, CHUNK_SIZE, Decor, StaticProp};
+use pav_core::statics::{Block, CHUNK_SIZE, Decor, Ladder, StaticProp};
 use pav_core::terrain::TerrainPatch;
 use pav_core::zones::{Label, Zone};
 
@@ -29,6 +29,7 @@ pub mod grid;
 pub mod ground;
 pub mod lanes;
 mod lots;
+pub mod parts;
 pub mod raster;
 pub mod terrain;
 pub mod walk;
@@ -46,11 +47,18 @@ pub struct Bin {
     pub props: Vec<StaticProp>,
     pub labels: Vec<Label>,
     pub zones: Vec<Zone>,
+    pub ladders: Vec<Ladder>,
 }
 
 impl Bin {
     fn len(&self) -> usize {
-        self.blocks.len() + self.decor.len() + self.meshes.len() + self.props.len() + self.labels.len() + self.zones.len()
+        self.blocks.len()
+            + self.decor.len()
+            + self.meshes.len()
+            + self.props.len()
+            + self.labels.len()
+            + self.zones.len()
+            + self.ladders.len()
     }
 }
 
@@ -65,6 +73,83 @@ pub struct Building {
     pub zone: u16,
     /// Its main colour (linear RGB), for the far view.
     pub color: [f32; 3],
+}
+
+/// A breakable pane of glass (a showroom's window, `breakable` glass in a landmark's room): a box
+/// round the middles of its destructible blocks — the pane (an invisible collider,
+/// `block_flags::HIDDEN`), its frosted band, its stretch of sill and the mullions either side. A
+/// game breaks it with `Sim::break_blocks_in(min, max, from)`.
+#[derive(Clone, Debug)]
+pub struct Pane {
+    pub min: Vec3,
+    pub max: Vec3,
+    /// Its landmark (index into `def.landmark`).
+    pub landmark: u16,
+}
+
+/// A parking place in a landmark (a lot, a yard, a bay, a helipad) for the game to fill.
+#[derive(Clone, Debug)]
+pub struct LotPlace {
+    /// Where the vehicle stands (on the floor under its middle) and the way it faces (unit).
+    pub pos: Vec3,
+    pub dir: Vec3,
+    /// What goes there (a vehicle archetype; empty: any).
+    pub kind: String,
+    /// Always taken (else the game's share of lot places).
+    pub always: bool,
+    pub landmark: u16,
+}
+
+/// A Ferris wheel for a game to draw turning (its legs and deck are baked into the chunks).
+#[derive(Clone, Debug)]
+pub struct WheelGeom {
+    /// The middle of its axle, and the way its face looks (horizontal, unit: along the axle).
+    pub hub: Vec3,
+    pub face: Vec3,
+    /// From the hub to the cars' pivots.
+    pub radius: f32,
+    pub cars: u32,
+    /// Seconds per turn.
+    pub period: f32,
+    /// The rim asset (its hub `rim_hub` m above its origin, its face toward +z) and the car
+    /// asset (hanging from `car_pivot` m above its origin, its front toward +z).
+    pub rim: String,
+    pub rim_hub: f32,
+    pub car: String,
+    pub car_pivot: f32,
+}
+
+impl WheelGeom {
+    /// How far round it has turned at time `t` (radians, from the clock: the same at any frame).
+    pub fn angle(&self, t: f64) -> f32 {
+        ((t / self.period as f64).fract() * std::f64::consts::TAU) as f32
+    }
+
+    /// The turn of its face (+z of its assets toward `face`).
+    fn facing(&self) -> glam::Quat {
+        glam::Quat::from_rotation_y(self.face.x.atan2(self.face.z))
+    }
+
+    /// Where the rim's origin goes at time `t`, and its rotation (turned about the axle).
+    pub fn rim_at(&self, t: f64) -> (Vec3, glam::Quat) {
+        let rot = self.facing() * glam::Quat::from_rotation_z(self.angle(t));
+        (self.hub - rot * Vec3::Y * self.rim_hub, rot)
+    }
+
+    /// Each car's origin at time `t` (hanging level under its pivot on the rim) and rotation.
+    /// Car 0 starts at the top and the rest follow round the rim the way the rim's radial
+    /// copies do (counter-clockwise seen from its face), so each car hangs from its bracket.
+    pub fn cars_at(&self, t: f64) -> Vec<(Vec3, glam::Quat)> {
+        let face = self.facing();
+        let a0 = self.angle(t);
+        (0..self.cars)
+            .map(|k| {
+                let a = std::f32::consts::FRAC_PI_2 + a0 + std::f32::consts::TAU * k as f32 / self.cars as f32;
+                let pivot = self.hub + face * Vec3::new(a.cos() * self.radius, a.sin() * self.radius, 0.0);
+                (pivot - Vec3::Y * self.car_pivot, face)
+            })
+            .collect()
+    }
 }
 
 /// The generated city.
@@ -85,9 +170,17 @@ pub struct City {
     /// Where people walk (2 m tiles) and where they take cover.
     pub walk: walk::WalkMap,
     pub cover: cover::Cover,
+    /// Landmarks' breakable glass, parking places and turning wheels.
+    pub panes: Vec<Pane>,
+    pub lots: Vec<LotPlace>,
+    pub wheels: Vec<WheelGeom>,
     /// Chunk coordinate bounds, inclusive.
     pub chunk_bounds: (IVec2, IVec2),
     bins: BTreeMap<(i32, i32), Bin>,
+    /// Landmarks' walk-map marks (with the height people stand at in each) and the ones over
+    /// each chunk, in order.
+    marks: Vec<parts::MarkRect>,
+    mark_bins: BTreeMap<(i32, i32), Vec<u32>>,
     /// The map picture (1 px per metre).
     pub map: Arc<MapImage>,
     /// The whole city in low detail (building masses, ground, water), per chunk.
@@ -103,7 +196,20 @@ pub(crate) struct Out {
     pub props: Vec<StaticProp>,
     pub labels: Vec<Label>,
     pub zones: Vec<Zone>,
+    pub ladders: Vec<Ladder>,
     pub buildings: Vec<Building>,
+    /// Landmarks' panes, lot places and wheels.
+    pub panes: Vec<Pane>,
+    pub lots: Vec<LotPlace>,
+    pub wheels: Vec<WheelGeom>,
+    /// Walk-map marks (yards, interiors, walls), applied in order after the buildings.
+    pub marks: Vec<parts::MarkRect>,
+    /// Boxes people take cover behind besides the buildings (low walls, big props).
+    pub cover: Vec<Building>,
+    /// Kerbs kept clear of parked cars (outside gates and garage doors).
+    pub driveways: Vec<(Vec2, Vec2)>,
+    /// The shop names the last few shops took (indices into their zone's names).
+    pub shop_names: Vec<usize>,
 }
 
 fn chunk_of(p: Vec3) -> (i32, i32) {
@@ -114,6 +220,7 @@ impl City {
     /// Builds the city a district file describes.
     pub fn build(def: DistrictDef) -> Result<City, String> {
         let grid = Grid::parse(&def)?;
+        parts::check(&def)?;
         let terrain = Terrain::build(&def, &grid)?;
         let mut out = Out::default();
         ground::build(&def, &grid, &terrain, &mut out);
@@ -126,10 +233,14 @@ impl City {
         dress::beach(&def, &grid, &mut out);
         let freeways = freeway::build(&def, &grid, &terrain, &mut out);
         edge::build(&def, &grid, &terrain, &mut out);
-        let lanes = lanes::LaneGraph::build(&grid, &terrain, &freeways, &channels, def.seed);
+        let mut lanes = lanes::LaneGraph::build(&grid, &terrain, &freeways, &channels, def.seed);
+        // No parking across a landmark's gates and garage doors.
+        lanes
+            .parking
+            .retain(|s| !out.driveways.iter().any(|(a, b)| s.pos.x > a.x && s.pos.x < b.x && s.pos.z > a.y && s.pos.z < b.y));
         let signal_heads = dress::signals(&grid, &lanes, &mut out);
-        let walk = walk::WalkMap::build(&def, &grid, &out.buildings, &lanes);
-        let cover = cover::Cover::build(&out.buildings, &walk, &channels, &freeways);
+        let walk = walk::WalkMap::build(&def, &grid, &out.buildings, &lanes, &out.marks);
+        let cover = cover::Cover::build(&out.buildings, &out.cover, &walk, &channels, &freeways);
         let lo = grid.origin;
         let hi = grid.origin + Vec2::new(grid.w as f32, grid.h as f32) * grid.cell;
         let chunk_bounds = (
@@ -156,6 +267,19 @@ impl City {
         for z in out.zones {
             bins.entry(chunk_of((z.min + z.max) * 0.5)).or_default().zones.push(z);
         }
+        for l in out.ladders {
+            bins.entry(chunk_of(l.center())).or_default().ladders.push(l);
+        }
+        let mut mark_bins: BTreeMap<(i32, i32), Vec<u32>> = BTreeMap::new();
+        for (i, m) in out.marks.iter().enumerate() {
+            let (x0, z0) = chunk_of(Vec3::new(m.min.x, 0.0, m.min.y));
+            let (x1, z1) = chunk_of(Vec3::new(m.max.x, 0.0, m.max.y));
+            for x in x0..=x1 {
+                for z in z0..=z1 {
+                    mark_bins.entry((x, z)).or_default().push(i as u32);
+                }
+            }
+        }
         let map = Arc::new(raster::draw(&grid, &terrain, &out.buildings, &freeways, &def));
         let far = Arc::new(far_view(&grid, &terrain, &def, &out.buildings, &freeways));
         Ok(City {
@@ -170,8 +294,13 @@ impl City {
             signal_heads,
             walk,
             cover,
+            panes: out.panes,
+            lots: out.lots,
+            wheels: out.wheels,
             chunk_bounds,
             bins,
+            marks: out.marks,
+            mark_bins,
             map,
             far,
         })
@@ -199,9 +328,28 @@ impl City {
     }
 
     /// The ground's height at a world point: the asphalt on roads, the lot level elsewhere, the
-    /// surface on water (terrain included; not decks or roofs).
+    /// surface on water (terrain included); in a landmark, its paving, a deck people walk on
+    /// (a pier over the water) or a room's floor (not roofs or parking decks).
     pub fn ground_y(&self, p: Vec2) -> f32 {
+        if let Some(ids) = self.mark_bins.get(&chunk_of(Vec3::new(p.x, 0.0, p.y))) {
+            // The last mark over the point says what is there, as on the walk map.
+            for &i in ids.iter().rev() {
+                let m = &self.marks[i as usize];
+                if p.x >= m.min.x && p.x <= m.max.x && p.y >= m.min.y && p.y <= m.max.y {
+                    return m.y;
+                }
+            }
+        }
         ground_at(&self.def, &self.grid, &self.terrain, p)
+    }
+
+    /// The landmark (index into `def.landmark`) built from parts whose cells hold a world point.
+    pub fn landmark_at(&self, p: Vec2) -> Option<usize> {
+        let c = self.grid.cell_of(p);
+        self.def.landmark.iter().position(|l| {
+            let [[x0, z0], [x1, z1]] = l.cells;
+            l.has_parts() && c.x >= x0 && c.x <= x1 && c.y >= z0 && c.y <= z1
+        })
     }
 
     /// Whether a world point lies inside a building's footprint (grown by `margin` metres).
@@ -235,6 +383,12 @@ impl City {
         let a = s.yaw.to_radians();
         let dir = Vec2::new(a.sin(), -a.cos());
         Some((p, dir.x.atan2(dir.y)))
+    }
+
+    /// How high a named spot stands above the ground under it (a deck, a roof: its `y`; 0 on
+    /// the ground).
+    pub fn spot_height(&self, name: &str) -> Option<f32> {
+        self.def.spot.iter().find(|s| s.name == name).map(|s| s.y)
     }
 
     /// A chunk's content (tools and tests).
@@ -273,6 +427,7 @@ impl RegionProvider for City {
         out.props.extend(b.props.iter().cloned());
         out.labels.extend(b.labels.iter().cloned());
         out.zones.extend(b.zones.iter().cloned());
+        out.ladders.extend(b.ladders.iter().cloned());
     }
 }
 

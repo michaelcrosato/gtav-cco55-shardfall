@@ -10,7 +10,7 @@ use glam::{IVec2, Quat, Vec2, Vec3};
 use pav_core::Color;
 use pav_core::rng::Rng;
 use pav_core::shape::{Look, Shape};
-use pav_core::statics::{Block, Decor};
+use pav_core::statics::{Block, Decor, Facing};
 use pav_core::zones::{Label, LabelMode};
 
 use crate::def::{DistrictDef, ZoneRules};
@@ -95,7 +95,9 @@ pub fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut Out) {
                 let front = facing(grid, lmin, lmax);
                 let lot = Lot { min: lmin, max: lmax, front };
                 let style = rules.styles[r.below(rules.styles.len() as u32) as usize].clone();
-                building(&style, lot, rules, &def.facades, zone, terrain, &mut r, out);
+                if let Some(band) = building(&style, lot, rules, &def.facades, zone, terrain, &mut r, out) {
+                    shop_sign(def.seed, grid, &lot, rules, &band, out);
+                }
             }
         }
     }
@@ -127,6 +129,17 @@ fn foundation(min: Vec2, max: Vec2, terrain: &Terrain, out: &mut Out) -> f32 {
     LOT_Y + floor
 }
 
+/// A shop's sign band over its awning: its two ends along the front, the way it faces, its
+/// middle's height and its colour.
+struct Band {
+    a0: Vec2,
+    a1: Vec2,
+    out: Vec3,
+    y: f32,
+    color: Color,
+}
+
+/// Builds a lot's building; a shop returns its sign band.
 #[allow(clippy::too_many_arguments)]
 fn building(
     style: &str,
@@ -137,7 +150,7 @@ fn building(
     terrain: &Terrain,
     r: &mut Rng,
     out: &mut Out,
-) {
+) -> Option<Band> {
     // A wall block in the district's facade for `key` (plain colour without one).
     let faced = |mut b: Block, key: &str| {
         b.material = facades.get(key).cloned();
@@ -155,12 +168,13 @@ fn building(
         _ => min.x += s,
     }
     if (max - min).min_element() < 4.0 {
-        return;
+        return None;
     }
     let h = r.range(rules.height[0], rules.height[1]);
     let y0 = foundation(min, max, terrain, out);
     let size = max - min;
     let inset = |k: f32| (min + size * k, max - size * k);
+    let mut band = None;
     match style {
         "tower_glass" | "tower_concrete" => {
             let glass = style == "tower_glass";
@@ -227,6 +241,7 @@ fn building(
                 let q0 = Vec3::new(a0.x, y + 0.6, a0.y) + out_dir * 0.05;
                 let q1 = Vec3::new(a1.x, y + 1.6, a1.y) + out_dir * 0.25;
                 out.decor.push(trim(q0.min(q1), q0.max(q1), sign));
+                band = Some(Band { a0, a1, out: out_dir, y: y + 1.1, color: sign });
             }
             out.buildings.push(Building { min, max, base: y0, height: h, zone, color: wall.0 });
         }
@@ -289,6 +304,96 @@ fn building(
             out.buildings.push(Building { min, max, base: y0, height: h, zone, color: Color::hex("#c8c0b0").0 });
         }
     }
+    band
+}
+
+/// A shop's name on its sign band, when it fronts a road class the zone's `signs` name: a name
+/// picked by the shop's place (its own random stream, so the city's other choices stay put),
+/// in a colour that reads on the band; some get a neon tube round the band that glows after
+/// dark.
+fn shop_sign(seed: u64, grid: &Grid, lot: &Lot, rules: &ZoneRules, band: &Band, out: &mut Out) {
+    let signs = &rules.signs;
+    if signs.names.is_empty() {
+        return;
+    }
+    let mid = (lot.min + lot.max) * 0.5;
+    let probe = match lot.front {
+        0 => Vec2::new(mid.x, lot.min.y - 1.0),
+        1 => Vec2::new(lot.max.x + 1.0, mid.y),
+        2 => Vec2::new(mid.x, lot.max.y + 1.0),
+        _ => Vec2::new(lot.min.x - 1.0, mid.y),
+    };
+    let Some(road) = grid.road(grid.cell_of(probe)) else { return };
+    if !signs.roads.contains(&road) {
+        return;
+    }
+    let mut r = rng(seed, 0x5160, (mid.x * 4.0) as i32, (mid.y * 4.0) as i32);
+    // A name none of the last few shops took (so neighbours differ).
+    let n = signs.names.len();
+    let fresh: Vec<usize> = (0..n).filter(|i| !out.shop_names.contains(i)).collect();
+    let pick = if fresh.is_empty() { r.below(n as u32) as usize } else { fresh[r.below(fresh.len() as u32) as usize] };
+    out.shop_names.push(pick);
+    if out.shop_names.len() > (n / 2).min(8) {
+        out.shop_names.remove(0);
+    }
+    let name = &signs.names[pick];
+    let len = band.a0.distance(band.a1);
+    // Letters as big as the band allows, smaller to fit its length.
+    let mut size = 0.62;
+    let w = crate::parts::text_width(name, size);
+    if w > len - 1.2 {
+        size *= ((len - 1.2) / w).max(0.3);
+    }
+    // Dark words on light bands, light ones on dark bands.
+    let lum = 0.2126 * band.color.0[0] + 0.7152 * band.color.0[1] + 0.0722 * band.color.0[2];
+    let ink = if lum > 0.45 {
+        ["#b0261c", "#1f2933", "#1d4e89"][r.below(3) as usize]
+    } else {
+        ["#fff4e0", "#ffd166"][r.below(2) as usize]
+    };
+    let centre = (band.a0 + band.a1) * 0.5;
+    let facing = [Facing::North, Facing::East, Facing::South, Facing::West][lot.front.min(3)];
+    out.labels.push(Label {
+        text: name.clone(),
+        pos: Vec3::new(centre.x, band.y, centre.y) + band.out * 0.27,
+        size,
+        color: Color::hex(ink),
+        mode: LabelMode::Wall,
+        facing,
+    });
+    if r.f32() < signs.neon && !signs.neon_colors.is_empty() {
+        let tube =
+            Color::try_hex(&signs.neon_colors[r.below(signs.neon_colors.len() as u32) as usize]).unwrap_or(Color::hex("#ff3ea5"));
+        let along = (band.a1 - band.a0).normalize_or_zero();
+        let along3 = Vec3::new(along.x, 0.0, along.y).abs();
+        let thin = Vec3::ONE - along3 - Vec3::Y;
+        let face = Vec3::new(centre.x, band.y, centre.y) + band.out * 0.29;
+        let half_len = len * 0.5 - 0.15;
+        for (k, (off, half)) in [
+            (Vec3::Y * 0.47, along3 * half_len + (Vec3::Y + thin) * 0.035),
+            (-Vec3::Y * 0.47, along3 * half_len + (Vec3::Y + thin) * 0.035),
+            (Vec3::new(along.x, 0.0, along.y) * half_len, Vec3::Y * 0.47 + (along3 + thin) * 0.035),
+            (-Vec3::new(along.x, 0.0, along.y) * half_len, Vec3::Y * 0.47 + (along3 + thin) * 0.035),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            out.decor.push(Decor {
+                shape: Shape::Box { half },
+                pos: face + off,
+                rot: Quat::IDENTITY,
+                color: tube,
+                look: Look::Unlit,
+                // One tube lights the wall round it after dark; the rest only glow.
+                emissive: if k == 0 { 0.9 } else { 0.5 },
+                solid: false,
+                collider: None,
+                sway: Default::default(),
+                material: None,
+                glow: pav_core::statics::Glow::Night,
+            });
+        }
+    }
 }
 
 /// The street-side edge of a rectangle (its two ends) and the outward direction.
@@ -305,6 +410,11 @@ fn front_edge(min: Vec2, max: Vec2, front: usize) -> (Vec2, Vec2, Vec3) {
 /// replace these as content lands).
 fn landmark(def: &DistrictDef, grid: &Grid, terrain: &Terrain, i: usize, l: &crate::def::Landmark, out: &mut Out) {
     let [[x0, z0], [x1, z1]] = l.cells;
+    if l.has_parts() {
+        let zone =
+            grid.at(IVec2::new(x0, z0)).and_then(|c| if let crate::Cell::Zone(z) = c { Some(z) } else { None }).unwrap_or(0);
+        return crate::parts::build(grid, terrain, i, l, zone, out);
+    }
     let min = grid.corner(IVec2::new(x0, z0)) + Vec2::splat(2.0);
     let max = grid.corner(IVec2::new(x1 + 1, z1 + 1)) - Vec2::splat(2.0);
     let mut r = rng(def.seed, 0x1a9 + i as u64, x0, z0);
