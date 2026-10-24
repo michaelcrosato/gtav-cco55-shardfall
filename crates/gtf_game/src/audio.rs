@@ -12,6 +12,35 @@ use pav_core::present::LoopSource;
 use pav_core::sim::Sim;
 use pav_core::vehicle::VehicleKind;
 
+/// The radio under the engines and the effects (PLAN.md §5.12: −6 dB), and how far the radio
+/// and the ambience beds duck (dB): under subtitled dialogue, in menus.
+pub const RADIO: f32 = 0.501;
+pub const DUCK_DIALOGUE: f32 = 8.0;
+pub const DUCK_MENU: f32 = 12.0;
+
+/// The police scanner's voice loop (an id clear of the vehicles' and the beds') and its level
+/// (under the radio).
+const SCANNER: u64 = 0x5ca7_0000_0001;
+const SCANNER_GAIN: f32 = 0.3;
+
+/// The dispatcher's babble while their line is on air (after the squelch, before the closing
+/// one).
+pub fn scanner_loop(c: &crate::radio::Chatter) -> Option<LoopSource> {
+    if c.age < crate::radio::CHATTER_LEAD || c.age >= c.seconds - 0.1 {
+        return None;
+    }
+    let def = crate::radio::def().ok()?;
+    let s = &def.scanner;
+    Some(LoopSource {
+        id: SCANNER,
+        cue: "voice.radio".into(),
+        pos: None,
+        gain: SCANNER_GAIN,
+        pitch: if s.pitch > 0.0 { s.pitch } else { 1.0 },
+        param: s.energy,
+    })
+}
+
 /// Vehicles further than this from the listener are not heard (m), and at most this many.
 pub const HEAR: f32 = 80.0;
 const MAX_HEARD: usize = 8;
