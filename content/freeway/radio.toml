@@ -1,7 +1,8 @@
 # Radio stations (PLAN.md §5.6.13, §5.12). Each station's songs come from its seed, one per `slot`
-# seconds of air (the song, then the station ident), and every station runs on the game clock, so
-# they are live: tuning in lands mid-song, as in the source. `genre` picks the music renderer's
-# groove and instruments; the words make song titles and artist names.
+# seconds of air (the song, then the station's ident), and every station runs on the radio's
+# clock, so they are live: tuning in lands mid-song, as in the source. `genre` picks the music
+# renderer's kit, feel and instruments (synthwave, boombap, surf, cumbia, smooth; talk has no
+# songs); the words make song titles and artist names. The dial card reads "<NAME> <freq>".
 
 [[station]]
 id = "freeway_fm"
@@ -16,8 +17,8 @@ artist_words = ["Tarmac", "Chrome", "Palm", "Vector", "Laser", "Nightcall", "Vap
 
 [[station]]
 id = "westside_99"
-name = "Westside 99"
-freq = "99.0"
+name = "Westside"
+freq = "99"
 genre = "boombap"
 bpm = [82.0, 94.0]
 seed = 9900
@@ -49,7 +50,7 @@ artist_words = ["Los", "Sonidos", "Mirador", "Paloma", "Tropical", "Hermanos", "
 
 [[station]]
 id = "smooth_88"
-name = "Smooth 88.8"
+name = "Smooth"
 freq = "88.8"
 genre = "smooth"
 bpm = [72.0, 92.0]
@@ -73,28 +74,30 @@ artist_words = ["Newsdesk", "Anchor", "Panel", "Desk", "Live"]
 # The DJs between songs ([dj.<station id>]): a babble voice (pitch in Hz, formant scale,
 # syllables a second, energy 0..1, radio 0..1) and what they say after a song: `{title}` and
 # `{artist}` name the song just played, `{station}` the station. The line shows on the radio
-# card while they talk. `talks`: the breaks in a hundred they talk in.
+# card while they talk (keep it short: the card wraps it in the corner). `talks`: the breaks in
+# a hundred they talk in.
 
 [dj.freeway_fm]
 voice = { pitch = 205.0, formant = 1.16, rate = 5.3, energy = 0.75, radio = 0.1 }
 talks = 75
 lines = [
-    "That was {title} by {artist}. Freeway FM: the only thing on Route 404 that moves.",
+    "That was {title} by {artist}.",
+    "Freeway FM: the only thing on Route 404 that moves.",
     "{artist}, everybody. Hands at ten and two, hair at eleven.",
-    "Tarmac Tina on {station}. If you're doing a hundred, you're doing it right. Kidding.",
+    "Doing a hundred? You're doing it right. Kidding. Mostly.",
     "{title}. Window down, volume up, smog optional.",
-    "Freeway FM 104.04: synthesizers, sunsets, and absolutely no brakes.",
-    "That was {artist}. The sun is low, the neon's on, the lanes are yours.",
+    "{station} 104.04: synths, sunsets, no brakes.",
+    "That was {artist}. The neon's on. The lanes are yours.",
     "Merge like you mean it, Paloma Bay. This is Tarmac Tina.",
-    "{title} by {artist}: a song about a car, like every good song.",
+    "{title}: a song about a car, like every good song.",
 ]
 
 [dj.westside_99]
 voice = { pitch = 98.0, formant = 0.97, rate = 4.6, energy = 0.55, radio = 0.1 }
 talks = 65
 lines = [
-    "Westside 99. That was {artist}, '{title}'. Low and slow, Paloma Bay.",
-    "MC Lowrider in your speakers. If your car don't bounce, it ain't listening.",
+    "That was {artist}, '{title}'. Low and slow.",
+    "If your car don't bounce, it ain't listening.",
     "That's {title}. Crate-dug, dust and all.",
     "Westside 99: beats for the stoop, the porch and the traffic jam.",
     "{artist} with the loop of the year. Respect the sample.",
@@ -107,7 +110,7 @@ voice = { pitch = 225.0, formant = 1.18, rate = 6.0, energy = 0.95, radio = 0.1 
 talks = 75
 lines = [
     "K-SURF 101.5! {title} by {artist}! Surf's up, traffic's down!",
-    "Wipeout Wendy here: if you can hear this, you're too far from the beach.",
+    "If you can hear this, you're too far from the beach!",
     "That was {artist}. Wax your board, check your mirrors, hang ten.",
     "{title}! Reverb so wet it needs a towel. K-SURF!",
     "K-SURF: the sound of Palisade Beach, now in your parking lot.",
@@ -119,7 +122,7 @@ lines = [
 voice = { pitch = 195.0, formant = 1.14, rate = 5.6, energy = 0.85, radio = 0.1 }
 talks = 70
 lines = [
-    "Radio Sol 92.3, con La Reina Rosa. {title}, de {artist}. ¡Baila, Paloma Bay!",
+    "{title}, de {artist}. ¡Baila, Paloma Bay!",
     "Radio Sol: más ritmo, menos tráfico.",
     "Eso fue {artist}. Move those hips, but keep your eyes on the road.",
     "{title}. Para los que bailan en el semáforo.",
@@ -133,7 +136,7 @@ voice = { pitch = 92.0, formant = 0.95, rate = 3.9, energy = 0.3, radio = 0.1 }
 talks = 70
 lines = [
     "Smooth 88.8. That was {artist} with {title}. Mmm.",
-    "Velvet Vance with you through the rush hour. Breathe in. Merge gently.",
+    "Velvet Vance here. Breathe in. Merge gently.",
     "{title}. Let that saxophone drive for a while.",
     "Smooth 88.8: music to sit in traffic to, beautifully.",
     "That was {artist}. Slower now. Slower. Perfect.",
