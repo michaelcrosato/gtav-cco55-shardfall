@@ -132,6 +132,26 @@ pub fn door(city: &City, key: &str) -> Option<Vec3> {
     None
 }
 
+/// The landmarks' Ferris wheels, turned by the game clock `t` (seconds): each rim within 700 m
+/// of the eye, its cars within 450 m (closer still they are the only moving part of it).
+pub fn wheels(city: &City, eye: Vec3, t: f32, out: &mut Vec<pav_core::present::AssetDraw>) {
+    for (i, w) in city.wheels.iter().enumerate() {
+        let d = w.hub.distance(eye);
+        if d > 700.0 {
+            continue;
+        }
+        let id = 0x5157_0000 + i as u32 * 256;
+        let (pos, rot) = w.rim_at(t as f64);
+        out.push(pav_core::present::AssetDraw { asset: w.rim.clone(), pos, rot, scale: 1.0, id, seed: 0 });
+        if d < 450.0 {
+            for (k, (pos, rot)) in w.cars_at(t as f64).into_iter().enumerate() {
+                let k = k as u32;
+                out.push(pav_core::present::AssetDraw { asset: w.car.clone(), pos, rot, scale: 1.0, id: id + 1 + k, seed: k });
+            }
+        }
+    }
+}
+
 /// Ground-plane position of a world point (the map's coordinates).
 pub fn flat(p: Vec3) -> Vec2 {
     Vec2::new(p.x, p.z)

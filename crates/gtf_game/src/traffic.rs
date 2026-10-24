@@ -65,6 +65,20 @@ pub struct Parked {
     pub despawn: f32,
     pub share: f32,
     pub locked: f32,
+    /// Share of landmarks' lot places (car parks, yards, decks) with a vehicle in them (the
+    /// places marked `always` always have one), within `lot_radius` of the player.
+    #[serde(default = "lot_share")]
+    pub lot_share: f32,
+    #[serde(default = "lot_radius")]
+    pub lot_radius: f32,
+}
+
+fn lot_share() -> f32 {
+    0.45
+}
+
+fn lot_radius() -> f32 {
+    90.0
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -183,6 +197,8 @@ pub struct Traffic {
     pub thin: Option<f32>,
     /// Parking spot index → its parked car.
     pub parked: BTreeMap<u32, EntityId>,
+    /// Landmark lot place index (`City::lots`) → its vehicle.
+    pub lots: BTreeMap<u32, EntityId>,
     /// Vehicles left behind (abandoned, carjacked, moved from their spot): removed when far and
     /// out of view.
     pub loose: Vec<EntityId>,
@@ -583,6 +599,7 @@ impl Traffic {
             return;
         }
         self.parked.retain(|_, id| *id != car);
+        self.lots.retain(|_, id| *id != car);
         self.loose.retain(|id| *id != car);
         let Some(c) = Car::read(sim, car) else { return };
         let g = &city.lanes;
@@ -669,9 +686,10 @@ impl Traffic {
 
     /// A parked car taken from its spot (the player got in): no longer kept at the curb.
     pub fn unpark(&mut self, car: EntityId) {
-        let before = self.parked.len();
+        let before = self.parked.len() + self.lots.len();
         self.parked.retain(|_, id| *id != car);
-        if self.parked.len() != before {
+        self.lots.retain(|_, id| *id != car);
+        if self.parked.len() + self.lots.len() != before {
             self.loose.push(car);
         }
     }
@@ -763,6 +781,7 @@ impl Traffic {
             "fleeing": n(&|a| a.mood == Mood::Flee),
             "held": n(&|a| a.held),
             "parked": self.parked.len(),
+            "lots": self.lots.len(),
             "loose": self.loose.len(),
             "spawned": self.spawned,
             "despawned": self.despawned,
@@ -952,6 +971,33 @@ impl Traffic {
                 None => {}
             }
         }
+        let mut leave = Vec::new();
+        for (&place, &car) in &self.lots {
+            let Some(e) = sim.state.entities.get(car) else {
+                leave.push((place, None));
+                continue;
+            };
+            let Some(l) = m.city.lots.get(place as usize) else {
+                leave.push((place, Some((car, true))));
+                continue;
+            };
+            if e.pos.distance(l.pos) > 3.0 {
+                leave.push((place, Some((car, false))));
+            } else if e.pos.distance(player) > d.parked.despawn && !seen(&m.camera, e.pos) {
+                leave.push((place, Some((car, true))));
+            }
+        }
+        for (place, what) in leave {
+            self.lots.remove(&place);
+            match what {
+                Some((car, true)) => {
+                    sim.despawn(car);
+                    locked.remove(&car);
+                }
+                Some((car, false)) => self.loose.push(car),
+                None => {}
+            }
+        }
         // Loose cars go once far and out of view, with anyone left sitting in them (the player's
         // aside); an occupied one goes as soon as its ground unloads (the engine only puts empty
         // cars to sleep, so it would fall through).
@@ -1004,6 +1050,47 @@ impl Traffic {
                 if hash(seed ^ 0x5eed, i as u64) < d.parked.locked {
                     locked.insert(car);
                 }
+            }
+        }
+        // Landmarks' lots, yards and decks: their own kinds where they name one (the news
+        // helicopter on the hospital roof, the armoured trucks in the depot), any car elsewhere.
+        for (i, l) in m.city.lots.iter().enumerate() {
+            let i = i as u32;
+            if self.lots.contains_key(&i) || l.pos.distance(player) > d.parked.lot_radius {
+                continue;
+            }
+            if !l.always && hash(seed ^ 0x107, i as u64) >= d.parked.lot_share {
+                continue;
+            }
+            // (A place that always has its vehicle gets it even in view: the player may arrive
+            // right beside it, by a ladder or a mission.)
+            if !first && !l.always && seen(&m.camera, l.pos) && l.pos.distance(player) < d.parked.lot_radius * 0.8 {
+                continue;
+            }
+            if sim.state.entities.iter().any(|e| e.vehicle.is_some() && e.pos.distance(l.pos) < 3.0)
+                || !crate::world::ground_loaded(sim, l.pos)
+            {
+                continue;
+            }
+            let key = if l.kind.is_empty() {
+                let kinds = ambient_kinds();
+                let Some(key) = pick_kind(&kinds, &mut sim.state.rng) else { break };
+                key
+            } else {
+                l.kind.clone()
+            };
+            let paint = Some(sim.state.rng.below(8) as usize);
+            match crate::vehicles::spawn(sim, &key, l.pos + Vec3::Y * 0.05, l.dir.x.atan2(l.dir.z), paint) {
+                Ok(car) => {
+                    crate::world::ambient(sim, car);
+                    self.lots.insert(i, car);
+                    // Only ordinary cars are ever locked (the helicopter, the trucks and the
+                    // dealer's cars are there to be taken).
+                    if l.kind.is_empty() && hash(seed ^ 0x5eed, (i as u64) << 20) < d.parked.locked {
+                        locked.insert(car);
+                    }
+                }
+                Err(e) => log::warn!("lot place {i}: {key}: {e:#}"),
             }
         }
         // Moving traffic: the hour's share of the cap.
@@ -1258,7 +1345,7 @@ impl Traffic {
             }
         }
         let ours: BTreeSet<EntityId> = self.cars.iter().map(|a| a.car).collect();
-        let parked: BTreeSet<EntityId> = self.parked.values().copied().collect();
+        let parked: BTreeSet<EntityId> = self.parked.values().chain(self.lots.values()).copied().collect();
         for e in sim.state.entities.iter() {
             if e.vehicle.is_none() || ours.contains(&e.id) || parked.contains(&e.id) || e.pos.distance(m.player) > 200.0 {
                 continue;

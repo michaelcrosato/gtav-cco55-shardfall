@@ -87,6 +87,9 @@ pub struct ProtagonistDef {
     pub vehicle: String,
     pub voice: f32,
     pub home: String,
+    /// Where they save (an anchor; none: `home`).
+    #[serde(default)]
+    pub bed: Option<String>,
     pub look: LookDef,
     #[serde(default)]
     pub life: Vec<LifeDef>,

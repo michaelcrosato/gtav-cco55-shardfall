@@ -2,7 +2,10 @@
 //! (the district file's named spots), `landmark:<key>[:<point>]` (its door, `centre`, or the
 //! spot `<key>_<point>`), `at:<x>,<z>` (world metres), `lane_near:<x>,<z>` (the nearest road),
 //! `player`, and `actor:<id>` (a mission's actor, which only the mission can resolve). A person
-//! is put on the nearest walkable ground, a vehicle on the nearest lane and along it.
+//! is put on the nearest walkable ground (a landmark's floors count), a vehicle on the nearest
+//! lane and along it — except at a landmark's own spots (in the cells of a landmark built from
+//! parts: a showroom, a bay, a yard), where a vehicle stands exactly on the spot, and at raised
+//! spots (`y`: a deck, a roof), where people and vehicles both do.
 
 use glam::{Vec2, Vec3};
 use pav_world::City;
@@ -89,6 +92,21 @@ pub fn ground(city: &City, p: Vec2) -> Vec3 {
     Vec3::new(p.x, city.ground_y(p), p.y)
 }
 
+/// The district spot an anchor names, if it names one.
+fn spot_name(a: &Anchor) -> Option<String> {
+    match a {
+        Anchor::Spot(n) => Some(n.clone()),
+        Anchor::Landmark(k, Some(p)) if p != "centre" && p != "door" => Some(format!("{k}_{p}")),
+        _ => None,
+    }
+}
+
+/// Where a raised spot (on a deck or a roof: its `y` in the district file) is.
+fn raised(city: &City, a: &Anchor, p: Vec2) -> Option<Vec3> {
+    let y = city.spot_height(&spot_name(a)?)?;
+    (y > 0.0).then(|| Vec3::new(p.x, city.ground_y(p) + y, p.y))
+}
+
 /// Where a person stands for a map point: the nearest walkable ground (sidewalk, path,
 /// crossing, open ground) within 30 m, else the point itself.
 pub fn foot_at(city: &City, p: Vec2) -> Vec3 {
@@ -124,6 +142,9 @@ fn car_facing(city: &City, p: Vec2, yaw: f32, facing: bool) -> (Vec3, f32) {
 /// A person's place and facing for a (non-actor) anchor.
 pub fn foot(city: &City, a: &Anchor) -> Option<(Vec3, f32)> {
     let (p, yaw) = raw(city, a)?;
+    if let Some(at) = raised(city, a, p) {
+        return Some((at, yaw.unwrap_or(0.0)));
+    }
     let feet = foot_at(city, p);
     // Facing: the spot's, else toward the anchor's own point (a landmark's door faces its door).
     let to = Vec2::new(p.x - feet.x, p.y - feet.z);
@@ -131,18 +152,24 @@ pub fn foot(city: &City, a: &Anchor) -> Option<(Vec3, f32)> {
 }
 
 /// A vehicle's place and heading for a (non-actor) anchor: `lane_near` and spots are put on the
-/// nearest lane; `at` stays exactly where it says.
+/// nearest lane; `at`, raised spots and a landmark's own spots stay exactly where they say.
 pub fn car(city: &City, a: &Anchor) -> Option<(Vec3, f32)> {
     let (p, yaw) = raw(city, a)?;
+    if let Some(at) = raised(city, a, p) {
+        return Some((at, yaw.unwrap_or(0.0)));
+    }
+    let own = spot_name(a).is_some() && city.landmark_at(p).is_some();
     Some(match a {
         Anchor::At(_) => (ground(city, p), yaw.unwrap_or(0.0)),
+        _ if own => (ground(city, p), yaw.unwrap_or(0.0)),
         _ => car_facing(city, p, yaw.unwrap_or(0.0), yaw.is_some()),
     })
 }
 
-/// The anchor's point on the ground (destinations, markers, the GPS).
+/// The anchor's point on the ground, or on its deck or roof (destinations, markers, the GPS).
 pub fn point(city: &City, a: &Anchor) -> Option<Vec3> {
-    raw(city, a).map(|(p, _)| ground(city, p))
+    let (p, _) = raw(city, a)?;
+    Some(raised(city, a, p).unwrap_or_else(|| ground(city, p)))
 }
 
 #[cfg(test)]
