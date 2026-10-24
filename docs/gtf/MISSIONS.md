@@ -14,7 +14,7 @@ missions (`dev_test`, `dev_test2`) use every step kind and are the worked exampl
 | Play one straight away | `gtf` REPL: `load scene=freeway/mission/<key>` (or `play cmd="mission start <key>"`) |
 | Let the bot finish it, 3 seeds | `gtf` REPL: `load scene=freeway/mission/<key>` then `play bot=true seeds=3 ticks=36000` |
 | Watch the bot step by step | `GTF_SCENE=freeway/mission/<key> GTF_STEP=<n> cargo test -p gtf_game --test missions bot_trace -- --ignored --nocapture` |
-| Other commands | `mission quit`, `mission fail` (tests), `mission choose <option>` (the bot's pick on boards), `mission replay <key>` |
+| Other commands | `mission quit`, `mission fail` (tests), `mission choose <option>` (the bot's pick on boards), `mission story <flag>` (a choice kept from an earlier mission, e.g. the heist approach), `mission replay <key>` |
 
 ## The file
 
@@ -48,7 +48,8 @@ time_under = 240.0             # or vehicle_health_over = { actor, value }, heal
 
 `spot:<name>` (a district's `[[spot]]`), `landmark:<key>` (its door), `landmark:<key>:centre`,
 `landmark:<key>:<point>` (the spot `<key>_<point>`), `at:<x>,<z>` (world metres, exact),
-`lane_near:<x>,<z>` (the nearest road lane there), `player`, `actor:<id>` (an actor; a
+`lane_near:<x>,<z>` (the nearest road lane there), `deck:<x>,<z>` (Route 404's lane nearest
+there, up on the deck: people and vehicles stand on it), `player`, `actor:<id>` (an actor; a
 protagonist's key names their body). People are put on the nearest walkable ground; vehicles on
 the nearest lane, along it (facing the spot's `yaw` when it has one).
 
@@ -67,7 +68,7 @@ locked = false
 driver = "owner"               # vehicles: the person actor at the wheel
 weapon = "p9"                  # people and enemies
 behaviour = "idle"             # see below
-health = 40.0                  # people: hit points; vehicles: not used
+health = 40.0                  # people: hit points; vehicles: the share of full health (0..1)
 blip = "target"                # target, enemy, ally, vehicle, pickup
 name = "Stallion"              # the marker's label
 later = true                   # made by a `spawn` action, not at the start
@@ -114,6 +115,7 @@ start and shows a countdown).
 | `choose` | `options` (`id`, `title`, `lines`) | an option is picked: its `id` becomes a flag (kept in the story) | `mission choose <id>`, else the first |
 | `branch` | `flag`, `to` (a label), `otherwise` | at once: to `to` when the flag is set | — |
 | `parallel` | `steps` (`[[step.steps]]`, each with `who`) | every sub-step done, each by its protagonist (the wheel switches between them) | does its own, then switches |
+| `jump` | `gates` = [run-up, lip], `target` (the landing), `radius` (16), `vehicle` (optional) | the vehicle has been airborne and stands near the landing | autopilot to the run-up, then straight over the lip flat out |
 
 Parallel sub-steps may be `goto`, `interact`, `kill`, `wait`, `drive_to`, `collect`,
 `enter_vehicle` or `photograph`.
@@ -124,7 +126,9 @@ Parallel sub-steps may be `goto`, `interact`, `kill`, `wait`, `drive_to`, `colle
 `{ blip = { actor = "id", kind = "enemy" } }`, `{ unblip = "id" }`, `{ heat = 2 }` (0 clears),
 `{ heat_floor = 1 }`, `{ heat_cap = 0 }`, `{ dispatch = false }`, `{ traffic = 0.4 }` (the share of
 moving traffic until the mission ends), `{ flag = "x" }`, `{ unflag = "x" }`, `{ story = "x" }`
-(kept after the mission), `{ give = { weapon = "p9", ammo = 24 } }`, `{ cash = 500 }`,
+(kept after the mission), `{ give = { weapon = "p9", ammo = 24 } }`, `{ armor = 100 }` (body
+armour on the player), `{ cash = 500 }`,
+`{ pay = { who = "dez", cash = 54000 } }` (to one of the crew, played or not),
 `{ text = { from = "mack", body = "..." } }`, `{ note = { title = "...", body = "..." } }`,
 `{ help = "..." }`, `{ time = "21:00" }`, `{ weather = "rain" }`,
 `{ lock = { actor = "id", locked = true } }`, `{ teleport = "anchor" }`, `{ alert = true }`,
