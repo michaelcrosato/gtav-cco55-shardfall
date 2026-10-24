@@ -163,8 +163,12 @@ impl Cx<'_> {
         let mut y = layout.br_bottom;
         c.moved(vec2((1.0 - t) * self.px(40.0), 0.0), |c| {
             if let Some(song) = &v.song {
-                let r = c.text(pos2(right, y), Align2::RIGHT_BOTTOM, song, self.ui(size::BODY), color::TEXT_DIM, Fx::Shadow);
-                y = r.top() - self.px(12.0);
+                // A song, or a DJ's line: wrapped, so a long one stays in the corner.
+                let wrap = self.px(620.0);
+                let rich = c.rich(song, self.ui(size::BODY), color::TEXT_DIM, Some(wrap));
+                let top = y - rich.size.y;
+                c.paint_rich(&rich, pos2(right - wrap, top), wrap, Align::Max, Fx::Shadow);
+                y = top - self.px(12.0);
             }
             if let Some(st) = &v.station {
                 let r = c.text(

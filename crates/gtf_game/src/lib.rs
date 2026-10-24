@@ -143,7 +143,7 @@ pub struct Freeway {
     /// People on foot around the player.
     #[serde(default)]
     pub peds: peds::Peds,
-    /// The car radio (stations are live on the game clock), and its wheel (hold D-pad left).
+    /// The car radio (stations are live on its clock), and its wheel (hold D-pad left).
     #[serde(default)]
     pub radio: radio::Radio,
     #[serde(default)]
@@ -170,9 +170,14 @@ pub struct Freeway {
     /// Crimes counted lately (a burst of fire is one shooting): seconds until each counts again.
     #[serde(default)]
     pub crime_clock: Vec<(heat::Crime, f32)>,
-    /// Seconds to the next scanner chatter, and of an officer's hand on the player's shoulder.
+    /// Seconds to the next scanner chatter, the line on air and how many have been said, and
+    /// seconds of an officer's hand on the player's shoulder.
     #[serde(default)]
     pub scanner: f32,
+    #[serde(default)]
+    pub chatter: Option<radio::Chatter>,
+    #[serde(default)]
+    pub chatters: u32,
     #[serde(default)]
     pub cuffed: f32,
     /// The player bot (`autopilot escape`: the heat-evasion bot).
@@ -331,6 +336,8 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         fate: fate::Fate::default(),
         crime_clock: Vec::new(),
         scanner: 0.0,
+        chatter: None,
+        chatters: 0,
         cuffed: 0.0,
         typed_crimes: Vec::new(),
         bot: bot::Bot::default(),
@@ -415,6 +422,7 @@ impl Freeway {
 
     /// World commands (also typed by tests, tools and bots): `time HH:MM`, `clock <speed>`,
     /// `weather <name>` (held until changed), `weather auto`, `radio <station>|off|next|prev`,
+    /// `radio seek <seconds>|end` (into the tuned station's slot, or to its song's end),
     /// `weapon <id or icon>`.
     fn world_cmds(&mut self, sim: &mut Sim, input: &InputFrame, events: &mut Vec<SimEvent>) {
         let Ok(world) = daytime::def() else { return };
@@ -524,6 +532,12 @@ impl Freeway {
                     Ok(k) if (0.0..=1000.0).contains(&k) => self.sky.speed = k,
                     _ => log::warn!("clock: '{k}' is not a speed (0-1000)"),
                 },
+                (Some("radio"), Some("seek")) => {
+                    let to = w.next().unwrap_or("");
+                    if let Err(e) = radio::def().and_then(|d| self.radio.seek(&d, to)) {
+                        log::warn!("{e}");
+                    }
+                }
                 (Some("radio"), Some(arg)) => self.radio_cmd(arg),
                 (Some("crime"), Some(kind)) => {
                     use heat::Crime::*;
@@ -632,7 +646,7 @@ impl Freeway {
         let Ok(def) = radio::def() else { return };
         match self.radio.command(&def, arg) {
             Ok(()) => {
-                if let Some((head, line)) = self.radio.card(&def, self.time as f64) {
+                if let Some((head, line)) = self.radio.card(&def, self.radio.clock) {
                     self.note("radio", &head, &line);
                 }
             }
@@ -682,6 +696,44 @@ impl Freeway {
     /// The radio wheel is open (past the tap delay).
     pub fn radio_wheel_open(&self) -> bool {
         self.radio_wheel.as_ref().is_some_and(|w| w.open_for >= RADIO_WHEEL_DELAY)
+    }
+
+    /// The radio's words on screen: the scanner's line (after its squelch), else what a talk
+    /// station is saying.
+    fn radio_subtitle(&self, def: &Arc<radio::RadioDef>) -> Option<Subtitle> {
+        if let Some(c) = &self.chatter
+            && c.age >= radio::CHATTER_LEAD
+        {
+            let name = if def.scanner.name.is_empty() { "SCANNER".to_string() } else { def.scanner.name.clone() };
+            return Some(Subtitle { speaker: Some(name), text: c.text.clone(), color: Some(pav_core::Color::hex("#8ab4ff")) });
+        }
+        let a = self.radio.on_air(def, self.radio.clock).filter(|a| !a.dj)?;
+        let st = def.station.get(self.radio.on?)?;
+        Some(Subtitle {
+            speaker: Some(format!("{} · {}", a.speaker.to_uppercase(), st.name.to_uppercase())),
+            text: a.text,
+            color: Some(pav_core::Color::hex("#ffcf6e")),
+        })
+    }
+
+    /// A traffic or weather report going on air: its words from the heat and the weather now.
+    fn radio_reports(&mut self, sim: &Sim) {
+        let Ok(def) = radio::def() else { return };
+        let Some((key, words, h)) = self.radio.pending(&def, self.radio.clock) else { return };
+        let news = self.news(sim, &def);
+        let station = def.station.get(key.station).map_or("", |s| s.id.as_str());
+        let text = radio::report(&def, station, &words, h, &news);
+        self.radio.say(radio::Said { text, ..key });
+    }
+
+    /// What the police and the weather are doing, for the radio.
+    pub fn news(&self, sim: &Sim, def: &radio::RadioDef) -> radio::News {
+        let feet = Self::feet(sim);
+        let (player, zone) = match self.city.as_deref() {
+            Some(c) => (def.places.name(c, feet), def.places.name(c, self.heat.last_known)),
+            None => (def.places.elsewhere.clone(), def.places.elsewhere.clone()),
+        };
+        radio::News { stars: self.heat.stars, searching: self.heat.searching, player, zone, weather: self.sky.weather.clone() }
     }
 
     /// What getting in and out did: the radio comes on in a car, the cameras hand over, people
@@ -993,6 +1045,10 @@ impl Game for Freeway {
             Some(Action::Quit) => self.quit = true,
             None => {}
         }
+        // The radio runs on real time (slow motion and the pause menu neither stretch nor stop
+        // it); a report going on air says what the police are doing now.
+        self.radio.clock += real as f64;
+        self.radio_reports(sim);
         for n in &mut self.notes {
             n.age += real;
         }
@@ -1159,7 +1215,9 @@ impl Game for Freeway {
                 let name = sim.state.entities.get(car).map(|e| e.name.clone())?;
                 Some(json!({ "key": name, "kmh": round(st.kmh), "gear": st.gear, "health": round(st.health), "siren": st.siren_on, "airborne": st.airborne }))
             }),
-            "radio": radio::def().ok().and_then(|d| self.radio.card(&d, self.time as f64)).map(|(head, line)| format!("{head}: {line}")),
+            "radio": radio::def().ok().and_then(|d| self.radio.card(&d, self.radio.clock)).map(|(head, line)| format!("{head}: {line}")),
+            "on_air": radio::def().ok().and_then(|d| self.radio.on_air(&d, self.radio.clock)).map(|a| format!("{}: {}", a.speaker, a.text)),
+            "scanner": self.chatter.as_ref().map(|c| c.text.clone()),
             "web": self.web,
             "touch": self.touch,
         })
@@ -1227,6 +1285,8 @@ impl Game for Freeway {
 
     fn present(&self, sim: &Sim) -> Option<PlayFrame> {
         let feet = Self::feet(sim);
+        // The radio's stations, once a frame (the HUD's card and subtitles, the host's music).
+        let rdef = radio::def().ok();
         let player = Vec2::new(feet.x, feet.z);
         let blips = self.city.as_deref().map(world::blips).unwrap_or_default();
         let page = self.front.page;
@@ -1352,14 +1412,28 @@ impl Game for Freeway {
                     hud.weapon = None;
                     hud.crosshair = None;
                     hud.objective = Some("Explore Paloma Bay.".into());
-                    if self.drive.card < 4.0 {
+                    let def = rdef.as_ref();
+                    let card = def.and_then(|d| self.radio.card(d, self.radio.clock));
+                    // The car's card on getting in and tuning (4 s), again as a song begins; the
+                    // DJ's card while they talk between songs.
+                    let fresh = def
+                        .and_then(|d| self.radio.now(d, self.radio.clock))
+                        .and_then(|(st, _, off)| (st.genre != "talk" && off < radio::NEW_SONG_CARD).then_some(off));
+                    let dj = def.and_then(|d| self.radio.on_air(d, self.radio.clock)).filter(|a| a.dj);
+                    if self.drive.card < 4.0 || fresh.is_some() {
                         let name = vehicles::get(&c.key).map(|a| a.name).unwrap_or_else(|_| c.key.clone());
-                        let card = radio::def().ok().and_then(|d| self.radio.card(&d, self.time as f64));
                         hud.vehicle = Some(VehicleHud {
                             name,
                             station: card.as_ref().map(|c| c.0.clone()).or_else(|| c.radio.then(|| "RADIO OFF".to_string())),
                             song: card.map(|c| c.1),
-                            age: self.drive.card,
+                            age: if self.drive.card < 4.0 { self.drive.card } else { fresh.unwrap_or(0.0) },
+                        });
+                    } else if let Some(a) = dj {
+                        hud.vehicle = Some(VehicleHud {
+                            name: a.speaker.to_uppercase(),
+                            station: card.map(|c| c.0),
+                            song: Some(a.text),
+                            age: a.since,
                         });
                     }
                 }
@@ -1462,9 +1536,16 @@ impl Game for Freeway {
         };
         let menu = page != Page::Play;
         let mut draw = DrawList::default();
+        let mut dialogue = false;
         if page == Page::Play {
             draw.ribbons.extend(self.gps.ribbon(feet, 160.0));
             self.mission_ui(sim, &mut ui, &mut draw);
+            // A mission's subtitled lines duck the radio; with none, the scanner's words, else
+            // the talk station's.
+            dialogue = ui.subtitle.is_some();
+            if !dialogue && self.settings.subtitles {
+                ui.subtitle = rdef.as_ref().and_then(|d| self.radio_subtitle(d));
+            }
             if shop_screen.is_some() {
                 ui.screen = shop_screen;
             }
@@ -1509,6 +1590,9 @@ impl Game for Freeway {
         let mut loops = loops;
         if !menu {
             audio::vehicle_loops(sim, cam.eye, self.drive.vehicle(), &self.drive.alarms, &mut loops);
+            if let (Some(c), Some(d)) = (&self.chatter, rdef.as_deref()) {
+                loops.extend(audio::scanner_loop(c, d));
+            }
         }
         let listener =
             Some(pav_core::present::Listener { pos: cam.eye, forward: (cam.target - cam.eye).normalize_or(Vec3::NEG_Z) });
@@ -1520,11 +1604,18 @@ impl Game for Freeway {
             audio: AudioScene {
                 master: self.settings.master,
                 effects: self.settings.sfx,
-                // The menus duck the city.
-                ducking: if menu { 0.6 } else { 0.0 },
+                // Menus duck the radio and the city most, subtitled dialogue a little less.
+                ducking: if menu {
+                    audio::DUCK_MENU
+                } else if dialogue {
+                    audio::DUCK_DIALOGUE
+                } else {
+                    0.0
+                },
                 listener,
                 loops,
-                music: radio::def().ok().and_then(|d| self.radio.music(&d, self.time as f64, self.settings.music)),
+                // The radio sits under the engines and the effects.
+                music: rdef.as_ref().and_then(|d| self.radio.music(d, self.radio.clock, self.settings.music * audio::RADIO)),
                 ..Default::default()
             },
             map: self.city.as_ref().map(|c| c.map.clone()),

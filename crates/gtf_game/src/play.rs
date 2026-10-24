@@ -661,11 +661,24 @@ impl Freeway {
             let stars = "★".repeat(self.heat.stars as usize);
             self.note("police", &format!("WANTED {stars}"), &news);
         }
-        // Scanner chatter under everything at 2★ and up.
+        // Scanner chatter under everything at 2★ and up: the squelch, a dispatcher's line (a code,
+        // a unit, where the police last saw the player: its babble and its words), the squelch.
         self.scanner -= real;
         if self.heat.stars >= 2 && self.scanner <= 0.0 {
             self.scanner = sim.state.rng.range(6.0, 11.0);
             events.push(SimEvent::Sound { cue: "police.scanner".into(), pos: None, gain: 0.8, pitch: 1.0 });
+            if let Ok(def) = crate::radio::def() {
+                let at = def.places.name(city, self.heat.last_known);
+                self.chatter = crate::radio::chatter(&def, self.chatters, self.heat.stars, &at);
+                self.chatters = self.chatters.wrapping_add(1);
+            }
+        }
+        if let Some(c) = &mut self.chatter {
+            c.age += real;
+            if c.age >= c.seconds {
+                self.chatter = None;
+                events.push(SimEvent::Sound { cue: "police.scanner_out".into(), pos: None, gain: 0.8, pitch: 1.0 });
+            }
         }
         // Busted: an officer at arm's length of a player on foot who is barely moving, at 1–2★.
         let slow = vel.length() < 1.5;
