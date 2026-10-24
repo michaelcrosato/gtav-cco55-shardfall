@@ -881,17 +881,15 @@ fn prop(f: &Frame, p: &PropPart, out: &mut Out) {
         let at = [p.at[0] + p.step[0] * k as f32, p.at[1] + p.step[1] * k as f32];
         let pos = f.v(at[0], p.y, at[1]);
         let sp = StaticProp::new(&p.asset, pos, rot, p.scale, p.seed, p.solid);
-        if p.cover
-            && let Some(b) = sp.solid_bounds()
-        {
-            out.cover.push(Building {
-                min: Vec2::new(b.min.x, b.min.z),
-                max: Vec2::new(b.max.x, b.max.z),
-                base: b.min.y,
-                height: b.max.y - b.min.y,
-                zone: f.zone,
-                color: [0.0; 3],
-            });
+        if let Some(b) = sp.solid_bounds() {
+            let (min, max) = (Vec2::new(b.min.x, b.min.z), Vec2::new(b.max.x, b.max.z));
+            // A solid prop standing on the ground: people go round it (and none is put inside).
+            if p.y < 1.0 {
+                mark(out, min, max, Mark::Blocked, f.base);
+            }
+            if p.cover {
+                out.cover.push(Building { min, max, base: b.min.y, height: b.max.y - b.min.y, zone: f.zone, color: [0.0; 3] });
+            }
         }
         out.props.push(sp);
     }
