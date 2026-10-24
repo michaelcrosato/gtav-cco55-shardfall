@@ -107,7 +107,7 @@ fn roll_deg(q: Quat) -> f32 {
 }
 
 const GO: VehicleInput =
-    VehicleInput { throttle: 1.0, brake: 0.0, steer: 0.0, pitch: 0.0, handbrake: false, horn: false, siren: false };
+    VehicleInput { throttle: 1.0, brake: 0.0, steer: 0.0, pitch: 0.0, handbrake: false, horn: false, siren: false, grip: 0.0 };
 
 #[test]
 fn a_car_pitches_up_a_grade_and_holds_still_on_it() {

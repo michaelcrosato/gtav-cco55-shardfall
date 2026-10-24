@@ -1,0 +1,18 @@
+{"format":2,"name":"shop_counter","unit":"cm",
+"description":"A 2.4 m shop counter: laminate front (+z, the customer side), stone top, a till with a lit screen at +x.",
+"tags":["counter","shop","store","checkout","till"],
+"category":"furniture",
+"materials":{
+"dark":{"color":"#1f2327"},
+"panel":{"base":"MAT/gtf/painted_metal","color":"#3e5266"},
+"screen":{"color":"#7fd6ff","look":"unlit","emissive":0.4},
+"top":{"color":"#ddd7cc","roughness":0.4}},
+"parts":{
+"body":{"type":"box","size":[240,92,66],"pos":[0,46,-2],"mat":"panel"},
+"kick":{"type":"box","size":[236,10,2],"pos":[0,5,32],"mat":"dark"},
+"rack":{"type":"box","size":[60,30,18],"pos":[-70,112,20],"color":"#d9a441"},
+"reader":{"type":"box","size":[9,3,14],"pos":[40,98.5,24],"mat":"dark"},
+"screen":{"type":"box","size":[32,22,3],"pos":[78,124,-16],"pitch":-15,"mat":"screen"},
+"stand":{"type":"box","size":[6,14,6],"pos":[78,110,-18],"mat":"dark"},
+"till":{"type":"box","size":[38,10,32],"pos":[78,102,-12],"mat":"dark"},
+"top":{"type":"box","size":[246,5,74],"pos":[0,94.5,0],"mat":"top"}}}

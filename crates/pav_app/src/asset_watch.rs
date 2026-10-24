@@ -44,6 +44,8 @@ pub struct AssetWatcher {
 pub struct AssetWatcher;
 
 impl AssetWatcher {
+    // On the web the watcher is a unit struct that does nothing.
+    #[cfg_attr(target_arch = "wasm32", allow(clippy::default_constructed_unit_structs))]
     pub fn new() -> Self {
         Self::default()
     }

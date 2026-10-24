@@ -1,0 +1,157 @@
+# m3 Overdrive (PLAN.md §5.7): Roxy wrecks her old producer's taco trucks on the boardwalk, runs
+# from three stars and the helicopter down The Ditch, and the first switch hands the getaway to
+# Dez. Teaches abilities, chaos, the helicopter and switching.
+
+key = "m3_overdrive"
+title = "Overdrive"
+protagonist = "roxy"
+text = "Chad Brightwater parked three taco trucks on Roxy's boardwalk."
+contact = "mack"
+blip = { letter = "R", at = "spot:roxy_pier" }
+start = "spot:m3_start"
+unlock = ["m2_midlife"]
+time = { at = "16:40", lock = true }
+weather = "clear"
+reward = { cash = 2500, unlock = ["switch"], text = ["mack", "Three of you, one city, zero sense. I have a job. A big one. Call me. - M"] }
+names = { chad = "CHAD" }
+
+[[medals]]
+id = "fast"
+text = "Finish within 5:00"
+time_under = 300.0
+
+[[medals]]
+id = "tough"
+text = "Finish with half your health or more"
+health_over = 0.5
+
+[[spawn]]
+id = "t1"
+vehicle = "fenwick_courier"
+at = "at:-262,296"
+yaw = 90.0
+health = 0.32
+blip = "target"
+name = "Taco Disruptor"
+
+[[spawn]]
+id = "t2"
+vehicle = "fenwick_courier"
+at = "at:-150,297"
+yaw = 270.0
+health = 0.32
+blip = "target"
+name = "Taco Disruptor"
+
+[[spawn]]
+id = "t3"
+vehicle = "fenwick_courier"
+at = "at:-104,295"
+yaw = 90.0
+health = 0.32
+blip = "target"
+name = "Taco Disruptor"
+
+[[spawn]]
+id = "roxy_car"
+vehicle = "marlin_bay"
+at = "spot:m3_car"
+paint = 0
+blip = "vehicle"
+name = "Marlin Bay"
+later = true
+
+[[spawn]]
+id = "dez_body"
+protagonist = "dez"
+at = "spot:m3_dez"
+later = true
+
+[[spawn]]
+id = "dez_car"
+vehicle = "bravura_stallion"
+at = "spot:m3_dez_car"
+paint = 1
+later = true
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "roxy", text = "Chad Brightwater. Fired me from Explosion 7 for excessive realism.", seconds = 3.0 },
+  { who = "roxy", text = "Now he sells disruptive tacos on MY boardwalk. Let's disrupt.", seconds = 3.0 },
+]
+on_start = [{ traffic = 0.35 }, { heat_cap = 0 }, { give = { weapon = "c4r", ammo = 150 } }]
+
+[[step]]
+kind = "kill"
+targets = ["t1", "t2", "t3"]
+checkpoint = true
+objective = "Wreck Chad's three ~r~taco trucks~s~."
+help = "Press ~btn:l3~ and ~btn:r3~ together for Overdrive: double damage, half the hurt."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "roxy", text = "That's a wrap. Uh oh. That's also a siren.", seconds = 2.4 },
+  { who = "roxy", text = "A voice on my phone says the Ditch. Fine, mystery voice.", seconds = 2.8 },
+]
+on_start = [{ spawn = "roxy_car" }]
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:roxy_car"
+objective = "Get in your ~b~pickup~s~."
+
+[[step]]
+kind = "drive_to"
+target = "spot:m3_ditch"
+radius = 14.0
+checkpoint = true
+objective = "Get into ~y~The Ditch~s~ before the police close in."
+help = "The Ditch is the storm channel across the Flats. A ramp goes down into it from the street west of the depot."
+on_done = [{ heat_cap = 5 }, { heat = 3 }]
+
+[[step]]
+kind = "drive_to"
+target = "spot:m3_ditch_end"
+radius = 16.0
+objective = "Run ~y~down The Ditch~s~ toward the harbor."
+help = "Three stars bring the helicopter. Keep moving down the channel."
+on_done = [{ spawn = "dez_body" }, { spawn = "dez_car" }, { unlock = "switch" }]
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Roxy, it's Mack. We haven't met. I have a driver at the bottom of the Ditch.", seconds = 3.4 },
+  { who = "roxy", text = "Who ARE you people?", seconds = 1.6 },
+]
+
+[[step]]
+kind = "switch"
+to = "dez"
+objective = "Switch to ~p~Dez~s~."
+help = "Hold ~btn:down~ for the switch wheel, push toward Dez and let go."
+on_done = [{ heat = 0 }, { heat = 1 }]
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:dez_car"
+objective = "Get in the ~b~Bravura~s~."
+
+[[step]]
+kind = "lose_heat"
+stars = 0
+checkpoint = true
+objective = "Lose the ~b~cops~s~."
+help = "They're looking for a red pickup, not a Bravura. One star: get out of the search area."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "dez", text = "Mack said there'd be a lady in a stunt jacket. Didn't say on fire.", seconds = 3.0 },
+  { who = "mack", text = "Welcome aboard, both of you. Next time, fewer tacos.", seconds = 2.6 },
+]
+
+[[fail]]
+when = { died = "player" }
+reason = "You were taken out."

@@ -1,0 +1,16 @@
+{"format":2,"name":"grenade","unit":"cm","mat":"od",
+"description":"A 9 cm fragmentation grenade, fuze up (+y): olive drab body, steel fuze, spoon down the +z side, pull ring at -x.",
+"tags":["grenade","explosive","frag","throwable","weapon"],
+"category":"weapon",
+"materials":{
+"od":{"color":"#4b5320","roughness":0.8},
+"steel":{"color":"#9aa0a6","roughness":0.4,"metallic":0.8}},
+"parts":{
+"band":{"type":"cylinder","radius":3.05,"height":0.5,"pos":[0,3.4,0],"color":"#3b4119"},
+"body":{"type":"ellipsoid","size":[6,6.8,6],"pos":[0,3.4,0]},
+"fuze":{"type":"cylinder","radius":1.2,"from":[0,6.3,0],"to":[0,8.6,0],"mat":"steel"},
+"lever":{"type":"box","size":[1.4,0.25],"from":[0,7.2,2.4],"to":[0,2.2,3.35],"mat":"steel"},
+"ring":{"type":"torus","radius":1.1,"minor_radius":0.2,"pos":[-2.3,7.6,0],"axis":"z","mat":"steel"},
+"spoon":{"type":"box","size":[1.4,0.25],"from":[0,8.5,-0.4],"to":[0,7.2,2.4],"mat":"steel"}},
+"sockets":{
+"grip":{"pos":[0,3.4,0]}}}

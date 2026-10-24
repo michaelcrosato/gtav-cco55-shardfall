@@ -1,0 +1,16 @@
+{"format":2,"name":"espresso_machine","unit":"cm",
+"description":"A two-group espresso machine in brushed steel with cups on top and a black grinder at +x; stands on a counter.",
+"tags":["coffee","espresso","machine","cafe","counter"],
+"category":"tool",
+"materials":{
+"black":{"color":"#1b1c1e"},
+"cup":{"color":"#f4f1ea"},
+"steel":{"base":"MAT/gtf/chrome","color":"#c9cdd1"}},
+"parts":{
+"body":{"type":"box","size":[70,46,48],"pos":[0,23,0],"mat":"steel"},
+"cup":{"type":"cylinder","radius":4,"height":7,"pos":[0,53.5,0],"mat":"cup","array":{"count":5,"step":[12,0,0]}},
+"drip":{"type":"box","size":[64,3,14],"pos":[0,4,28],"mat":"black"},
+"grinder":{"type":"box","size":[20,46,22],"pos":[50,23,0],"mat":"black"},
+"head":{"type":"cylinder","radius":5,"height":8,"pos":[0,30,27],"mat":"black","array":{"count":2,"step":[40,0,0]}},
+"hopper":{"type":"cone","radius":9,"radius_end":6,"height":14,"pos":[50,53,0],"color":"#5a3a22"},
+"top":{"type":"box","size":[72,4,50],"pos":[0,48,0],"mat":"black"}}}

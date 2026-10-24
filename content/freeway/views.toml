@@ -62,9 +62,9 @@ time = "16:00"
 
 [[view]]
 name = "broken_ramp"
-about = "The end of the Harbor Spur, high over the water (the stunt jump)"
-eye = [140.0, 5.0, 452.0]
-target = [208.0, 6.0, 400.0]
+about = "The end of the Harbor Spur, high over the harbor road (the stunt jump and the heist's getaway)"
+eye = [30.0, 4.0, 392.0]
+target = [104.0, 9.0, 361.0]
 time = "17:00"
 
 [[view]]
@@ -73,3 +73,187 @@ about = "Above The Ditch: the channel, its bridges and ramps"
 eye = [150.0, 45.0, 60.0]
 target = [208.0, -6.0, 180.0]
 time = "15:00"
+
+[[view]]
+name = "spur_above"
+about = "Above the Harbor Spur's broken end and the harbor road below it (the getaway jump)"
+eye = [30.0, 70.0, 430.0]
+target = [150.0, 6.0, 340.0]
+time = "17:30"
+
+# The landmarks (M7 D2), each at its best hour.
+[[view]]
+name = "luxe_showroom"
+about = "Luxe Motors' glass showroom across the avenue at dusk, the cars inside lit"
+eye = [36.0, 2.5, -152.0]
+target = [70.0, 3.5, -143.0]
+time = "19:30"
+
+[[view]]
+name = "cityworks_yard"
+about = "The City Works yard through its gate: utility trucks, the shed, pipes and barriers"
+eye = [300.0, 4.5, 176.0]
+target = [296.0, 0.0, 236.0]
+time = "10:00"
+
+[[view]]
+name = "harbor_warehouse"
+about = "Harbor Gate Freight's truck door on the dock road"
+eye = [85.0, 2.0, 276.0]
+target = [115.0, 4.0, 296.0]
+time = "16:30"
+
+[[view]]
+name = "gas_n_grab"
+about = "Gas-N-Grab's lit canopy, pumps and store on Sunset Row after dark"
+eye = [-70.0, 2.0, -240.0]
+target = [-38.0, 3.0, -210.0]
+time = "21:30"
+
+[[view]]
+name = "grind_house"
+about = "The Grind House's brick front and patio on Sunset Row in the morning"
+eye = [165.0, 1.8, -238.0]
+target = [180.0, 3.0, -262.0]
+time = "08:30"
+
+[[view]]
+name = "freeway_diner"
+about = "The Freeway Diner's lot and neon at night"
+eye = [340.0, 2.0, -240.0]
+target = [372.0, 4.0, -278.0]
+time = "21:00"
+
+[[view]]
+name = "ironclad_depot"
+about = "Ironclad Transit's guarded gate and yard from the avenue"
+eye = [318.0, 9.0, 78.0]
+target = [290.0, 0.0, 122.0]
+time = "14:00"
+
+[[view]]
+name = "pier_night"
+about = "Palisade Pier at night: the arcade, the stalls and the Big Wheel lit up"
+eye = [-160.0, 1.8, 386.0]
+target = [-176.0, 14.0, 455.0]
+time = "21:30"
+
+[[view]]
+name = "freighter"
+about = "The MV Pacific Star moored at Harbor Gate's quay"
+eye = [205.0, 7.0, 476.0]
+target = [300.0, 9.0, 404.0]
+time = "17:30"
+
+[[view]]
+name = "bank_tower"
+about = "Paloma Savings & Trust's tower over the park at night, its monogram lit on the crown"
+eye = [-224.0, 25.0, -330.0]
+target = [-224.0, 55.0, -144.0]
+time = "21:00"
+
+[[view]]
+name = "city_hall"
+about = "City Hall's portico, steps, fountain and flags"
+eye = [-104.0, 6.0, -186.0]
+target = [-120.0, 9.0, -146.0]
+time = "11:00"
+
+[[view]]
+name = "sppd_central"
+about = "SPPD Central's entrance, the radio mast and the patrol cars behind the fence"
+eye = [-290.0, 3.0, -105.0]
+target = [-326.0, 5.0, -92.0]
+time = "10:30"
+
+[[view]]
+name = "hospital_roof"
+about = "St. Brigid's roof: the helipad with the Skylark parked on it, the ladders up"
+eye = [30.0, 45.0, -20.0]
+target = [-32.0, 30.0, -68.0]
+time = "16:00"
+
+[[view]]
+name = "civic_garage"
+about = "Civic Center Parking: the decks and the ramps up the east side"
+eye = [-70.0, 6.0, -104.0]
+target = [-110.0, 4.0, -64.0]
+time = "13:00"
+
+[[view]]
+name = "impound_lot"
+about = "The SPPD impound lot under its floodlights"
+eye = [-300.0, 6.0, -28.0]
+target = [-320.0, 1.0, 20.0]
+time = "22:00"
+
+[[view]]
+name = "bang_bang_bros"
+about = "Bang Bang Bros.' storefront and neon on Sunset Row"
+eye = [-130.0, 1.8, -240.0]
+target = [-145.0, 4.0, -218.0]
+time = "20:30"
+
+[[view]]
+name = "paloma_customs"
+about = "Paloma Customs' drive-through bay on Sunset Row"
+eye = [-204.0, 2.2, -247.0]
+target = [-232.0, 3.0, -214.0]
+time = "14:00"
+
+[[view]]
+name = "dez_apartment"
+about = "Dez's apartment block in Los Mirados"
+eye = [-360.0, 1.7, -410.0]
+target = [-340.0, 2.0, -385.0]
+time = "18:30"
+
+[[view]]
+name = "mack_house"
+about = "Mack's house in the hills: the glass front, the pool deck, the carport"
+eye = [-150.0, 14.0, -428.0]
+target = [-186.0, 8.0, -462.0]
+time = "19:00"
+
+[[view]]
+name = "roxy_trailer"
+about = "Roxy's trailer on its fenced lot in The Flats"
+eye = [95.0, 3.0, 85.0]
+target = [105.0, 1.0, 108.0]
+time = "17:00"
+
+[[view]]
+name = "sunset_row_neon"
+about = "Sunset Row's shop signs after dark"
+eye = [-352.0, 2.0, -249.0]
+target = [-305.0, 4.5, -224.0]
+time = "21:45"
+
+# The stunt jumps (M7), each from beside its run-up toward the landing.
+[[view]]
+name = "jump_ditch"
+about = "The Ditch Jump from its landing: the kicker in the channel bed, coming this way"
+eye = [205.0, -2.0, 258.0]
+target = [212.0, -4.5, 208.0]
+time = "15:00"
+
+[[view]]
+name = "jump_pier"
+about = "The Pier Ramp on the sand west of the pier's approach, the landing over the walk"
+eye = [-232.0, 5.0, 322.0]
+target = [-150.0, 1.0, 332.0]
+time = "17:30"
+
+[[view]]
+name = "jump_hills"
+about = "The Hills Jump off the ridge road's dead end, over the plateau"
+eye = [58.0, 31.5, -587.0]
+target = [140.0, 26.0, -582.0]
+time = "16:00"
+
+[[view]]
+name = "jump_containers"
+about = "The Harbor Container Ramp: through the container yard, over the wall of containers"
+eye = [22.0, 9.0, 360.0]
+target = [-60.0, 1.0, 362.0]
+time = "16:30"

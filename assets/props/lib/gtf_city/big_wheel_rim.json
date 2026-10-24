@@ -1,0 +1,17 @@
+{"format":2,"name":"big_wheel_rim","unit":"cm",
+"description":"A Ferris wheel's turning rim, 46 m across: twin white rings on 16 spokes a side, car brackets, pink lights after dark.",
+"tags":["ferris","wheel","pier","ride","landmark"],
+"category":"town",
+"materials":{
+"led":{"color":"#ff4fa8","look":"unlit","emissive":1.6},
+"red":{"base":"MAT/gtf/painted_metal","color":"#c9302c"},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#f2f0ea"}},
+"parts":{
+"bracket":{"type":"box","size":[14,52,14],"pos":[0,2302,0],"mat":"red","radial":{"count":16,"radius":2218,"axis":"z"}},
+"cross":{"type":"box","size":[26,26,340],"pos":[0,2302,0],"mat":"steel","radial":{"count":16,"radius":2250,"axis":"z"}},
+"hub":{"type":"cylinder","radius":110,"height":420,"pos":[0,2302,0],"axis":"z","mat":"steel"},
+"hub_cap":{"type":"cylinder","radius":60,"height":440,"pos":[0,2302,0],"axis":"z","mat":"red"},
+"inner":{"type":"torus","radius":1500,"minor_radius":20,"pos":[0,2302,160],"axis":"z","mat":"steel","mirror":"z"},
+"led":{"type":"torus","radius":2294,"minor_radius":8,"pos":[0,2302,196],"axis":"z","mat":"led","glow":"night","mirror":"z"},
+"ring":{"type":"torus","radius":2250,"minor_radius":36,"pos":[0,2302,160],"axis":"z","mat":"steel","mirror":"z"},
+"spoke":{"type":"cylinder","radius":14,"height":2140,"pos":[0,2302,160],"mat":"steel","mirror":"z","radial":{"count":16,"radius":1175,"axis":"z"}}}}

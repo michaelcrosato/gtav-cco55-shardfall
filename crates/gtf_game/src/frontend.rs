@@ -56,6 +56,14 @@ pub const IDLE_SECONDS: f32 = 10.0;
 pub enum Action {
     /// Start playing (free roam).
     Play,
+    /// Load the newest save and play.
+    Continue,
+    /// A fresh game.
+    NewGame,
+    /// The pause menu's replay list, Load Game, Quit Mission.
+    Replay,
+    Load,
+    QuitMission,
     /// The settings changed (keep them).
     Settings,
     Quit,
@@ -121,6 +129,8 @@ pub struct Ctx<'a> {
     pub player: Vec2,
     /// Real seconds since the game started (the UI clock).
     pub now: f32,
+    /// A mission is under way (the pause menu offers to quit it).
+    pub on_mission: bool,
 }
 
 fn item(id: &str, label: &str, enabled: bool, note: Option<&str>) -> MenuItem {
@@ -160,12 +170,18 @@ impl Front {
         items
     }
 
-    fn game_items() -> Vec<MenuItem> {
-        vec![
-            item("resume", "Resume", true, None),
+    fn game_items(on_mission: bool) -> Vec<MenuItem> {
+        let mut v = vec![item("resume", "Resume", true, None)];
+        if on_mission {
+            v.push(item("quit_mission", "Quit Mission", true, None));
+        }
+        v.extend([
+            item("replay", "Replay Mission", !on_mission, Some("Missions you have passed")),
+            item("load", "Load Game", !on_mission, None),
             item("gallery", "UI Gallery", true, None),
             item("title", "Quit to Title", true, None),
-        ]
+        ]);
+        v
     }
 
     fn settings_cards() -> Vec<Card> {
@@ -257,7 +273,15 @@ impl Front {
                     self.go(Page::Title, now);
                 } else if accept && items[self.main].enabled {
                     match items[self.main].id.as_str() {
-                        "continue" | "new_game" | "free_roam" => {
+                        "continue" => {
+                            self.go(Page::Play, now);
+                            return Some(Action::Continue);
+                        }
+                        "new_game" => {
+                            self.go(Page::Play, now);
+                            return Some(Action::NewGame);
+                        }
+                        "free_roam" => {
                             self.go(Page::Play, now);
                             return Some(Action::Play);
                         }
@@ -359,11 +383,23 @@ impl Front {
                         }
                     }
                     4 => {
-                        let items = Self::game_items();
-                        self.pause = move_focus(self.pause, items.len(), dy, |_| true);
-                        if accept {
-                            match items[self.pause].id.as_str() {
+                        let items = Self::game_items(ctx.on_mission);
+                        self.pause = move_focus(self.pause, items.len(), dy, |i| items[i].enabled);
+                        if accept && items[self.pause.min(items.len() - 1)].enabled {
+                            match items[self.pause.min(items.len() - 1)].id.as_str() {
                                 "resume" => self.go(Page::Play, now),
+                                "quit_mission" => {
+                                    self.go(Page::Play, now);
+                                    return Some(Action::QuitMission);
+                                }
+                                "replay" => {
+                                    self.go(Page::Play, now);
+                                    return Some(Action::Replay);
+                                }
+                                "load" => {
+                                    self.go(Page::Play, now);
+                                    return Some(Action::Load);
+                                }
                                 "gallery" => self.go(Page::Gallery, now),
                                 "title" => self.go(Page::Title, now),
                                 _ => {}
@@ -412,7 +448,7 @@ impl Front {
                     }
                 }
                 4 => {
-                    if let Some(i) = find(&Self::game_items()) {
+                    if let Some(i) = find(&Self::game_items(ctx.on_mission)) {
                         self.pause = i;
                     }
                 }
@@ -422,7 +458,9 @@ impl Front {
         }
     }
 
-    /// The page's full-screen `Screen` (None while playing).
+    /// The page's full-screen `Screen` (None while playing). `stats` is the stats page's cards,
+    /// `brief` the BRIEF tab (the mission under way; none: free roam).
+    #[allow(clippy::too_many_arguments)]
     pub fn screen(
         &self,
         settings: &Settings,
@@ -431,6 +469,9 @@ impl Front {
         player: Vec2,
         blips: &[Blip],
         route: &[Vec2],
+        stats: CardRow,
+        brief: Option<TextCard>,
+        on_mission: bool,
     ) -> Option<Screen> {
         let s = |id: &str, title: &str, body: ScreenBody, backdrop: Backdrop, hints: Vec<Prompt>| Screen {
             id: id.into(),
@@ -522,29 +563,25 @@ impl Front {
                         ],
                     ),
                     1 => (
-                        ScreenBody::Text(TextCard {
+                        ScreenBody::Text(brief.unwrap_or_else(|| TextCard {
                             heading: "FREE ROAM".into(),
                             lines: vec![
                                 "Paloma Bay is yours to explore: downtown, the docks, the hills.".into(),
-                                "Hold ~btn:l1~ to open the weapon wheel (time slows down).".into(),
+                                "Hold ~btn:l1~ to open the weapon wheel, ~btn:down~ to switch, ~btn:up~ for the phone.".into(),
                                 "~btn:start~ pauses; ~btn:l1~ ~btn:r1~ switch tabs.".into(),
                             ],
-                        }),
+                        })),
                         Backdrop::Dim,
                         vec![hint(PadButton::East, "Resume")],
                     ),
-                    2 => (
-                        ScreenBody::Cards(crate::protagonists::stat_cards(self.stats)),
-                        Backdrop::Dim,
-                        vec![hint(PadButton::East, "Resume")],
-                    ),
+                    2 => (ScreenBody::Cards(stats), Backdrop::Dim, vec![hint(PadButton::East, "Resume")]),
                     3 => (
                         ScreenBody::Cards(CardRow { cards: Self::settings_cards(), focus: self.pause }),
                         Backdrop::Dim,
                         vec![hint(PadButton::South, "Open"), hint(PadButton::East, "Resume")],
                     ),
                     _ => (
-                        ScreenBody::Menu(MenuList { items: Self::game_items(), focus: self.pause }),
+                        ScreenBody::Menu(MenuList { items: Self::game_items(on_mission), focus: self.pause }),
                         Backdrop::Dim,
                         vec![hint(PadButton::South, "Select"), hint(PadButton::East, "Resume")],
                     ),
@@ -561,5 +598,10 @@ impl Front {
     /// The fade over a page change: black at the change, clear after `secs`.
     pub fn fade(&self, now: f32, secs: f32) -> f32 {
         (1.0 - (now - self.changed_at) / secs).clamp(0.0, 1.0)
+    }
+
+    /// Fades the picture in from black again (a respawn).
+    pub fn fade_in(&mut self, now: f32) {
+        self.changed_at = now;
     }
 }

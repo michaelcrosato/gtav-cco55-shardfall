@@ -32,6 +32,8 @@ pub mod block_flags {
     pub const CRACKED: u32 = 16;
     /// Crumbles only under the player (monsters fall into holes but don't make them).
     pub const PLAYER_CRUMBLE: u32 = 32;
+    /// Not drawn: collision only (an invisible wall at the edge of the world).
+    pub const HIDDEN: u32 = 64;
 }
 
 /// Which region static content belongs to.
@@ -753,6 +755,20 @@ impl StaticWorld {
         for (key, chunk) in self.regions_in(center - r, center + r) {
             for (i, b) in chunk.blocks.iter().enumerate() {
                 if b.alive && center.clamp(b.min, b.max).distance_squared(center) < radius * radius {
+                    out.push(BlockRef { region: *key, index: i as u32 });
+                }
+            }
+        }
+        out
+    }
+
+    /// Alive blocks whose middles lie inside a box.
+    pub fn blocks_centred_in(&self, min: Vec3, max: Vec3) -> Vec<BlockRef> {
+        let mut out = Vec::new();
+        for (key, chunk) in self.regions_in(min, max) {
+            for (i, b) in chunk.blocks.iter().enumerate() {
+                let c = b.center();
+                if b.alive && c.cmpge(min).all() && c.cmple(max).all() {
                     out.push(BlockRef { region: *key, index: i as u32 });
                 }
             }

@@ -1261,7 +1261,7 @@ impl ViewBuilder {
                 let mut lights = Vec::new();
                 let mut night_lights = Vec::new();
                 let mut list = Vec::with_capacity(chunk.blocks.len());
-                for b in chunk.blocks.iter().filter(|b| b.alive) {
+                for b in chunk.blocks.iter().filter(|b| b.alive && !b.has(block_flags::HIDDEN)) {
                     // Blocks are world-mapped with seed 0, so neighbours (4 m floor tiles) join;
                     // a material laid on the block's own faces (a facade) is seeded by its place.
                     let at = b.center().to_array().map(f32::to_bits);
@@ -1342,7 +1342,8 @@ impl ViewBuilder {
                 // the night lights, which each frame dims by the street-light level.
                 let mut baked = Scene { street_lights: 1.0, ..Scene::default() };
                 let mut prop_lights = Vec::new();
-                let mut generated = GeneratedMeshes { built: std::mem::take(&mut self.generated.built), sent: HashSet::new() };
+                let mut generated =
+                    GeneratedMeshes { built: std::mem::take(&mut self.generated.built), sent: HashSet::new(), synced: (0, 0) };
                 for (index, p) in chunk.props.iter().enumerate() {
                     let Some(parts) = p.parts() else { continue };
                     let id = baked_id(*key, index);
@@ -1930,7 +1931,7 @@ fn emit_puppet(scene: &mut Scene, def: &PuppetDef, o: &RenderObject, p: &PuppetF
     }
     let (parts, span) = pav_core::puppet::pose_ex(def, &p.state, p.rig.as_ref(), feet, cam_fwd);
     if let (false, Some((hand, tip))) = (def.weapon.asset.is_empty(), span) {
-        held_asset(scene, &def.weapon.asset, hand, tip, o.id.0);
+        held_asset(scene, &def.weapon.asset, hand, tip, o.rot * Vec3::Z, o.id.0);
     }
     for part in parts {
         scene.sdfs.push(SdfInstance {
@@ -1949,14 +1950,32 @@ fn emit_puppet(scene: &mut Scene, def: &PuppetDef, o: &RenderObject, p: &PuppetF
 }
 
 /// A library prop held in the hand (a look's `weapon.asset`): its `grip` socket at `hand`, the
-/// socket's +y toward `tip`, at the prop's own size.
-fn held_asset(scene: &mut Scene, name: &str, hand: Vec3, tip: Vec3, id: u32) {
+/// socket's +y toward `tip` and its +z as near straight up as that allows (a gun's top up,
+/// whichever way the holder faces; held straight up or down, +z toward the holder's `forward`),
+/// at the prop's own size.
+fn held_asset(scene: &mut Scene, name: &str, hand: Vec3, tip: Vec3, forward: Vec3, id: u32) {
     let Ok(parts) = pav_core::props::resolve_parts(name, 0) else { return };
     let (grip, turn) = parts.sockets.get("grip").map_or((Vec3::ZERO, Quat::IDENTITY), |s| (s.pos, s.rot));
-    let rot = Quat::from_rotation_arc((turn * Vec3::Y).normalize_or(Vec3::Y), (tip - hand).normalize_or(Vec3::Y));
+    let rot = held_turn(turn, (tip - hand).normalize_or(Vec3::Y), forward);
     let at = crate::assets::Placement::at(hand - rot * grip).rot(rot).id(id);
     // Names were checked when the look was read; a prop this build lacks is not drawn.
     let _ = crate::assets::emit_asset(scene, name, at, 0, &Default::default());
+}
+
+/// The turn that lays a held prop along `along`: its grip socket's +y (`turn` is the socket's
+/// own) onto `along` and the socket's +z as near world up as that allows — `forward` when the
+/// prop points straight up or down.
+fn held_turn(turn: Quat, along: Vec3, forward: Vec3) -> Quat {
+    let sy = (turn * Vec3::Y).normalize_or(Vec3::Y);
+    let sz = (turn * Vec3::Z - sy * (turn * Vec3::Z).dot(sy)).normalize_or(Vec3::Z);
+    let up = if (Vec3::Y - along * along.y).length() > 0.25 { Vec3::Y } else { forward };
+    let up = (up - along * up.dot(along)).normalize_or(Vec3::ZERO);
+    if up == Vec3::ZERO {
+        return Quat::from_rotation_arc(sy, along);
+    }
+    let from = glam::Mat3::from_cols(sy.cross(sz), sy, sz);
+    let to = glam::Mat3::from_cols(along.cross(up), along, up);
+    Quat::from_mat3(&(to * from.transpose())).normalize()
 }
 
 /// Adds one object's instances to the scene (props are drawn by `ViewBuilder::emit_prop`).
@@ -2029,6 +2048,9 @@ pub(crate) struct GeneratedMeshes {
     pub(crate) built: HashMap<u64, Arc<MeshData>>,
     /// Keys this frame's scene already carries.
     pub(crate) sent: HashSet<u64>,
+    /// (frame serial, how many of the scene's custom meshes `sent` has seen): the asset path's
+    /// running tally.
+    pub(crate) synced: (u64, usize),
 }
 
 impl GeneratedMeshes {
@@ -2487,6 +2509,19 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
+
+    #[test]
+    fn a_held_gun_keeps_its_top_up_whichever_way_it_points() {
+        for along in [Vec3::Z, Vec3::X, Vec3::new(-0.6, 0.2, 0.77).normalize(), Vec3::new(0.3, -0.5, -0.81).normalize()] {
+            let r = held_turn(Quat::IDENTITY, along, Vec3::Z);
+            assert!((r * Vec3::Y).distance(along) < 1e-4, "+y along the weapon: {along}");
+            let top = r * Vec3::Z;
+            assert!(top.y > 0.5 && top.dot(along).abs() < 1e-4, "top up: {top} for {along}");
+        }
+        // Hanging straight down: the top toward the holder's front.
+        let r = held_turn(Quat::IDENTITY, Vec3::NEG_Y, Vec3::X);
+        assert!((r * Vec3::Z).distance(Vec3::X) < 1e-4);
+    }
     use pav_core::EntityId;
     use pav_core::props::{self, Doc, PropAsset, PropDef};
     use pav_core::shape::Visual;

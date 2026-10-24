@@ -45,12 +45,17 @@ impl WheelState {
     /// Points the stick: past half way picks the slot in that direction (slot 0 at the top,
     /// clockwise); closer to the middle keeps the last pick.
     pub fn aim(&mut self, stick: Vec2) {
-        if stick.length() < 0.5 {
+        self.aim_n(stick, 8);
+    }
+
+    /// The same for a wheel of `n` slots.
+    pub fn aim_n(&mut self, stick: Vec2, n: usize) {
+        if stick.length() < 0.5 || n == 0 {
             return;
         }
         // Angle clockwise from up.
         let a = stick.x.atan2(stick.y).rem_euclid(std::f32::consts::TAU);
-        self.focus = Some(((a / std::f32::consts::TAU * 8.0 + 0.5).floor() as usize) % 8);
+        self.focus = Some(((a / std::f32::consts::TAU * n as f32 + 0.5).floor() as usize) % n);
     }
 
     pub fn ui(&self, current: usize) -> Wheel {
@@ -80,6 +85,8 @@ pub struct HudInput<'a> {
     pub camera_yaw: f32,
     pub money: (i64, i64, f32),
     pub weapon: usize,
+    /// The ability meter (0..1) and the protagonist's colour.
+    pub ability: (f32, Color),
     pub help: Option<(&'a str, f32)>,
     pub map_blips: Vec<Blip>,
     /// The GPS route on the radar (map points from the player on).
@@ -104,7 +111,7 @@ pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
             cones: Vec::new(),
             circles: Vec::new(),
         }),
-        vitals: Some(Vitals { health: h.vitals.0, armor: h.vitals.1, ability: 0.8, ability_color: Color::hex("#ffc145") }),
+        vitals: Some(Vitals { health: h.vitals.0, armor: h.vitals.1, ability: h.ability.0, ability_color: h.ability.1 }),
         money: Some(Money { amount: h.money.0, delta: h.money.1, delta_age: h.money.2 }),
         weapon: armed.then(|| {
             let (name, icon, _) = WEAPONS[h.weapon];

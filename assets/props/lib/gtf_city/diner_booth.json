@@ -1,0 +1,20 @@
+{"format":2,"name":"diner_booth","unit":"cm",
+"description":"A diner booth: two red vinyl benches facing across a chrome-edged table; the aisle side is +z.",
+"tags":["booth","diner","table","bench","seat"],
+"category":"furniture",
+"materials":{
+"chrome":{"base":"MAT/gtf/chrome","color":"#c9cdd1"},
+"top":{"color":"#efe9dc"},
+"trim":{"color":"#f2efe8"},
+"vinyl":{"color":"#c0392b","roughness":0.4}},
+"parts":{
+"back":{"type":"box","size":[14,72,116],"pos":[96,80,0],"mat":"vinyl","mirror":"x"},
+"back_top":{"type":"box","size":[18,6,118],"pos":[96,119,0],"mat":"trim","mirror":"x"},
+"base":{"type":"box","size":[50,37,112],"pos":[67,18.5,0],"mat":"chrome","mirror":"x"},
+"cup":{"type":"cylinder","radius":4,"height":10,"pos":[18,82,20],"color":"#f4f1ea"},
+"edge":{"type":"box","size":[76,3,112],"pos":[0,71.5,-2],"mat":"chrome"},
+"foot":{"type":"box","size":[50,3,50],"pos":[0,1.5,-2],"mat":"chrome"},
+"ketchup":{"type":"cylinder","radius":3,"height":16,"pos":[-12,85,-42],"color":"#c0392b"},
+"pedestal":{"type":"cylinder","radius":6,"from":[0,3,-2],"to":[0,70,-2],"mat":"chrome"},
+"seat":{"type":"box","size":[52,14,116],"pos":[67,44,0],"mat":"vinyl","mirror":"x"},
+"table":{"type":"box","size":[74,4,110],"pos":[0,75,-2],"mat":"top"}}}

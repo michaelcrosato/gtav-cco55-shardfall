@@ -370,6 +370,21 @@ impl MeshBuf {
             self.i.extend_from_slice(&[base, base + 2, base + 1, base, base + 3, base + 2]);
         }
     }
+
+    /// A triangle of one colour facing along `n`.
+    pub(crate) fn tri(&mut self, v: [Vec3; 3], n: Vec3, c: [f32; 3]) {
+        let base = self.p.len() as u32;
+        for p in v {
+            self.p.push(p.to_array());
+            self.n.push(n.to_array());
+            self.c.push(c);
+        }
+        if (v[1] - v[0]).cross(v[2] - v[0]).dot(n) >= 0.0 {
+            self.i.extend_from_slice(&[base, base + 1, base + 2]);
+        } else {
+            self.i.extend_from_slice(&[base, base + 2, base + 1]);
+        }
+    }
 }
 
 /// Smooth value noise in about -1..1 (cells `scale` metres wide).

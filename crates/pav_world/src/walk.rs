@@ -28,6 +28,9 @@ pub enum Walk {
     Path,
     /// Parks, plazas and the beach.
     Open,
+    /// Inside a landmark's rooms and through their doors: people can be put and walk there,
+    /// but crowds neither spawn nor wander in.
+    Indoor,
 }
 
 /// The tile map.
@@ -37,15 +40,22 @@ pub struct WalkMap {
     pub tile: f32,
     pub w: i32,
     pub h: i32,
-    /// 0 blocked, 1 sidewalk, 2 path, 3 open, 4 + i crossing i.
+    /// 0 blocked, 1 sidewalk, 2 path, 3 open, 4 indoor, 5 + i crossing i.
     tiles: Vec<u16>,
     crossings: Vec<(u32, bool)>,
 }
 
 const TILE: f32 = 2.0;
+const CROSSING: u16 = 5;
 
 impl WalkMap {
-    pub fn build(def: &DistrictDef, grid: &Grid, buildings: &[Building], lanes: &LaneGraph) -> WalkMap {
+    pub fn build(
+        def: &DistrictDef,
+        grid: &Grid,
+        buildings: &[Building],
+        lanes: &LaneGraph,
+        marks: &[crate::parts::MarkRect],
+    ) -> WalkMap {
         let per = (grid.cell / TILE) as i32;
         let (w, h) = (grid.w * per, grid.h * per);
         let mut m = WalkMap { origin: grid.origin, tile: TILE, w, h, tiles: vec![0; (w * h) as usize], crossings: Vec::new() };
@@ -70,6 +80,15 @@ impl WalkMap {
         // Buildings stand on plazas and parks.
         for b in buildings {
             m.fill(b.min, b.max, 0);
+        }
+        // Landmarks' yards, walls and rooms.
+        for r in marks {
+            let v = match r.mark {
+                crate::parts::Mark::Open => 3,
+                crate::parts::Mark::Indoor => 4,
+                crate::parts::Mark::Blocked => 0,
+            };
+            m.fill(r.min, r.max, v);
         }
         for cz in 0..grid.h {
             for cx in 0..grid.w {
@@ -112,7 +131,7 @@ impl WalkMap {
                         m.crossings.push((j, ns));
                         m.crossings.len() - 1
                     });
-                    m.fill_if(a, b, 4 + id as u16, |v| v == 0);
+                    m.fill_if(a, b, CROSSING + id as u16, |v| v == 0);
                 }
             }
         }
@@ -157,8 +176,9 @@ impl WalkMap {
             1 => Walk::Sidewalk,
             2 => Walk::Path,
             3 => Walk::Open,
+            4 => Walk::Indoor,
             i => {
-                let (junction, ns) = self.crossings[(i - 4) as usize];
+                let (junction, ns) = self.crossings[(i - CROSSING) as usize];
                 Walk::Crossing { junction, ns }
             }
         }
@@ -173,12 +193,44 @@ impl WalkMap {
         self.get(t) != Walk::Blocked
     }
 
-    /// How many tiles of each kind: (sidewalk, crossing, path, open).
+    /// The centre of the walkable tile nearest `p` within `rings` tiles of it (ring by ring,
+    /// nearest centre first): where someone on a road or against a wall steps onto the map.
+    pub fn nearest_walkable(&self, p: Vec2, rings: i32) -> Option<Vec2> {
+        let c = self.tile_of(p);
+        if self.walkable(c) {
+            return Some(self.centre(c));
+        }
+        for r in 1..=rings {
+            let mut best: Option<(f32, Vec2)> = None;
+            for dz in -r..=r {
+                for dx in -r..=r {
+                    if dx.abs() != r && dz.abs() != r {
+                        continue;
+                    }
+                    let t = c + IVec2::new(dx, dz);
+                    if self.walkable(t) {
+                        let at = self.centre(t);
+                        let d = at.distance_squared(p);
+                        if best.is_none_or(|b| d < b.0) {
+                            best = Some((d, at));
+                        }
+                    }
+                }
+            }
+            if let Some((_, at)) = best {
+                return Some(at);
+            }
+        }
+        None
+    }
+
+    /// How many tiles of each kind: (sidewalk, crossing, path, open); indoor tiles are not
+    /// counted ([`WalkMap::indoor`]).
     pub fn counts(&self) -> (usize, usize, usize, usize) {
         let mut c = (0, 0, 0, 0);
         for &v in &self.tiles {
             match v {
-                0 => {}
+                0 | 4 => {}
                 1 => c.0 += 1,
                 2 => c.2 += 1,
                 3 => c.3 += 1,
@@ -186,6 +238,11 @@ impl WalkMap {
             }
         }
         c
+    }
+
+    /// How many tiles are indoors.
+    pub fn indoor(&self) -> usize {
+        self.tiles.iter().filter(|v| **v == 4).count()
     }
 
     /// A random tile of a kind `keep` accepts (`None` after many misses).
@@ -277,10 +334,12 @@ impl WalkMap {
                         {
                             continue;
                         }
-                        // Prefer sidewalks and crossings over open ground.
+                        // Prefer sidewalks and crossings over open ground, and both over
+                        // cutting through rooms.
                         let step = if dx != 0 && dz != 0 { 1.414 } else { 1.0 };
                         let k = match self.get(nt) {
                             Walk::Open => 1.4,
+                            Walk::Indoor => 2.5,
                             _ => 1.0,
                         };
                         let c = c0 + step * k;

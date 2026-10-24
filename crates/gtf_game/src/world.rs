@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Result, anyhow};
 use glam::{Vec2, Vec3};
 use pav_core::Color;
+use pav_core::entity::EntityId;
 use pav_core::present::{Blip, BlipIcon};
 use pav_core::region::StreamSettings;
 use pav_core::sim::Sim;
@@ -45,9 +46,10 @@ pub fn dev_city() -> Result<Arc<City>> {
     district("dev_district.toml", include_str!("../../../content/freeway/dev_district.toml"))
 }
 
-/// The district a scene mode plays in.
+/// The district a scene mode plays in (a mission scene: its mission's).
 pub fn city_for(mode: &str) -> Result<Arc<City>> {
-    if mode == "dev" { dev_city() } else { city() }
+    let mission = mode.strip_prefix("mission/").and_then(|k| crate::missions::get(k).ok());
+    if mode == "dev" || mission.is_some_and(|m| m.district == "dev") { dev_city() } else { city() }
 }
 
 /// Where the Proving Grounds start: by the main crossroads.
@@ -77,6 +79,7 @@ fn icon(name: &str) -> Option<(BlipIcon, &'static str)> {
         "vehicle" => (BlipIcon::Vehicle, "#c9d6df"),
         "heist" => (BlipIcon::Heist, "#ffc145"),
         "activity" => (BlipIcon::Activity, "#ff3e8a"),
+        "garage" => (BlipIcon::Garage, "#8fd3ff"),
         _ => return None,
     })
 }
@@ -102,6 +105,51 @@ pub fn blips(city: &City) -> Vec<Blip> {
             })
         })
         .collect()
+}
+
+/// The sidewalk outside landmark `key` (its door, near enough): the walkable tile nearest the
+/// landmark's middle, on the ground.
+pub fn door(city: &City, key: &str) -> Option<Vec3> {
+    let l = city.def.landmark.iter().find(|l| l.key == key)?;
+    let [[x0, z0], [x1, z1]] = l.cells;
+    let a = city.cell_centre(glam::IVec2::new(x0, z0));
+    let b = city.cell_centre(glam::IVec2::new(x1, z1));
+    let mid = (a + b) * 0.5;
+    let half = ((b - a).abs() * 0.5 + Vec2::splat(12.0)).max_element();
+    // Spiral out from the middle until a sidewalk or path tile turns up.
+    for r in 0..40 {
+        let rr = r as f32 * 2.0;
+        for k in 0..16 {
+            let ang = k as f32 / 16.0 * std::f32::consts::TAU;
+            let p = mid + Vec2::new(ang.cos(), ang.sin()) * (half * 0.5 + rr);
+            let t = city.walk.tile_of(p);
+            if matches!(city.walk.get(t), pav_world::walk::Walk::Sidewalk | pav_world::walk::Walk::Path) {
+                let c = city.walk.centre(t);
+                return Some(Vec3::new(c.x, city.ground_y(c), c.y));
+            }
+        }
+    }
+    None
+}
+
+/// The landmarks' Ferris wheels, turned by the game clock `t` (seconds): each rim within 700 m
+/// of the eye, its cars within 450 m (closer still they are the only moving part of it).
+pub fn wheels(city: &City, eye: Vec3, t: f32, out: &mut Vec<pav_core::present::AssetDraw>) {
+    for (i, w) in city.wheels.iter().enumerate() {
+        let d = w.hub.distance(eye);
+        if d > 700.0 {
+            continue;
+        }
+        let id = 0x5157_0000 + i as u32 * 256;
+        let (pos, rot) = w.rim_at(t as f64);
+        out.push(pav_core::present::AssetDraw { asset: w.rim.clone(), pos, rot, scale: 1.0, id, seed: 0 });
+        if d < 450.0 {
+            for (k, (pos, rot)) in w.cars_at(t as f64).into_iter().enumerate() {
+                let k = k as u32;
+                out.push(pav_core::present::AssetDraw { asset: w.car.clone(), pos, rot, scale: 1.0, id: id + 1 + k, seed: k });
+            }
+        }
+    }
 }
 
 /// Ground-plane position of a world point (the map's coordinates).
@@ -134,4 +182,43 @@ pub fn signal_lamps(city: &City, at: Vec3, t: f32, out: &mut Vec<pav_core::prese
             glow: Default::default(),
         });
     }
+}
+
+/// Marks `id` as population the game makes again (traffic, parked cars, people, the police):
+/// when its ground unloads it goes with it, rather than staying behind with nothing under it.
+pub fn ambient(sim: &mut Sim, id: EntityId) {
+    if let Some(e) = sim.state.entities.get_mut(id) {
+        e.unload = pav_core::entity::Unload::Despawn;
+    }
+}
+
+/// People of the population on foot where the ground is not loaded (they walked off the edge of
+/// the streamed area, or were left there) go, as the engine removes those standing on ground
+/// that unloads: otherwise they would fall through.
+pub fn sweep_unloaded(sim: &mut Sim) {
+    let gone: Vec<EntityId> = sim
+        .state
+        .entities
+        .iter()
+        .filter(|e| e.unload == pav_core::entity::Unload::Despawn && Some(e.id) != sim.state.player)
+        .filter(|e| e.character.as_ref().is_some_and(|c| c.riding.is_none()))
+        .filter(|e| !ground_loaded(sim, e.pos))
+        .map(|e| e.id)
+        .collect();
+    for id in gone {
+        sim.despawn(id);
+    }
+}
+
+/// Whether the ground around `p` is loaded (every streaming chunk within a car's length of it is
+/// active; none lies beyond the map's edge): only there do bodies with physics stand on it
+/// (elsewhere they fall through, or tip over the edge of what is loaded).
+pub fn ground_loaded(sim: &Sim, p: Vec3) -> bool {
+    use pav_core::statics::{CHUNK_SIZE, RegionKey};
+    const REACH: f32 = 3.0;
+    let (lo, hi) = sim.region_provider().map(|r| r.bounds()).unwrap_or((glam::IVec2::MIN, glam::IVec2::MAX));
+    let span = |a: f32, min: i32, max: i32| {
+        (((a - REACH) / CHUNK_SIZE).floor() as i32).max(min)..=(((a + REACH) / CHUNK_SIZE).floor() as i32).min(max)
+    };
+    span(p.x, lo.x, hi.x).all(|x| span(p.z, lo.y, hi.y).all(|z| sim.state.statics.is_active(RegionKey::Chunk(x, z))))
 }

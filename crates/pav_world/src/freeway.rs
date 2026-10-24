@@ -25,6 +25,9 @@ pub const HALF: f32 = 15.2;
 const SLAB: f32 = 1.25;
 /// Lane centres from the deck's centre line (m), inner to outer, on each side.
 pub const LANES: [f32; 3] = [3.2, 6.8, 10.4];
+/// A closed start's turnaround, this far (m) from the start: every lane loops back into its
+/// opposite number short of the barrier, through a gap in the median.
+pub const TURNAROUND: f32 = 27.0;
 /// A ramp's half width (barrier outsides) and how long it runs level beside the deck.
 pub const RAMP_HALF: f32 = 3.6;
 const MERGE: f32 = 40.0;
@@ -46,6 +49,11 @@ impl Path {
 
     pub fn is_empty(&self) -> bool {
         self.points.is_empty()
+    }
+
+    /// The first sample at least `station` metres along.
+    pub fn sample_at(&self, station: f32) -> usize {
+        self.station.iter().position(|&s| s >= station).unwrap_or(self.len().saturating_sub(1))
     }
 
     /// The point `u` metres to the right of sample `i`, `v` above the road.
@@ -204,7 +212,7 @@ fn barrier(prof: &mut Profile, edge: f32, sign: f32, gap: bool, c: &Paint) {
 
 /// The main deck's cross-section, going around: right road, right barrier, underside, left
 /// barrier, left road, median.
-fn deck_profile(gap_r: bool, gap_l: bool, dash: bool, c: &Paint) -> Profile {
+fn deck_profile(gap_r: bool, gap_l: bool, dash: bool, median: bool, c: &Paint) -> Profile {
     let dashc = if dash { c.white } else { c.asphalt };
     let mut p = Profile::new();
     road(&mut p, 0.4, &[(1.4, c.yellow), (5.0, dashc), (8.6, dashc), (12.2, c.white)], c.asphalt);
@@ -220,8 +228,12 @@ fn deck_profile(gap_r: bool, gap_l: bool, dash: bool, c: &Paint) -> Profile {
         }
     }
     road(&mut p, -14.6, &[(-12.2, c.white), (-8.6, dashc), (-5.0, dashc), (-1.4, c.yellow)], c.asphalt);
-    for (u, v) in [(-0.4, 0.0), (-0.3, 0.33), (-0.15, 0.85), (0.15, 0.85), (0.3, 0.33)] {
-        p.push((Vec2::new(u, v), c.concrete));
+    if median {
+        for (u, v) in [(-0.4, 0.0), (-0.3, 0.33), (-0.15, 0.85), (0.15, 0.85), (0.3, 0.33)] {
+            p.push((Vec2::new(u, v), c.concrete));
+        }
+    } else {
+        p.push((Vec2::new(-0.4, 0.0), c.asphalt));
     }
     p
 }
@@ -261,7 +273,7 @@ fn sweep(buf: &mut MeshBuf, path: &Path, i: usize, prof: &Profile) {
     }
 }
 
-fn decor(shape: Shape, pos: Vec3, rot: Quat, color: &str, solid: bool) -> Decor {
+pub(crate) fn decor(shape: Shape, pos: Vec3, rot: Quat, color: &str, solid: bool) -> Decor {
     Decor {
         shape,
         pos,
@@ -295,7 +307,7 @@ fn closure(path: &Path, i: usize, u0: f32, u1: f32, gap: Option<(f32, f32)>, out
 }
 
 /// A road-closed sign on two posts facing along `-t` (toward oncoming drivers).
-fn sign(at: Vec3, t: Vec3, text: &str, out: &mut Out) {
+pub(crate) fn sign(at: Vec3, t: Vec3, text: &str, out: &mut Out) {
     let rot = Quat::from_rotation_y(t.x.atan2(t.z));
     let side = rot * Vec3::X;
     for s in [-1.6f32, 1.6] {
@@ -376,8 +388,10 @@ fn one(def: &DistrictDef, grid: &Grid, terrain: &Terrain, f: &Freeway, out: &mut
         let m = (p.points[i] + p.points[i + 1]) * 0.5;
         chunk_key(Vec2::new(m.x, m.z))
     };
+    // A closed start turns its traffic round short of the barrier: no median there.
+    let turn = if f.closed_start { deck.sample_at(TURNAROUND) } else { 0 };
     for i in 0..n - 1 {
-        let prof = deck_profile(gap_r[i], gap_l[i], i % 4 == 0, &c);
+        let prof = deck_profile(gap_r[i], gap_l[i], i % 4 == 0, !f.closed_start || i > turn, &c);
         sweep(bufs.entry(key_of(&deck, i)).or_default(), &deck, i, &prof);
     }
     for r in &ramps {
@@ -462,7 +476,7 @@ fn one(def: &DistrictDef, grid: &Grid, terrain: &Terrain, f: &Freeway, out: &mut
         ));
         i += 10;
     }
-    for i in (8..n - 2).step_by(15) {
+    for i in ((turn + 6).max(8)..n - 2).step_by(15) {
         // A two-armed lamp on the median, arms over both carriageways.
         let at = deck.at(i, 0.0, 0.85);
         out.props.push(crate::dress::prop("LIB/gtf_city/street_lamp_double", at, crate::dress::yaw_to(deck.right[i]), 1.0, 0));

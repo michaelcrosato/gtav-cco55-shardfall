@@ -80,7 +80,8 @@ crates/
               assets.rs (`emit_asset`: a library asset drawn from game state each frame),
               interpolation between ticks, visual settings (ViewSettings)
   pav_audio   synthesized sound: oscillators/noise/envelopes/filters, event -> sound bank,
-              cpal output (optional), offline .wav rendering
+              loops with live parameters, radio music by genre and talk (music/), babble
+              voices (voice.rs), cpal output (optional), offline .wav rendering
   pav_tools   agent layer: tool registry + `pav` CLI (one-shot, REPL) + MCP stdio server +
               live bridge client (bridge.rs), and the motion importer (mocap/: glTF and FBX
               libraries, CMU's ASF/AMC, BVH; Rigify, Unreal, Mixamo/MotionBuilder, 100STYLE and
@@ -475,6 +476,32 @@ it sinks and the engine drowns.
   wheels and lamps. `pav_view::assets::emit_asset_tweaked` draws any asset with per-part
   turns, offsets and glow.
 
+## Radio and voices
+A station is data (`pav_core::radio::StationDef`: genre, tempo range, seed, slot length, title
+and artist words, DJ); `radio::at(st, clock)` gives the song on air and the seconds into its
+slot, live on the clock the game keeps. The game hands the host `present::Music` (station, song,
+offset, volume, muffle, `segments`) in its `AudioScene`; `pav_audio::music` renders it.
+- **Genres:** `synthwave` (gated snares, arpeggios, saw leads), `boombap` (swung sixteenths,
+  vinyl, electric piano, sub bass), `surf` (driving drums, driven square guitars through a
+  spring, tremolo picking), `cumbia` (güiro, accordions, bouncing bass), `smooth` (brushes and
+  ride, seventh chords, a filtered-saw sax with vibrato), `talk` (no songs). Songs have
+  sections (`music::sections`: intro, verses, choruses, a bridge in longer songs, outro); each
+  note is a function of the time since it began, so a song plays from any offset. After the
+  song the station's ident (its own motif and key, from its seed) and a quiet bed.
+- **Talk:** `radio::Segment { kind, start, seconds, voice, seed }` laid on a slot: `voice`
+  (babble), `chime` (the station's sounder), `jingle` (a short bed under an ad). The music dips
+  under a voice; a talk station plays a news bed under its voices. The game shows the words
+  (subtitles, cards); `radio::speech_seconds(text, rate)` says how long a line takes.
+- **Voices:** `radio::Voice { pitch, formant, rate, energy, radio }` → `pav_audio::voice::Babble`
+  (formants gliding between vowels, consonant noise, syllables in phrases with a falling pitch,
+  `radio` band-limits and drives it like a two-way set). As a loop: cues `voice` and
+  `voice.radio` (`pitch` 1 = 120 Hz, `param` liveliness), e.g. a police scanner.
+- **Mix:** `AudioScene.ducking` is the decibels the radio and the ambience beds duck by
+  (dialogue, menus); the mixer glides to it.
+- **Listening:** `audio_capture` renders a run's mix (events, loops, the radio and its talk) to
+  .wav; a game's CLI calls `pav_tools::tools::register_sounds(its cue file)` so its own cues
+  are in it. `music::render` and `voice::render` render a song or a line alone.
+
 ## Urban kit (pav_world)
 `pav_world` turns a district file (TOML) into an immutable `City` (`City::from_toml`, a pure
 function of the text: build once, share as `Arc<City>`). The city is a
@@ -490,13 +517,39 @@ the small developer district is `content/freeway/dev_district.toml`.
   (concrete, grass, sand, water, asphalt, dirt, plaza, brush), lot widths/depth/setback, building
   `styles` (tower_glass, tower_concrete, stucco_shop, apartment, bungalow, shed, warehouse),
   heights, street dressing densities (`props`), `level` (ground offset; -0.15 = road level).
+  `[zones.<name>.signs]` puts `names` on the sign bands of shops fronting the `roads` classes
+  listed (each from the shop's own random stream), a `neon` share of them outlined in a tube of
+  one of `neon_colors` that glows after dark.
 - **Landmarks** (`[[landmark]]`): a cell rectangle taken over by an `assembly` (tower_bank,
   police, hospital, open, paloma_sign, lookout...), with a map `blip`; `level = true` flattens the
-  terrain under it.
+  terrain under it. A landmark with parts is built from them instead (`parts.rs`; all in its own
+  frame: metres from its north-west corner, x east, z south, rectangles `[x0, z0, x1, z1]`,
+  heights `y` above its ground, colours `#rrggbb`, `MAT/name` or `MAT/name #rrggbb`): `ground`
+  (paving over the whole rectangle); `[[landmark.room]]` (walls round `rect` with `door`
+  openings and `glass` runs cut in, `inside` lining, `floor`, `roof`, `parapet`, ceiling
+  `lights`; its floor and doorways are `Indoor` walk tiles); `mass` (solid blocks, `cap`);
+  `wall` / `fence` (lines, or round a rectangle with `gate`s: `wall`, chain-link `fence`,
+  `rail`; `cover = true` makes low cover); `slab` (floors, decks on `piles`, canopies on
+  `columns`, `walk`, `glow`); `ramp` (a wedge cars drive up, `rise` toward a side, `y0` → `y1`);
+  `prop` (library props, rows of `count` × `step`, `cover`); `park` (lot places: `kind` names a
+  vehicle archetype, `always` keeps one there — `City::lots`, for the game to fill); `sign`
+  (wall words on an optional `board`, `neon` tube glowing at night, `pole`); `lamp` (glowing
+  panels that light the room); `wheel` (a Ferris wheel: legs and deck baked, rim and cars drawn
+  by the game turning from `City::wheels` — `WheelGeom::rim_at(t)`, `cars_at(t)`); `hull` (a
+  ship moored in the water); `ladder` (a climbable strip up a wall face). Glass panes are
+  invisible destructible colliders in visible frames (the renderer draws no transparency, so
+  the inside shows) with a frosted `band`; `breakable` runs are listed pane by pane in
+  `City::panes` (each box holds its pane, band, sill and mullions: a game breaks it with
+  `Sim::break_blocks_in(min, max, from)`, debris flying from `from`; explosions break any glass).
+  Gates and doors 2.6 m or wider keep the kerb outside free of parked cars.
+- **Spots** (`[[spot]]`: `name`, `at` in cell coordinates, `yaw` degrees from north, `y` metres
+  up on a deck or a roof): `City::spot`, `spot_height`; `landmark_at(p)` is the landmark with
+  parts whose cells hold a point.
 - **Terrain:** `terrain` rows (same size as the map: `0`-`9`, `a`-`z` × `terrain_step` m),
   smoothed into 4 m samples (`City::terrain`, `Terrain::height_at`); cells with height become
   meshes with exact colliders, roads on slopes are flat across. `City::ground_y(p)` is the
-  walkable height anywhere (road, lot, terrain, water surface).
+  walkable height anywhere (road, lot, terrain, water surface; in a landmark its paving, a deck
+  people walk on, a room's floor).
 - **Freeways** (`[[freeway]]`): a smoothed centre line in cell coordinates, deck `height`,
   `lanes` each way, `closed_start`, `broken_end`, and `[[freeway.ramps]]` (`from` beside the
   deck, `to` on a street stub, `kind` on/off). Deck and ramps are swept meshes with exact
@@ -504,15 +557,18 @@ the small developer district is `content/freeway/dev_district.toml`.
 - **Channels:** `channel` road cells running north-south become a sunken bed (6 m) with sloped
   walls; roads crossing them keep their own characters and become bridges; `[[channel_ramp]]`
   adds ramps down the walls. Channel roads never join street roads in road roles.
-- **Placements:** `[[jump]]` (a kicker wedge: `at` cell coords, `yaw`, length/width/height) and
-  `[[sign]]` (words on a post).
+- **Placements:** `[[jump]]` (a kicker wedge: `at` cell coords, `yaw`, length/width/height),
+  `[[sign]]` (words on a post) and `[[prop]]` (a library prop or a row of them, as a landmark's
+  `prop` but with `at` in cell coords, standing on the ground there).
 - **Lanes** (`City::lanes`, `lanes::LaneGraph`): every drivable lane as a polyline in its
   direction (right-hand traffic), connectors through junctions (straight/left/right, U-turns at
   dead ends), freeway and ramp lanes, channel lanes (closed to ambient traffic), lane-change
   neighbours, `Junction`s with `SignalPlan`s (`light(ns, t)`, `walk(ns, t)`: pure functions of
   time), `parking` spots, `nearest(p, filter)`, `route(from, to)` (A*) and `route_points`.
 - **Walking** (`City::walk`, `walk::WalkMap`): 2 m tiles (sidewalk, crossing tied to its
-  junction's signal, path, open ground), `at(p)`, `random(rng, filter)`, `path(from, to, budget)`.
+  junction's signal, path, open ground, indoor: landmarks' rooms, where people can be put and
+  walk but crowds neither spawn nor wander), `at(p)`, `random(rng, filter)`,
+  `path(from, to, budget)`.
 - **Cover** (`City::cover`): points along building walls facing walkable ground (high) and low
   walls and barriers (low), each with the direction away from its wall; `near(pos, threat, r)`.
 - Checks: `cargo test -p pav_world` (district builds and is deterministic, the open lane network

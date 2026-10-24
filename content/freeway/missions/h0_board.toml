@@ -1,0 +1,81 @@
+# h0 The Board (PLAN.md §5.7): the planning board in Mack's garage. The crew looks over what the
+# three setups found, and the player picks the approach for the Freeway Job — Loud or Smart — and
+# sees the cut. The pick is kept (`loud` or `smart`) for h1.
+
+key = "h0_board"
+title = "The Board"
+protagonist = "mack"
+text = "Thursday, nine sharp. Loud, or smart?"
+contact = "dez"
+blip = { letter = "H", at = "spot:mack_home" }
+start = "spot:mack_home"
+unlock = ["s1_rush_hour", "s2_heavy_metal", "s3_test_drive"]
+time = { at = "21:30", lock = true }
+weather = "clear"
+reward = { cash = 0, text = ["mack", "Get some sleep, both of you. Thursday, nine sharp. Wear something you can run in."] }
+
+[[spawn]]
+id = "dez_body"
+protagonist = "dez"
+at = "at:-188.5,-472.5"
+yaw = 270.0
+
+[[spawn]]
+id = "roxy_body"
+protagonist = "roxy"
+at = "at:-195.5,-472.5"
+yaw = 90.0
+
+[[step]]
+kind = "cutscene"
+shots = [
+  { anchor = "spot:mack_home", offset = [3.0, 1.8, 4.0], look = "spot:mack_home", look_offset = [0.0, 1.2, 0.0], fov = 42.0, seconds = 5.0 },
+  { anchor = "spot:mack_home", offset = [-4.0, 2.4, 2.0], to = [-2.5, 2.0, 3.5], look = "spot:mack_home", look_offset = [0.0, 1.0, 0.0], fov = 38.0, seconds = 6.0 },
+]
+lines = [
+  { who = "mack", text = "Every Thursday at nine, an Ironclad truck takes Route 404 south. Two guards. One route sheet.", seconds = 4.0 },
+  { who = "mack", text = "We have a city truck nobody looks at, and the fastest car in Paloma Bay.", seconds = 3.4 },
+  { who = "roxy", text = "And a plan?", seconds = 1.2 },
+  { who = "mack", text = "Two plans. That's what makes it a plan.", seconds = 2.4 },
+]
+
+[[step]]
+kind = "choose"
+options = [
+  { id = "loud", title = "Loud", lines = ["Block the truck on Route 404 with the City Works truck.", "Breach it, grab the bags, hold off the SWAT.", "Jump the broken ramp in the Okami Kaze, lose the police.", "Take $180,000 - Mack 40%, Dez 30%, Roxy 30%."] },
+  { id = "smart", title = "Smart", lines = ["Fake roadwork in the Flats sends the truck into a harbor warehouse.", "Swap the cargo for scrap while it waits.", "Drive out in hard hats with one star at most.", "Take $150,000 - Mack 40%, Dez 30%, Roxy 30%."] },
+]
+
+[[step]]
+kind = "branch"
+flag = "smart"
+to = "smart_cut"
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Loud. Seventy-two for me, fifty-four each for you. Minus ammunition.", seconds = 3.4 },
+  { who = "roxy", text = "Finally, a job with a soundtrack.", seconds = 2.0 },
+]
+on_start = [{ note = { title = "The cut: Loud", body = "Take $180,000. Mack $72,000, Dez $54,000, Roxy $54,000." } }]
+
+[[step]]
+kind = "branch"
+flag = "loud"
+to = "close"
+
+[[step]]
+kind = "dialogue"
+label = "smart_cut"
+lines = [
+  { who = "mack", text = "Smart. Sixty for me, forty-five each for you. Nobody gets shot.", seconds = 3.2 },
+  { who = "dez", text = "I like the version where nobody gets shot.", seconds = 2.0 },
+]
+on_start = [{ note = { title = "The cut: Smart", body = "Take $150,000. Mack $60,000, Dez $45,000, Roxy $45,000." } }]
+
+[[step]]
+kind = "dialogue"
+label = "close"
+lines = [
+  { who = "mack", text = "Thursday. Nine sharp. Don't be early, early is suspicious.", seconds = 2.8 },
+]

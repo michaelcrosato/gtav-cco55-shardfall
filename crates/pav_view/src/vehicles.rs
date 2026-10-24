@@ -28,6 +28,9 @@ fn hex(s: &str, fallback: &str) -> Vec3 {
 
 /// The wheel prop's authored radius (m): a wheel is drawn at its own radius over this.
 pub const WHEEL_PROP_RADIUS: f32 = 0.33;
+
+/// Beyond this far from the camera (m) a wheel is a plain dark cylinder, not the wheel prop.
+const WHEEL_DETAIL: f32 = 60.0;
 /// How far a door swings open (radians).
 const DOOR_SWING: f32 = 1.15;
 
@@ -289,8 +292,22 @@ pub fn emit_vehicle(scene: &mut Scene, o: &RenderObject, v: &VehicleView, style:
                     part(scene, Shape::Sphere { radius: 0.09 }, p, rot, Vec3::new(1.0, 0.12, 0.08) * 1.4, tail_glow);
                 }
             }
-            // Wheels: the wheel prop, else cylinders turned onto the axle with a hub.
+            // Wheels: the wheel prop, else cylinders turned onto the axle with a hub; far off
+            // (a few pixels), the cylinder alone.
+            let far = o.pos.distance(scene.camera.eye) > WHEEL_DETAIL;
             for w in &v.wheels {
+                if far {
+                    let q = rot * Quat::from_rotation_y(w.steer) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+                    part(
+                        scene,
+                        Shape::Cylinder { half_height: 0.13, radius: w.radius },
+                        world(o, v, w.center),
+                        q,
+                        Vec3::splat(0.08),
+                        0.0,
+                    );
+                    continue;
+                }
                 let drawn = match v.wheel_asset.as_deref() {
                     Some(name) => match emit_wheel_prop(scene, o, v, w, name) {
                         Ok(()) => true,

@@ -1,0 +1,20 @@
+{"format":2,"name":"flagpole","unit":"cm",
+"description":"A 9 m flagpole on a stepped concrete base flying the San Paloma flag: blue and gold bands with a white dove (+x).",
+"tags":["flag","pole","civic","plaza","city"],
+"category":"town",
+"materials":{
+"base":{"base":"MAT/gtf/concrete","color":"#c9c4b8"},
+"blue":{"color":"#1d4e89"},
+"gold":{"color":"#e8b23a"},
+"pole":{"base":"MAT/gtf/chrome","color":"#c9cdd1"},
+"white":{"color":"#f4f2ec"}},
+"parts":{
+"ball":{"type":"sphere","radius":9,"pos":[0,905,0],"color":"#e8b23a"},
+"base":{"type":"box","size":[90,20,90],"pos":[0,10,0],"mat":"base"},
+"flag":{"solid":false,"parts":{
+  "dove":{"type":"ellipsoid","size":[40,22,4],"pos":[80,830,0],"mat":"white","sway":"leaves"},
+  "low":{"type":"box","size":[180,40,2],"pos":[94,790,0],"mat":"blue","sway":"leaves"},
+  "mid":{"type":"box","size":[180,30,2],"pos":[94,825,0],"mat":"gold","sway":"leaves"},
+  "top":{"type":"box","size":[180,40,2],"pos":[94,860,0],"mat":"blue","sway":"leaves"}}},
+"pole":{"type":"cone","radius":7,"radius_end":4,"from":[0,40,0],"to":[0,900,0],"mat":"pole"},
+"step":{"type":"box","size":[60,20,60],"pos":[0,30,0],"mat":"base"}}}

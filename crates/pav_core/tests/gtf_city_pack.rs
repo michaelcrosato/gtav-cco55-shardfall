@@ -63,6 +63,40 @@ const PROPS: &[&str] = &[
     "beach_umbrella",
     "volleyball_net",
     "trash_can_beach",
+    // landmarks: shops and their interiors
+    "shop_counter",
+    "store_shelf",
+    "drinks_cooler",
+    "gas_pump",
+    "gun_rack",
+    "car_lift",
+    "tool_chest",
+    "tyre_stack",
+    "espresso_machine",
+    "cafe_table_set",
+    "diner_booth",
+    "bar_stool",
+    "office_desk",
+    "office_chair",
+    // landmarks: homes
+    "bed",
+    "sofa",
+    "tv_stand",
+    "kitchenette",
+    "picnic_table",
+    "bbq_grill",
+    // landmarks: yards and civic
+    "pallet_rack",
+    "pipe_stack",
+    "fuel_tank",
+    "floodlight_mast",
+    "boom_barrier",
+    "flagpole",
+    // landmarks: the pier
+    "food_stall",
+    "arcade_cabinet",
+    "big_wheel_rim",
+    "big_wheel_car",
 ];
 
 /// Parts the game drives by name (night lamps, signal states, text and ad panels).
@@ -99,6 +133,7 @@ const MATERIAL_NAMES: &[&str] = &[
     "tinted_glass",
     "painted_metal",
     "wood_boardwalk",
+    "chain_link",
 ];
 
 fn repo() -> &'static Path {

@@ -31,9 +31,17 @@ const CELL: f32 = 16.0;
 const SPACING: f32 = 1.5;
 
 impl Cover {
-    pub fn build(buildings: &[Building], walk: &WalkMap, channels: &[ChannelGeom], freeways: &[FreewayGeom]) -> Cover {
+    /// Cover along `buildings` and the `extra` boxes (low walls, big props) where they face
+    /// walkable ground, the channels' walls and the freeways' barriers.
+    pub fn build(
+        buildings: &[Building],
+        extra: &[Building],
+        walk: &WalkMap,
+        channels: &[ChannelGeom],
+        freeways: &[FreewayGeom],
+    ) -> Cover {
         let mut c = Cover::default();
-        for b in buildings {
+        for b in buildings.iter().chain(extra) {
             let edges = [
                 (Vec2::new(b.min.x, b.min.y), Vec2::new(b.max.x, b.min.y), Vec2::NEG_Y),
                 (Vec2::new(b.max.x, b.min.y), Vec2::new(b.max.x, b.max.y), Vec2::X),
@@ -42,7 +50,7 @@ impl Cover {
             ];
             for (a, e, n) in edges {
                 let len = a.distance(e);
-                if len < 2.5 {
+                if len < 1.6 {
                     continue;
                 }
                 let mut t = 0.9;
@@ -85,6 +93,28 @@ impl Cover {
             c.index.entry(k).or_default().push(i as u32);
         }
         c
+    }
+
+    /// Every cover point within `radius` of `pos` (on about its level), nearest first, whichever
+    /// way it faces: a corner shields from threats along the wall it ends, which the facing test
+    /// of [`Cover::near`] does not see (callers judge those by lines of sight).
+    pub fn within(&self, pos: Vec3, radius: f32) -> Vec<CoverPoint> {
+        let r = (radius / CELL).ceil() as i32;
+        let (cx, cz) = ((pos.x / CELL).floor() as i32, (pos.z / CELL).floor() as i32);
+        let mut out: Vec<(f32, CoverPoint)> = Vec::new();
+        for z in cz - r..=cz + r {
+            for x in cx - r..=cx + r {
+                for &i in self.index.get(&(x, z)).map(|v| v.as_slice()).unwrap_or(&[]) {
+                    let p = self.points[i as usize];
+                    let d = p.pos.distance(pos);
+                    if d <= radius && (p.pos.y - pos.y).abs() < 3.0 {
+                        out.push((d, p));
+                    }
+                }
+            }
+        }
+        out.sort_by(|a, b| a.0.total_cmp(&b.0));
+        out.into_iter().map(|(_, p)| p).collect()
     }
 
     /// Cover points within `radius` of `pos` that shield from `threat` (the wall between),

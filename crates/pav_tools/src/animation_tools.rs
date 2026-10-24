@@ -280,11 +280,15 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let name = path.file_name().ok_or_else(|| anyhow!("{} has no file name", path.display()))?.to_string_lossy();
     let temp = parent.join(format!(".{name}.{}.{id}.tmp", std::process::id()));
     let result = (|| -> Result<()> {
-        let mut file =
-            OpenOptions::new().write(true).create_new(true).open(&temp).with_context(|| format!("create {}", temp.display()))?;
-        file.write_all(bytes).with_context(|| format!("write {}", temp.display()))?;
-        file.sync_all().with_context(|| format!("flush {}", temp.display()))?;
-        drop(file);
+        {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temp)
+                .with_context(|| format!("create {}", temp.display()))?;
+            file.write_all(bytes).with_context(|| format!("write {}", temp.display()))?;
+            file.sync_all().with_context(|| format!("flush {}", temp.display()))?;
+        }
         std::fs::rename(&temp, path).with_context(|| format!("replace {}", path.display()))?;
         Ok(())
     })();

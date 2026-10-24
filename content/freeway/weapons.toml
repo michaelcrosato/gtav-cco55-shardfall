@@ -2,7 +2,8 @@
 # Guns are hitscan: `damage` per pellet, `rpm` rounds a minute, `spread` degrees at rest, `bloom`
 # degrees each shot adds (it recovers), `recoil` radians of camera kick, `reload` seconds, `head`
 # the head-shot multiplier, `knockback` m/s given to people hit. Melee weapons play `combo` clips,
-# one a swing, and hit within `range` metres.
+# one a swing, and hit within `range` metres. `asset` is the prop in the hand (LIB/gtf_weapons);
+# `driveby` weapons fire from a vehicle's window.
 
 [[weapon]]
 id = "fists"
@@ -17,7 +18,9 @@ knockback = 2.5
 
 [[weapon]]
 id = "p9"
+asset = "LIB/gtf_weapons/p9_pistol"
 name = "P9 Pistol"
+driveby = true
 icon = "pistol"
 kind = "gun"
 damage = 26.0
@@ -35,7 +38,9 @@ cue = "gun.pistol"
 
 [[weapon]]
 id = "buzz"
+asset = "LIB/gtf_weapons/buzz_smg"
 name = "Buzz SMG"
+driveby = true
 icon = "smg"
 kind = "gun"
 damage = 18.0
@@ -54,6 +59,7 @@ cue = "gun.smg"
 
 [[weapon]]
 id = "pump"
+asset = "LIB/gtf_weapons/pump_shotgun"
 name = "Pump Shotgun"
 icon = "shotgun"
 kind = "gun"
@@ -73,6 +79,7 @@ cue = "gun.shotgun"
 
 [[weapon]]
 id = "c4r"
+asset = "LIB/gtf_weapons/c4r_carbine"
 name = "C-4R Carbine"
 icon = "rifle"
 kind = "gun"
@@ -92,6 +99,7 @@ cue = "gun.rifle"
 
 [[weapon]]
 id = "marksman"
+asset = "LIB/gtf_weapons/c4r_carbine"
 name = "Marksman Rifle"
 icon = "sniper"
 kind = "gun"
@@ -110,6 +118,7 @@ cue = "gun.sniper"
 
 [[weapon]]
 id = "grenade"
+asset = "LIB/gtf_weapons/grenade"
 name = "Grenades"
 icon = "grenade"
 kind = "thrown"

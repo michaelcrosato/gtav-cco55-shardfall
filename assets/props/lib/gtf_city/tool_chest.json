@@ -1,0 +1,12 @@
+{"format":2,"name":"tool_chest","unit":"cm",
+"description":"A red rolling tool chest, 1.1 m: drawers with dark handles on the front (+z), a black top, four castors.",
+"tags":["tool","chest","garage","workshop","mechanic"],
+"category":"container",
+"materials":{
+"dark":{"color":"#2b2f33"},
+"red":{"base":"MAT/gtf/painted_metal","color":"#c0392b"}},
+"parts":{
+"body":{"type":"box","size":[110,95,50],"pos":[0,55.5,0],"mat":"red"},
+"castor":{"type":"cylinder","radius":4,"height":4,"pos":[48,4,20],"axis":"x","mat":"dark","mirror":["x","z"]},
+"handle":{"type":"box","size":[86,3,3],"pos":[0,60,26.5],"mat":"dark","array":{"count":7,"step":[0,12.5,0]}},
+"top":{"type":"box","size":[112,4,52],"pos":[0,105,0],"mat":"dark"}}}

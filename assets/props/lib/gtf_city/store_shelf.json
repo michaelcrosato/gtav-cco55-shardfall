@@ -1,0 +1,17 @@
+{"format":2,"name":"store_shelf","unit":"cm",
+"description":"A 2.4 m double-sided store shelf: white uprights, four shelves a side stocked with bright packets.",
+"tags":["shelf","store","grocery","shop","products"],
+"category":"furniture",
+"materials":{
+"c1":{"color":"#d63c2f"},
+"c2":{"color":"#f2c230"},
+"c3":{"color":"#2f7fc1"},
+"c4":{"color":"#3fa45b"},
+"c5":{"color":"#f07f2e"},
+"metal":{"color":"#e4e4df"}},
+"parts":{
+"base":{"type":"box","size":[240,12,88],"pos":[0,6,0],"mat":"metal"},
+"end":{"type":"box","size":[3,160,88],"pos":[118.5,80,0],"mat":"metal","mirror":"x"},
+"goods":{"type":"box","size":[16,22,26],"pos":[0,105,26],"mirror":"z","grid":{"count":[12,4],"step":[19,35],"plane":"xy","cycle":["c1","c2","c3","c4","c5"]}},
+"shelf":{"type":"box","size":[234,2.5,40],"pos":[0,92.5,22],"mat":"metal","mirror":"z","array":{"count":4,"step":[0,35,0]}},
+"spine":{"type":"box","size":[240,150,4],"pos":[0,87,0],"mat":"metal"}}}
