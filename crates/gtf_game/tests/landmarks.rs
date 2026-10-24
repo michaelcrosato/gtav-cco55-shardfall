@@ -138,3 +138,61 @@ fn dez_saves_at_his_bed() {
     steps(&mut sim, 5, &InputFrame::default());
     assert_eq!(game(&sim).counter, None, "not on the doorstep");
 }
+
+/// The north-west corner of landmark `key`'s cells (its parts' frame).
+fn corner(city: &pav_world::City, key: &str) -> Vec2 {
+    let l = city.def.landmark.iter().find(|l| l.key == key).unwrap();
+    city.cell_centre(glam::IVec2::new(l.cells[0][0], l.cells[0][1])) - Vec2::splat(city.grid.cell * 0.5)
+}
+
+/// Drives `car` with the throttle at `r2` until `done` says so (or `secs` pass): where it got.
+fn drive_until(sim: &mut Sim, car: EntityId, r2: f32, secs: f32, done: impl Fn(Vec3) -> bool) -> Vec3 {
+    for _ in 0..(secs * 60.0) as usize {
+        sim.step(&throttle(r2));
+        let at = sim.state.entities.get(car).unwrap().pos;
+        if done(at) {
+            return at;
+        }
+    }
+    sim.state.entities.get(car).unwrap().pos
+}
+
+#[test]
+fn a_car_drives_up_the_garage_ramp_to_the_first_deck() {
+    let mut sim = roam();
+    let city = gtf_game::world::city().unwrap();
+    // The east side's first ramp climbs north from the ground floor to the first deck (3.4 m).
+    let o = corner(&city, "garage");
+    let start = o + Vec2::new(67.5, 59.0);
+    let ground = city.ground_y(start);
+    put(&mut sim, Vec3::new(start.x - 4.0, ground, start.y));
+    let north = std::f32::consts::PI;
+    let car =
+        gtf_game::vehicles::spawn(&mut sim, "fenwick_commuter", Vec3::new(start.x, ground + 0.05, start.y), north, None).unwrap();
+    steps(&mut sim, 30, &InputFrame::default());
+    seat(&mut sim, car);
+    let at = drive_until(&mut sim, car, 0.55, 10.0, |p| p.z < o.y + 16.0);
+    eprintln!("from {start} at {ground:.2} m to {at}");
+    assert!(at.z < o.y + 16.0, "it went up the ramp and on along the deck: {at}");
+    assert!(at.y > ground + 3.2, "on the first deck: {at}");
+}
+
+#[test]
+fn the_armoured_truck_drives_into_the_harbor_warehouse() {
+    let mut sim = roam();
+    let city = gtf_game::world::city().unwrap();
+    let (door, _) = city.spot("warehouse_door").unwrap();
+    let (bay, _) = city.spot("warehouse_bay").unwrap();
+    // From the dock road, south through the truck door into the bay.
+    let start = Vec2::new(door.x, door.y - 9.0);
+    let ground = city.ground_y(start);
+    put(&mut sim, Vec3::new(start.x + 5.0, ground, start.y));
+    let truck =
+        gtf_game::vehicles::spawn(&mut sim, "ironclad_armored", Vec3::new(start.x, ground + 0.05, start.y), 0.0, None).unwrap();
+    steps(&mut sim, 30, &InputFrame::default());
+    seat(&mut sim, truck);
+    let at = drive_until(&mut sim, truck, 0.5, 12.0, |p| p.z > bay.y);
+    eprintln!("the truck from {start} to {at}; the bay at {bay}");
+    assert!(at.z > bay.y, "in the bay: {at}");
+    assert!((at.x - bay.x).abs() < 2.0, "straight through the door: {at}");
+}
