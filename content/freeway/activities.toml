@@ -4,6 +4,65 @@
 # events (`[[event]]`). Each finished one counts toward completion.
 
 # ---- Stunt jumps ----
+# Through the `gate` (world x, z: a ramp's lip, a road's broken end) at `speed` m/s or more,
+# heading `heading` (degrees from north), then airborne; down inside `land` (radius `radius`)
+# is the bonus. The ramps are `[[jump]]` wedges in district.toml. `runup` is where a run at it
+# starts (bots, the attract mode, tests).
+
+[[jump]]
+id = "ditch"
+name = "The Ditch Jump"
+gate = [212.5, 211.0]
+heading = 180.0
+speed = 16.0
+land = [212.5, 250.0]
+radius = 20.0
+reward = 500
+runup = [212.5, -6.0, 100.0]
+
+[[jump]]
+id = "freeway_gap"
+name = "The Freeway Gap"
+gate = [110.0, 361.0]
+heading = 270.0
+speed = 18.0
+land = [62.0, 361.0]
+radius = 30.0
+reward = 1000
+runup = [185.0, 11.0, 360.0]
+
+[[jump]]
+id = "pier"
+name = "The Pier Ramp"
+gate = [-194.0, 330.0]
+heading = 90.0
+speed = 20.0
+land = [-140.0, 330.0]
+radius = 16.0
+reward = 500
+runup = [-330.0, 0.0, 330.0]
+
+[[jump]]
+id = "hills"
+name = "The Hills Jump"
+gate = [96.0, -582.2]
+heading = 90.0
+speed = 20.0
+land = [150.0, -582.0]
+radius = 18.0
+reward = 750
+runup = [-60.0, 27.8, -582.2]
+
+[[jump]]
+id = "containers"
+name = "The Harbor Container Ramp"
+gate = [-36.0, 360.0]
+heading = 270.0
+speed = 20.0
+land = [-82.0, 362.0]
+radius = 20.0
+reward = 750
+runup = [55.0, 0.0, 360.0]
 
 # ---- The Lost Shields ----
 

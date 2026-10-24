@@ -3212,3 +3212,66 @@ yaw = 90.0
 name = "h1_lockup"
 at = [37.6, 45.7]
 yaw = 90.0
+
+# ---- Stunt jump ramps (activities.toml [[jump]]): wedges rising along `yaw`, the lip at the
+# far end. The Freeway Gap needs none: the Harbor Spur's broken end is the ramp.
+
+# The Ditch: on the channel bed's east half (x 209-216, east of the trickle; clear of the
+# southbound lane), southbound.
+[[jump]]
+at = [45.28125, 52.8125]
+yaw = 180.0
+height = 2.5
+name = "The Ditch Jump"
+
+# The pier: on the sand west of the pier's approach walk, eastbound over it.
+[[jump]]
+at = [19.5, 60.625]
+yaw = 90.0
+height = 3.0
+name = "The Pier Ramp"
+
+# The hills: just past the ridge road's dead end, eastbound onto the plateau.
+[[jump]]
+at = [37.625, 3.6125]
+yaw = 90.0
+height = 2.5
+name = "The Hills Jump"
+
+# The harbor: on the sand at the harbor road's end, westbound along the shore.
+[[jump]]
+at = [30.125, 62.5]
+yaw = 270.0
+height = 3.0
+name = "The Harbor Container Ramp"
+
+# Its containers: the yard it is run up through (stacks either side of the run-up, west of the
+# harbor road's end) and the wall of two end to end across the flight, 14 m past the lip.
+[[prop]]
+asset = "LIB/gtf_city/shipping_container:orange"
+at = [30.94375, 62.09375]
+count = 2
+step = [12.4, 0]
+
+[[prop]]
+asset = "LIB/gtf_city/shipping_container:blue"
+at = [30.94375, 62.09375]
+y = 2.59
+
+[[prop]]
+asset = "LIB/gtf_city/shipping_container:green"
+at = [30.94375, 62.90625]
+count = 2
+step = [12.4, 0]
+
+[[prop]]
+asset = "LIB/gtf_city/shipping_container:grey"
+at = [31.71875, 62.90625]
+y = 2.59
+
+[[prop]]
+asset = "LIB/gtf_city/shipping_container"
+at = [28.875, 62.115625]
+yaw = 90.0
+count = 2
+step = [0, 12.3]

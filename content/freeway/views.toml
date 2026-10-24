@@ -228,3 +228,32 @@ about = "Sunset Row's shop signs after dark"
 eye = [-352.0, 2.0, -249.0]
 target = [-305.0, 4.5, -224.0]
 time = "21:45"
+
+# The stunt jumps (M7), each from beside its run-up toward the landing.
+[[view]]
+name = "jump_ditch"
+about = "The Ditch Jump from its landing: the kicker in the channel bed, coming this way"
+eye = [205.0, -2.0, 258.0]
+target = [212.0, -4.5, 208.0]
+time = "15:00"
+
+[[view]]
+name = "jump_pier"
+about = "The Pier Ramp on the sand west of the pier's approach, the landing over the walk"
+eye = [-232.0, 5.0, 322.0]
+target = [-150.0, 1.0, 332.0]
+time = "17:30"
+
+[[view]]
+name = "jump_hills"
+about = "The Hills Jump off the ridge road's dead end, over the plateau"
+eye = [58.0, 31.5, -587.0]
+target = [140.0, 26.0, -582.0]
+time = "16:00"
+
+[[view]]
+name = "jump_containers"
+about = "The Harbor Container Ramp: through the container yard, over the wall of containers"
+eye = [22.0, 9.0, 360.0]
+target = [-60.0, 1.0, 362.0]
+time = "16:30"
