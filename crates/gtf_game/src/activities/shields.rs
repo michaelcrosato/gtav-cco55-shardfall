@@ -5,6 +5,7 @@
 
 use glam::{Quat, Vec2, Vec3};
 use pav_core::Color;
+use pav_core::entity::EntityId;
 use pav_core::frame::SimEvent;
 use pav_core::present::{DrawList, PrimDraw};
 use pav_core::shape::{Look, Shape};
@@ -20,6 +21,9 @@ const TAKE_CAR: f32 = 4.0;
 const DRAWN: f32 = 150.0;
 /// All of them: the cash.
 pub const ALL_BONUS: i64 = 10_000;
+/// The gold Okami Kaze's paint, and how near Dez's place it is put out at the kerb (m).
+pub const GOLD: &str = "#d4a937";
+const GOLD_NEAR: f32 = 150.0;
 
 /// A shield (`[[shield]]` in `activities.toml`): where its post stands (world metres, the
 /// ground or roof it is on) and its card.
@@ -46,6 +50,9 @@ impl ShieldDef {
 pub struct ShieldState {
     /// The all-fifteen reward was paid.
     pub rewarded: bool,
+    /// The gold Kaze put out at Dez's place (until it is gone: wrecked, or driven off and
+    /// left behind with the streets it was on).
+    pub gold: Option<EntityId>,
 }
 
 impl Freeway {
@@ -74,6 +81,46 @@ impl Freeway {
                 "dez",
                 "Fifteen shields. I looked up what they're worth: nothing. I had them gold-plate a Kaze instead. It's at my place. - D",
             );
+        }
+        if self.activities.shields.rewarded {
+            self.gold_kaze(sim);
+        }
+    }
+
+    /// The gold Kaze waits at the kerb nearest Dez's door: put there (out of sight) whenever
+    /// the player is in the neighbourhood and it is not around.
+    fn gold_kaze(&mut self, sim: &mut Sim) {
+        let here = |id: EntityId| sim.state.entities.get(id).is_some_and(|e| e.vehicle.is_some() && e.name == "okami_kaze");
+        if self.activities.shields.gold.is_some_and(here) {
+            return;
+        }
+        let Some((door, _)) = self.city.as_ref().and_then(|c| c.spot("dez_home")) else { return };
+        let me = Self::feet(sim);
+        if Vec2::new(me.x - door.x, me.z - door.y).length() > GOLD_NEAR {
+            return;
+        }
+        let Some(city) = self.city.clone() else { return };
+        let cam = self.camera(sim);
+        let free = |p: Vec3| !sim.state.entities.iter().any(|e| e.vehicle.is_some() && e.pos.distance(p) < 4.0);
+        let Some(spot) = city
+            .lanes
+            .parking
+            .iter()
+            .filter(|s| free(s.pos) && crate::world::ground_loaded(sim, s.pos))
+            .min_by(|a, b| Vec2::new(a.pos.x, a.pos.z).distance(door).total_cmp(&Vec2::new(b.pos.x, b.pos.z).distance(door)))
+        else {
+            return;
+        };
+        if crate::traffic::seen(&cam, spot.pos) {
+            return;
+        }
+        if let Ok(car) = crate::vehicles::spawn(sim, "okami_kaze", spot.pos + Vec3::Y * 0.05, spot.dir.x.atan2(spot.dir.z), None)
+        {
+            if let Some(v) = sim.state.entities.get_mut(car).and_then(|e| e.vehicle.as_deref_mut()) {
+                v.def.color = GOLD.into();
+            }
+            crate::world::ambient(sim, car);
+            self.activities.shields.gold = Some(car);
         }
     }
 
