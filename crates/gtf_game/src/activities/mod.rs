@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Result, anyhow};
 use pav_core::InputFrame;
 use pav_core::frame::SimEvent;
+use pav_core::present::{DrawList, UiModel};
 use pav_core::sim::Sim;
 use serde::{Deserialize, Serialize};
 
@@ -78,9 +79,15 @@ pub struct Activities {
 }
 
 impl Freeway {
-    /// The activities' tick, while playing (not in a mission: a mission's world is its own).
+    /// Whether the activities run: in Paloma Bay, not in a mission (a mission's world is its
+    /// own) nor the Proving Grounds (the places are Paloma Bay's).
+    fn activities_on(&self) -> bool {
+        self.missions.run.is_none() && self.mode != "dev"
+    }
+
+    /// The activities' tick, while playing.
     pub(crate) fn activities_tick(&mut self, sim: &mut Sim, input: &InputFrame, dt: f32, real: f32, events: &mut Vec<SimEvent>) {
-        if self.missions.run.is_some() {
+        if !self.activities_on() {
             return;
         }
         let Ok(d) = def() else { return };
@@ -88,6 +95,15 @@ impl Freeway {
         self.shields_tick(sim, &d, dt, events);
         self.vigilante_tick(sim, &d, input, dt, events);
         self.events_tick(sim, &d, dt, events);
+    }
+
+    /// What the activities show: the stunt banner, the shields.
+    pub(crate) fn activities_ui(&self, sim: &Sim, ui: &mut UiModel, draw: &mut DrawList) {
+        if !self.activities_on() {
+            return;
+        }
+        self.jumps_ui(ui);
+        self.shields_draw(sim, draw);
     }
 
     /// An activity finished (the first time it is new for completion).

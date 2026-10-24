@@ -522,6 +522,8 @@ impl Freeway {
                 }
                 // An activity or collectible counted as done (`jump:<id>`, `shield:<id>`, ...): tests.
                 (Some("activity_done"), Some(id)) => self.activity_done(id),
+                // A run at a stunt jump for the bot, from its run-up in an Okami Kaze.
+                (Some("stunt"), Some(id)) => self.stunt_cmd(id),
                 // The autopilot's destination: `pilot_goal <x> <z> [desire]`, `pilot_goal off`.
                 (Some("pilot_goal"), Some("off")) => self.traffic.pilot_goal(None, 1.0),
                 (Some("pilot_goal"), Some(x)) => {
@@ -945,6 +947,9 @@ impl Freeway {
             c.near = 0.1;
             return c;
         }
+        if let Some(c) = self.stunt_camera(sim) {
+            return c;
+        }
         match self.drive.vehicle().and_then(|car| ride(sim, car)) {
             Some(r) => self.chase.intent(&r),
             None => self.cam.intent(),
@@ -1216,6 +1221,12 @@ impl Game for Freeway {
             "health": round(self.combat.health),
             "money": self.money,
             "mission": self.mission_status(),
+            "activities": json!({
+                "done": self.activities.done.len(),
+                "flight": self.activities.jumps.flight.as_ref().map(|f| if f.air { "air" } else { "gate" }),
+                "stunt_run": self.activities.jumps.run.is_some(),
+                "completion": round(self.completion() * 100.0),
+            }),
             "drive": match self.drive.phase {
                 drive::Phase::Foot => "foot",
                 drive::Phase::Enter { .. } => "entering",
@@ -1252,6 +1263,7 @@ impl Game for Freeway {
             }
         }
         self.bot.frame(&mut f);
+        self.stunt_frame(_sim, &mut f);
         f
     }
 
@@ -1260,6 +1272,8 @@ impl Game for Freeway {
             fate::SLOW
         } else if (self.wheel_open() || self.switch_wheel_open()) && self.settings.wheel_slowmo {
             0.25
+        } else if self.stunt_slowmo() {
+            activities::jumps::SLOW
         } else {
             self.ability_time_scale()
         }
@@ -1553,6 +1567,7 @@ impl Game for Freeway {
         if page == Page::Play {
             draw.ribbons.extend(self.gps.ribbon(feet, 160.0));
             self.mission_ui(sim, &mut ui, &mut draw);
+            self.activities_ui(sim, &mut ui, &mut draw);
             // A mission's subtitled lines duck the radio; with none, the scanner's words, else
             // the talk station's.
             dialogue = ui.subtitle.is_some();
