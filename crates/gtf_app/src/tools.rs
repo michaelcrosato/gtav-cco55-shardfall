@@ -521,6 +521,7 @@ fn t_citymap(_s: &mut Session, a: &Args) -> Result<Output> {
                     Walk::Crossing { .. } => [255, 150, 40, 170],
                     Walk::Path => [210, 180, 120, 90],
                     Walk::Open => [120, 200, 120, 50],
+                    Walk::Indoor => [120, 170, 255, 120],
                     Walk::Blocked => continue,
                 };
                 let ctr = wm.centre(t);
