@@ -557,8 +557,9 @@ the small developer district is `content/freeway/dev_district.toml`.
 - **Channels:** `channel` road cells running north-south become a sunken bed (6 m) with sloped
   walls; roads crossing them keep their own characters and become bridges; `[[channel_ramp]]`
   adds ramps down the walls. Channel roads never join street roads in road roles.
-- **Placements:** `[[jump]]` (a kicker wedge: `at` cell coords, `yaw`, length/width/height) and
-  `[[sign]]` (words on a post).
+- **Placements:** `[[jump]]` (a kicker wedge: `at` cell coords, `yaw`, length/width/height),
+  `[[sign]]` (words on a post) and `[[prop]]` (a library prop or a row of them, as a landmark's
+  `prop` but with `at` in cell coords, standing on the ground there).
 - **Lanes** (`City::lanes`, `lanes::LaneGraph`): every drivable lane as a polyline in its
   direction (right-hand traffic), connectors through junctions (straight/left/right, U-turns at
   dead ends), freeway and ramp lanes, channel lanes (closed to ambient traffic), lane-change

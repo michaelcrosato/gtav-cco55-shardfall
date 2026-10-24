@@ -30,11 +30,15 @@ pub struct DistrictDef {
     pub freeway: Vec<Freeway>,
     #[serde(default)]
     pub channel_ramp: Vec<ChannelRamp>,
-    /// Stunt ramps and signs placed by hand.
+    /// Stunt ramps, signs and props placed by hand.
     #[serde(default)]
     pub jump: Vec<Jump>,
     #[serde(default)]
     pub sign: Vec<Sign>,
+    /// Library props standing on their own: `at` is in map cells (fractions allowed), on the
+    /// ground there; `y` above it and a row's `step` are metres.
+    #[serde(default)]
+    pub prop: Vec<PropPart>,
     /// Named points for games: where scripted scenes begin, safehouse doors, spots where people
     /// pass the time.
     #[serde(default)]

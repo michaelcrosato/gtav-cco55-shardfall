@@ -199,6 +199,9 @@ pub fn text_width(text: &str, size: f32) -> f32 {
 
 /// Checks a district's landmark parts before building: colours, rectangles, assets.
 pub(crate) fn check(def: &DistrictDef) -> Result<(), String> {
+    for p in &def.prop {
+        pav_core::props::resolve_parts(&p.asset, p.seed).map_err(|e| format!("prop {}: {e}", p.asset))?;
+    }
     let color = |key: &str, what: &str, s: &str| -> Result<(), String> {
         if surface_ok(s) {
             Ok(())
@@ -893,6 +896,13 @@ fn prop(f: &Frame, p: &PropPart, out: &mut Out) {
         }
         out.props.push(sp);
     }
+}
+
+/// A prop the district file places on its own (`[[prop]]`), at `origin` (its `at`) on ground
+/// `base` high.
+pub(crate) fn loose_prop(p: &PropPart, origin: Vec2, base: f32, zone: u16, out: &mut Out) {
+    let f = Frame { o: origin, base, zone, index: u16::MAX, open: Mark::Open };
+    prop(&f, &PropPart { at: [0.0, 0.0], ..p.clone() }, out);
 }
 
 fn park(f: &Frame, p: &Park, out: &mut Out) {
