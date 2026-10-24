@@ -714,7 +714,7 @@ pub fn music_target(scene: &pav_core::present::AudioScene) -> Option<music::Musi
         offset: m.offset,
         volume: m.volume,
         muffle: m.muffle,
-        segments: Vec::new(),
+        segments: m.segments.clone(),
     })
 }
 

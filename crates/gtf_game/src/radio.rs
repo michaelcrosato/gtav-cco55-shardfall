@@ -99,7 +99,7 @@ impl Radio {
     /// The music intent for the host at game time `t`.
     pub fn music(&self, def: &RadioDef, t: f64, volume: f32) -> Option<Music> {
         let (st, song, offset) = self.now(def, t)?;
-        Some(Music { station: st.id.clone(), song, offset, volume, muffle: 0.0 })
+        Some(Music { station: st.id.clone(), song, offset, volume, ..Default::default() })
     }
 
     /// The dial card at game time `t`: ("FREEWAY FM 104.04", "Freeway Dreams — The Tarmacs").

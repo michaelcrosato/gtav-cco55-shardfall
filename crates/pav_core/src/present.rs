@@ -1079,8 +1079,8 @@ pub struct LoopSource {
 }
 
 /// The radio: which station, which song and where in it (stations are live: the sim keeps
-/// their clocks).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// their clocks), and the talk on its air.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Music {
     pub station: String,
     /// The song (`pav_core::radio::song`): what the host renders and the HUD names.
@@ -1091,6 +1091,11 @@ pub struct Music {
     /// 0..1: heard from outside the car (low-passed).
     #[serde(default)]
     pub muffle: f32,
+    /// Talk on this slot's air (`pav_core::radio::Segment`): a talk station's news, ads and
+    /// reports, a DJ between songs. The host renders their voices, sounder and jingles; the game
+    /// shows the words.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<crate::radio::Segment>,
 }
 
 /// The map picture: RGBA rows, top row north.

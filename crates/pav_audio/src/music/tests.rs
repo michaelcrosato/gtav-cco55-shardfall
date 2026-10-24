@@ -319,6 +319,7 @@ fn a_game_run_plays_its_radio_and_switches_stations() {
             offset,
             volume: 0.8,
             muffle: 0.0,
+            segments: Vec::new(),
         }),
         master: 1.0,
         effects: 1.0,
@@ -334,6 +335,30 @@ fn a_game_run_plays_its_radio_and_switches_stations() {
     let third = out.len() / 3;
     assert!(rms(&out[..third]) > 0.02 && rms(&out[third..2 * third]) > 0.02, "the radio plays on both stations");
     assert!(rms(&out[out.len() - 4000..]) < 0.01, "and fades out when switched off");
+}
+
+#[test]
+fn talk_rides_on_the_scene_into_the_mix() {
+    let t = talk_station();
+    let scene = |segments: Vec<Segment>| pav_core::present::AudioScene {
+        music: Some(pav_core::present::Music {
+            station: "spnn".into(),
+            song: t.song.clone(),
+            offset: 5.0,
+            volume: 1.0,
+            muffle: 0.0,
+            segments,
+        }),
+        ..Default::default()
+    };
+    let dt = 1.0 / 60.0;
+    let run = |segments: Vec<Segment>| {
+        let ticks: Vec<_> = (0..60).map(|_| (Vec::new(), Some(scene(segments.clone())))).collect();
+        rms(&crate::render_run(&ticks, dt, 0.0, SR, &crate::Listener::default()))
+    };
+    let (talking, silent) = (run(t.segments.clone()), run(Vec::new()));
+    eprintln!("with its segments {talking:.3}, without {silent:.4}");
+    assert!(talking > 0.03 && silent < 0.005, "a talk station's air is its segments");
 }
 
 #[test]
