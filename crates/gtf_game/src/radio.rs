@@ -252,11 +252,15 @@ pub const NEW_SONG_CARD: f32 = 4.0;
 const TRAFFIC: f32 = 9.0;
 const WEATHER: f32 = 7.0;
 
-/// Fills `{key}`s.
+/// Fills `{key}`s (a name ending in a full stop does not double the sentence's).
 fn fill(text: &str, keys: &[(&str, &str)]) -> String {
     let mut s = text.to_string();
     for (k, v) in keys {
         s = s.replace(&format!("{{{k}}}"), v);
+    }
+    let mut s = s.replace(".. ", ". ");
+    if s.ends_with("..") && !s.ends_with("...") {
+        s.pop();
     }
     s
 }
@@ -637,6 +641,20 @@ impl Radio {
         Ok(())
     }
 
+    /// `radio seek <seconds>|end` (tools and checks): the tuned station jumps to that many
+    /// seconds into its current slot, or to just before its song ends (every station moves
+    /// with it: they share the clock).
+    pub fn seek(&mut self, def: &RadioDef, to: &str) -> Result<()> {
+        let Some((st, song, offset)) = self.now(def, self.clock) else { return Err(anyhow!("radio seek: the radio is off")) };
+        let s = match to {
+            "end" => song.seconds - 1.0,
+            x => x.parse::<f32>().map_err(|_| anyhow!("radio seek: '{x}' is not seconds or 'end'"))?,
+        };
+        let slot = st.slot.max(30.0);
+        self.clock += (s.clamp(0.0, slot - 0.01) - offset) as f64;
+        Ok(())
+    }
+
     /// The words of line `i` of a slot: fixed, or as said when the report went on air.
     fn words(&self, si: usize, slot: u64, i: usize, l: &Line) -> Option<String> {
         match &l.words {
@@ -651,7 +669,7 @@ impl Radio {
     /// A line's seconds on air: a report's follow its words once said.
     fn span(&self, si: usize, slot: u64, i: usize, l: &Line) -> f32 {
         match (&l.words, self.words(si, slot, i, l)) {
-            (Words::Traffic | Words::Weather, Some(text)) => speech_seconds(&text, l.seg.voice.rate).clamp(1.0, l.seg.seconds),
+            (Words::Traffic | Words::Weather, Some(text)) => speech_seconds(&text, l.seg.voice.rate).max(1.0).min(l.seg.seconds),
             _ => l.seg.seconds,
         }
     }
@@ -884,6 +902,14 @@ elsewhere = "in town"
         let m = r.music(&def, brk, 0.5).unwrap();
         assert_eq!(m.segments.len(), 1);
         assert_eq!(m.segments[0].voice.pitch, 200.0);
+        // `radio seek`: into the slot, or to the song's end.
+        r.clock = 100.0;
+        r.seek(&def, "60").unwrap();
+        assert!((r.now(&def, r.clock).unwrap().2 - 60.0).abs() < 1e-3);
+        r.seek(&def, "end").unwrap();
+        let (_, s, off) = r.now(&def, r.clock).unwrap();
+        assert!((off - (s.seconds - 1.0)).abs() < 1e-3);
+        assert!(r.seek(&def, "soon").is_err());
     }
 
     #[test]
@@ -907,6 +933,8 @@ air = ["Air-1 over {at}."]
         .unwrap();
         let c = chatter(&def, 0, 2, "on Sunset Row").unwrap();
         assert_eq!(c.text, "Paloma-7, 10-80 on Sunset Row.");
+        // A place ending in a full stop ends the sentence once.
+        assert_eq!(chatter(&def, 0, 2, "outside Bang Bang Bros.").unwrap().text, "Paloma-7, 10-80 outside Bang Bang Bros.");
         assert!(c.seconds > CHATTER_LEAD + 1.0);
         // At three stars and up, the air unit sometimes.
         assert!((0..30).any(|n| chatter(&def, n, 3, "downtown").unwrap().text.starts_with("Air-1")));

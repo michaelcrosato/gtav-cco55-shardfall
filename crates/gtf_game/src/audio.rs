@@ -25,11 +25,10 @@ const SCANNER_GAIN: f32 = 0.3;
 
 /// The dispatcher's babble while their line is on air (after the squelch, before the closing
 /// one).
-pub fn scanner_loop(c: &crate::radio::Chatter) -> Option<LoopSource> {
+pub fn scanner_loop(c: &crate::radio::Chatter, def: &crate::radio::RadioDef) -> Option<LoopSource> {
     if c.age < crate::radio::CHATTER_LEAD || c.age >= c.seconds - 0.1 {
         return None;
     }
-    let def = crate::radio::def().ok()?;
     let s = &def.scanner;
     Some(LoopSource {
         id: SCANNER,
