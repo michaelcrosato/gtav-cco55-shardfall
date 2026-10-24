@@ -65,6 +65,116 @@ reward = 750
 runup = [55.0, 0.0, 360.0]
 
 # ---- The Lost Shields ----
+# Fifteen Route 404 shields lost round the district: `at` is where the post stands (world
+# metres, on the ground, deck or roof there), `yaw` the way the sign faces (degrees from north),
+# `trivia` its card. Walking (or driving) up to one takes it; all fifteen pay $10,000 and leave
+# a gold Okami Kaze outside Dez's place.
+
+# St. Brigid's roof, by the helipad (up the ladders).
+[[shield]]
+id = "hospital_roof"
+at = [-20.0, 30.95, -74.0]
+yaw = 90.0
+trivia = "St. Brigid's keeps a helicopter on its roof because an ambulance on Route 404 at five o'clock is legally a parked car."
+
+# The top deck of Civic Center Parking.
+[[shield]]
+id = "garage_top"
+at = [-128.0, 10.35, -72.0]
+yaw = 90.0
+trivia = "Civic Center Parking was the first garage in the state with more levels than exits. Some drivers are still looking."
+
+# Behind Dez's block in Los Mirados.
+[[shield]]
+id = "dez_block"
+at = [-336.0, 0.15, -366.0]
+yaw = 180.0
+trivia = "Route 404 is named after its original budget: not found."
+
+# Mack's pool deck.
+[[shield]]
+id = "mack_pool"
+at = [-178.0, 5.95, -452.0]
+yaw = 270.0
+trivia = "Homes in the hills are sold on their ocean views. Their pools face the sea for the same reason: the other way is Route 404."
+
+# Lookout Point, in the corner by the wall.
+[[shield]]
+id = "lookout"
+at = [-269.5, 26.85, -565.0]
+yaw = 90.0
+trivia = "From Lookout Point you can see all of Route 404 at once, which is more than anyone on it has ever done."
+
+# Under Route 404 by the harbor.
+[[shield]]
+id = "under_404"
+at = [401.0, 0.15, 320.0]
+yaw = 0.0
+trivia = "The shade under Route 404 is the most sought-after real estate in Paloma Bay. The rent is the noise."
+
+# The Harbor Spur's broken end.
+[[shield]]
+id = "spur_end"
+at = [110.0, 11.0, 358.0]
+yaw = 90.0
+trivia = "The Harbor Spur ends forty feet short of the harbor. The city calls it phase one. Phase two was due in 1974."
+
+# The Ditch, under the bridge.
+[[shield]]
+id = "ditch_bridge"
+at = [202.0, -6.0, 190.0]
+yaw = 0.0
+trivia = "The Ditch was built to carry storm water. It has carried storm water four times and police chases four thousand."
+
+# The MV Pacific Star's foredeck (up the gangway).
+[[shield]]
+id = "freighter"
+at = [370.0, 9.15, 398.0]
+yaw = 270.0
+trivia = "The MV Pacific Star crossed the Pacific in eleven days. Its containers will take longer to get through the Pretzel."
+
+# Behind the racks in Harbor Gate Freight's warehouse.
+[[shield]]
+id = "warehouse"
+at = [140.0, 0.19, 305.0]
+yaw = 90.0
+trivia = "Route 404's shields are blue because red tested as \"too exciting\" with focus groups."
+
+# Behind Roxy's trailer.
+[[shield]]
+id = "roxy_lot"
+at = [105.0, 0.17, 109.0]
+yaw = 180.0
+trivia = "The Flats were named by the freeway's planners, who called the neighborhood \"flat, cheap and unlikely to complain.\""
+
+# The far corner of the SPPD impound lot.
+[[shield]]
+id = "impound"
+at = [-292.0, 0.17, 43.0]
+yaw = 315.0
+trivia = "Most cars in the SPPD impound lot were towed from the carpool lane. Most of their passengers were mannequins."
+
+# Behind the Freeway Diner, by its dumpsters.
+[[shield]]
+id = "diner_back"
+at = [400.0, 0.15, -290.0]
+yaw = 270.0
+trivia = "The Freeway Diner's sign has said EXIT NOW since 1962. Four drivers have, through the front window."
+
+# Behind a lifeguard tower on Palisade Beach.
+[[shield]]
+id = "lifeguard"
+at = [-376.0, 0.15, 377.0]
+yaw = 180.0
+trivia = "Palisade Beach lifeguards can spot a swimmer in trouble at 400 yards and a free parking space at a mile."
+
+# The end of Palisade Pier.
+[[shield]]
+id = "pier_end"
+at = [-176.0, 0.17, 476.5]
+yaw = 0.0
+trivia = "Route 404 was once planned to run out along Palisade Pier to a floating interchange. The pier said no."
+
 
 # ---- Vigilante ----
 
