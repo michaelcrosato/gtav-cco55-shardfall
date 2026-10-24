@@ -5,7 +5,8 @@
 # steadies the aim, strength hardens the fists, stealth quietens the crouch). `home` and the
 # `life` spots are mission anchors (`spot:<name>` from the district file): where the protagonist
 # is found when the player switches to them, busy with something (`clip`, `text` on the switch
-# card) in the hours given. `voice` pitches their babble.
+# card) in the hours given. `bed` is where they save (D-pad right; home without one). `voice`
+# pitches their babble.
 
 [[protagonist]]
 key = "dez"
@@ -20,6 +21,7 @@ stats = { driving = 72, shooting = 38, stamina = 55, strength = 40, stealth = 45
 vehicle = "bravura_stallion"
 voice = 1.12
 home = "spot:dez_home"
+bed = "spot:dez_bed"
 look = { skin = "#c68a62", shirt = "#f2f2ee", pants = "#3b5a8c", shoes = "#ededed", cap = "#1f2a44", scale = 0.98, build = 0.9 }
 
 [[protagonist.life]]
@@ -53,6 +55,7 @@ stats = { driving = 48, shooting = 80, stamina = 35, strength = 55, stealth = 70
 vehicle = "daimon_titan"
 voice = 0.82
 home = "spot:mack_home"
+bed = "spot:mack_bed"
 look = { skin = "#e0ac83", shirt = "#1f2d4d", pants = "#5a5f66", shoes = "#2a1d14", scale = 1.04, build = 1.25 }
 
 [[protagonist.life]]
@@ -86,6 +89,7 @@ stats = { driving = 60, shooting = 55, stamina = 85, strength = 80, stealth = 30
 vehicle = "marlin_bay"
 voice = 1.28
 home = "spot:roxy_home"
+bed = "spot:roxy_bed"
 look = { skin = "#f1c9a5", shirt = "#c8242c", pants = "#1d1d22", shoes = "#111111", eyes = "#0d0d0d", scale = 0.97, build = 1.0 }
 
 [[protagonist.life]]

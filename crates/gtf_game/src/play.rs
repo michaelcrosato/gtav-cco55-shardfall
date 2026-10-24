@@ -284,6 +284,7 @@ impl Freeway {
                 self.police.harmed(id);
             }
         }
+        crate::glass::shots(sim, &city, &res.walls, events);
         for &id in &res.vehicles {
             self.police.harmed(id);
         }

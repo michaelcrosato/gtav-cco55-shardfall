@@ -31,6 +31,9 @@ pub struct GunItem {
 #[serde(deny_unknown_fields)]
 pub struct GunShop {
     pub landmark: String,
+    /// Where its counter is (an anchor; none: the landmark's door).
+    #[serde(default)]
+    pub at: Option<String>,
     pub name: String,
     pub armor: i64,
     pub item: Vec<GunItem>,
@@ -40,6 +43,8 @@ pub struct GunShop {
 #[serde(deny_unknown_fields)]
 pub struct ModShop {
     pub landmark: String,
+    #[serde(default)]
+    pub at: Option<String>,
     pub name: String,
     pub respray: i64,
     pub repair: [i64; 2],
@@ -57,6 +62,8 @@ pub struct Snack {
 #[serde(deny_unknown_fields)]
 pub struct Store {
     pub landmark: String,
+    #[serde(default)]
+    pub at: Option<String>,
     pub name: String,
     pub item: Vec<Snack>,
 }
@@ -116,9 +123,30 @@ impl ShopState {
     }
 }
 
-/// How near a door the player must stand on foot (m), and Paloma Customs' door in a car.
+/// How near a counter the player must stand on foot (m), and Paloma Customs' bay in a car.
 const REACH: f32 = 3.0;
 const CAR_REACH: f32 = 11.0;
+
+/// Where a shop's counter is: its anchor (`at`) when the district has it, else the landmark's
+/// door.
+fn counter_point(city: &pav_world::City, landmark: &str, at: Option<&str>) -> Option<Vec3> {
+    at.and_then(|a| crate::anchor::Anchor::parse(a).ok())
+        .filter(|a| a.exists(city))
+        .and_then(|a| crate::anchor::foot(city, &a))
+        .map(|(p, _)| p)
+        .or_else(|| crate::world::door(city, landmark))
+}
+
+/// Where a protagonist saves: their bed (`bed`, an anchor) when the district has it, else home.
+pub fn save_point(city: &pav_world::City, p: &crate::protagonists::ProtagonistDef) -> Option<Vec3> {
+    [p.bed.as_deref(), Some(p.home.as_str())]
+        .into_iter()
+        .flatten()
+        .filter_map(|a| crate::anchor::Anchor::parse(a).ok())
+        .find(|a| a.exists(city))
+        .and_then(|a| crate::anchor::foot(city, &a))
+        .map(|(p, _)| p)
+}
 /// The save slots.
 pub const SLOTS: [&str; 3] = ["slot1", "slot2", "slot3"];
 
@@ -137,11 +165,10 @@ impl Freeway {
         let d = def().ok()?;
         let feet = Self::feet(sim);
         if self.doors.is_none() {
-            let door = |k: &str| crate::world::door(&city, k);
             self.doors = Some(vec![
-                (Counter::Gun, door(&d.gun.landmark)),
-                (Counter::Mods, door(&d.mods.landmark)),
-                (Counter::Store, door(&d.store.landmark)),
+                (Counter::Gun, counter_point(&city, &d.gun.landmark, d.gun.at.as_deref())),
+                (Counter::Mods, counter_point(&city, &d.mods.landmark, d.mods.at.as_deref())),
+                (Counter::Store, counter_point(&city, &d.store.landmark, d.store.at.as_deref())),
             ]);
         }
         let in_car = self.drive.vehicle().is_some();
@@ -155,9 +182,9 @@ impl Freeway {
                 return Some(c);
             }
         }
-        // The protagonist's own safehouse.
-        let home = crate::protagonists::def().ok().and_then(|p| p.protagonist.get(self.crew.current).map(|p| p.home.clone()))?;
-        let at = crate::anchor::Anchor::parse(&home).ok().and_then(|a| crate::anchor::foot(&city, &a))?.0;
+        // The protagonist's own safehouse: the bed.
+        let def = crate::protagonists::def().ok()?;
+        let at = save_point(&city, def.protagonist.get(self.crew.current)?)?;
         (!in_car && feet.distance(at) < REACH).then_some(Counter::Save)
     }
 
@@ -491,12 +518,12 @@ impl Freeway {
     pub fn counter_door(&self, c: Counter) -> Option<Vec3> {
         let city = self.city.as_ref()?;
         let d = def().ok()?;
-        let key = match c {
-            Counter::Gun => &d.gun.landmark,
-            Counter::Mods => &d.mods.landmark,
-            Counter::Store => &d.store.landmark,
+        let (key, at) = match c {
+            Counter::Gun => (&d.gun.landmark, &d.gun.at),
+            Counter::Mods => (&d.mods.landmark, &d.mods.at),
+            Counter::Store => (&d.store.landmark, &d.store.at),
             _ => return None,
         };
-        crate::world::door(city, key)
+        counter_point(city, key, at.as_deref())
     }
 }

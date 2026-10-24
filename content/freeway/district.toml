@@ -207,6 +207,17 @@ depth = 30.0
 height = [5.0, 13.0]
 props = { lamp = 1.0, palm = 6.0, bench = 1.5, bin = 2.0, hydrant = 0.8, billboard = 0.4 }
 
+[zones.commercial.signs]   # Names on the shops' sign bands along Sunset Row, some in neon
+roads = ["boulevard"]
+names = [
+  "SUNSET LIQUOR", "PALOMA PAWN", "TACO LOCO", "VINYL VAULT", "DONUTS 24", "NAIL SPA",
+  "BOARDWALK BIKES", "PHO 404", "LUCKY DRAGON", "CHECK CASHING", "WASH-O-RAMA", "SURF SHACK",
+  "BOOK NOOK", "TATTOO", "PIZZA SLICE", "DISCOUNT TIRES", "GOLD & SILVER", "CELL REPAIR",
+  "BAIL BONDS", "VIDEO RENTAL", "RE-THREADS", "ICE CREAM", "DRY CLEANERS", "BURGER BARN",
+]
+neon = 0.35
+neon_colors = ["#ff3ea5", "#3ef0ff", "#ffd166", "#7dff6a", "#ff7a3d"]
+
 [zones.downtown]      # Towers of glass and concrete on plazas
 ground = "plaza"
 styles = ["tower_glass", "tower_concrete", "tower_glass"]
@@ -257,84 +268,2529 @@ props = { tree = 2.0 }
 ground = "dirt"
 level = -0.15
 
+# Landmarks (PLAN.md §5.3, §5.7). Each takes over its cell rectangle and is built from parts
+# placed in its own frame: metres from the north-west corner of its cells (x east, z south),
+# heights above its ground (`docs/REFERENCE.md`, "Urban kit"). Doors, gates and glass are
+# openings in walls: `at`, `from` and `to` run along the wall (x on a north or south wall, z on an
+# east or west one). Glass panes are invisible colliders in their frames, so the insides show.
+
+# Paloma Savings & Trust: a stone podium with a colonnade on the plaza, a glass tower with a
+# setback, a gold crown and spire, the bank's monogram lit on top after dark.
 [[landmark]]
 key = "bank"
 name = "Paloma Savings & Trust"
 cells = [[15, 29], [20, 32]]
-assembly = "tower_bank"
-height = 132.0
 blip = "bank"
+ground = "#cfc8b9"
 
+[[landmark.mass]]
+rect = [4, 5, 92, 60]
+height = 12
+color = "#d9d2c3"
+material = "MAT/gtf/office_concrete"
+cap = "#bfb6a5"
+
+[[landmark.mass]]
+rect = [24, 15, 72, 52]
+y = 12.5
+height = 106
+color = "#3f5c74"
+material = "MAT/gtf/glass_curtain"
+
+[[landmark.mass]]
+rect = [30, 21, 66, 46]
+y = 118.5
+height = 10
+color = "#3f5c74"
+material = "MAT/gtf/glass_curtain"
+cap = "#d9d2c3"
+
+[[landmark.mass]]
+rect = [37, 27, 59, 40]
+y = 129
+height = 4
+color = "#e8b23a"
+
+[[landmark.mass]]
+rect = [46.5, 32, 49.5, 35]
+y = 133
+height = 16
+color = "#e8b23a"
+building = false
+
+[[landmark.slab]]
+rect = [8, 1.2, 88, 5]
+y = 9
+thick = 1.0
+color = "#e4dccb"
+columns = 4.5
+
+[[landmark.slab]]
+rect = [42, 4.8, 54, 5.0]
+thick = 3.2
+color = "#24323d"
+
+[[landmark.sign]]
+text = "PALOMA SAVINGS & TRUST"
+at = [48, 1.2]
+y = 9.5
+facing = "north"
+size = 0.8
+color = "#2b3a4a"
+
+[[landmark.sign]]
+text = "PS&T"
+at = [48, 21]
+y = 124
+facing = "north"
+size = 4.0
+color = "#e8b23a"
+neon = "#ffd27a"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/planter"
+at = [10, -1]
+count = 8
+step = [11, 0]
+
+# City Hall: a stone civic block behind a colonnaded portico and steps, a clock tower, a plaza
+# with a fountain and three flags.
 [[landmark]]
 key = "city_hall"
 name = "City Hall Plaza"
 cells = [[22, 29], [26, 32]]
-assembly = "open"
+ground = "#d6cfc0"
 
+[[landmark.mass]]
+rect = [8, 34, 72, 60]
+height = 16
+color = "#e6dfd0"
+material = "MAT/gtf/office_concrete"
+cap = "#cfc6b4"
+
+[[landmark.mass]]
+rect = [34, 38, 46, 48]
+y = 16.5
+height = 13
+color = "#e6dfd0"
+cap = "#cfc6b4"
+
+[[landmark.mass]]
+rect = [35.5, 39.5, 44.5, 46.5]
+y = 30
+height = 5
+color = "#c9a24a"
+building = false
+
+[[landmark.slab]]
+rect = [24, 25, 56, 34]
+y = 11
+thick = 1.5
+color = "#ece6d8"
+columns = 3.6
+
+[[landmark.slab]]
+rect = [22, 22, 58, 34]
+thick = 0.18
+color = "#ddd6c7"
+
+[[landmark.slab]]
+rect = [23, 23.2, 57, 34]
+y = 0.18
+thick = 0.18
+color = "#e2dbcc"
+
+[[landmark.wall]]
+from = [35, 8]
+to = [45, 8]
+height = 0.6
+thick = 0.35
+color = "#cfc6b4"
+
+[[landmark.wall]]
+from = [35, 14]
+to = [45, 14]
+height = 0.6
+thick = 0.35
+color = "#cfc6b4"
+
+[[landmark.wall]]
+from = [35, 8.2]
+to = [35, 13.8]
+height = 0.6
+thick = 0.35
+color = "#cfc6b4"
+
+[[landmark.wall]]
+from = [45, 8.2]
+to = [45, 13.8]
+height = 0.6
+thick = 0.35
+color = "#cfc6b4"
+
+[[landmark.slab]]
+rect = [35.2, 8.2, 44.8, 13.8]
+thick = 0.42
+color = "#3d7fa0"
+solid = false
+
+[[landmark.mass]]
+rect = [39.4, 10.4, 40.6, 11.6]
+height = 2.7
+color = "#cfc6b4"
+building = false
+
+[[landmark.sign]]
+text = "SAN PALOMA CITY HALL"
+at = [40, 25]
+y = 11.75
+facing = "north"
+size = 0.85
+color = "#5a4a36"
+
+[[landmark.sign]]
+text = "XII"
+at = [40, 38]
+y = 25
+facing = "north"
+size = 1.6
+color = "#2b2a28"
+board = "#f4efe2"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/flagpole"
+at = [33, 18]
+count = 3
+step = [7, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/bench"
+at = [30, 12]
+yaw = 90
+count = 2
+step = [0, 4]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/bench"
+at = [50, 12]
+yaw = 270
+count = 2
+step = [0, 4]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/planter"
+at = [12, 6]
+count = 4
+step = [18.7, 0]
+
+# SPPD Central: a civic block with a blue band and a canopied entrance, a radio mast, flags, its
+# own lot of patrol cars behind.
 [[landmark]]
 key = "police"
 name = "SPPD Central"
 cells = [[10, 34], [13, 37]]
-assembly = "police"
-height = 14.0
 blip = "police"
+ground = "#c9c4b8"
 
+[[landmark.mass]]
+rect = [4, 5, 44, 36]
+height = 14
+color = "#d8d4c8"
+material = "MAT/gtf/office_concrete"
+cap = "#2f4a7a"
+
+[[landmark.mass]]
+rect = [3.9, 4.9, 44.1, 36.1]
+y = 11.6
+height = 1.0
+color = "#2f4a7a"
+building = false
+
+[[landmark.slab]]
+rect = [16, 1.2, 32, 5]
+y = 3.6
+thick = 0.4
+color = "#2f4a7a"
+columns = 5
+
+[[landmark.slab]]
+rect = [19, 4.8, 29, 5.0]
+thick = 3.0
+color = "#24323d"
+
+[[landmark.sign]]
+text = "SAN PALOMA POLICE"
+at = [24, 5]
+y = 6.3
+facing = "north"
+size = 0.95
+color = "#ffffff"
+board = "#2f4a7a"
+
+[[landmark.sign]]
+text = "CENTRAL DIVISION"
+at = [24, 5]
+y = 4.55
+facing = "north"
+size = 0.5
+color = "#2f4a7a"
+board = "#f4f1ea"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/antenna_mast"
+at = [38, 10]
+y = 14.5
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/flagpole"
+at = [12, 2]
+count = 2
+step = [4, 0]
+
+[[landmark.wall]]
+from = [1, 40]
+to = [63, 40]
+height = 1.0
+kind = "fence"
+
+[[landmark.park]]
+at = [8, 46]
+yaw = 0
+kind = "sppd_interceptor"
+always = true
+count = 3
+step = [3.2, 0]
+
+[[landmark.park]]
+at = [8, 56]
+yaw = 180
+count = 6
+step = [3.2, 0]
+
+# St. Brigid Medical: the main block with the roof helipad (the Skylark parks there; a ladder
+# up the east face), a low wing with the emergency bay under a red canopy.
 [[landmark]]
 key = "hospital"
 name = "St. Brigid Medical"
 cells = [[28, 34], [32, 37]]
-assembly = "hospital"
-height = 30.0
 blip = "hospital"
+ground = "#d3cec4"
 
+[[landmark.mass]]
+rect = [6, 6, 58, 50]
+height = 30
+color = "#eae7df"
+material = "MAT/gtf/office_concrete"
+cap = "#cfc9be"
+
+[[landmark.mass]]
+rect = [58, 14, 76, 50]
+height = 14
+color = "#eae7df"
+material = "MAT/gtf/office_concrete"
+cap = "#cfc9be"
+
+[[landmark.slab]]
+rect = [18, 14, 46, 42]
+y = 30.5
+thick = 0.3
+color = "#3d4248"
+
+[[landmark.slab]]
+rect = [27, 22, 28.6, 34]
+y = 30.8
+thick = 0.02
+color = "#f4f1ea"
+solid = false
+
+[[landmark.slab]]
+rect = [35.4, 22, 37, 34]
+y = 30.8
+thick = 0.02
+color = "#f4f1ea"
+solid = false
+
+[[landmark.slab]]
+rect = [28.6, 27.2, 35.4, 28.8]
+y = 30.8
+thick = 0.02
+color = "#f4f1ea"
+solid = false
+
+[[landmark.lamp]]
+at = [19, 15]
+y = 30.82
+size = [0.4, 0.4]
+color = "#ffd166"
+glow = 0.5
+night = true
+
+[[landmark.lamp]]
+at = [45, 15]
+y = 30.82
+size = [0.4, 0.4]
+color = "#ffd166"
+glow = 0.5
+night = true
+
+[[landmark.lamp]]
+at = [19, 41]
+y = 30.82
+size = [0.4, 0.4]
+color = "#ffd166"
+glow = 0.5
+night = true
+
+[[landmark.lamp]]
+at = [45, 41]
+y = 30.82
+size = [0.4, 0.4]
+color = "#ffd166"
+glow = 0.5
+night = true
+
+[[landmark.ladder]]
+at = [58, 30]
+side = "east"
+y = 14.5
+height = 16.3
+
+[[landmark.ladder]]
+at = [76, 32]
+side = "east"
+height = 14.5
+
+[[landmark.slab]]
+rect = [24, 2, 40, 6]
+y = 4.0
+thick = 0.4
+color = "#2b6cb0"
+columns = 5
+
+[[landmark.slab]]
+rect = [60, 50, 76, 58]
+y = 4.4
+thick = 0.5
+color = "#c0392b"
+columns = 7
+
+[[landmark.sign]]
+text = "ST. BRIGID MEDICAL CENTER"
+at = [32, 6]
+y = 7.5
+facing = "north"
+size = 1.0
+color = "#2b6cb0"
+
+[[landmark.sign]]
+text = "+"
+at = [32, 6]
+y = 25
+facing = "north"
+size = 3.0
+color = "#d63c2f"
+board = "#ffffff"
+neon = "#ff4d4d"
+
+[[landmark.sign]]
+text = "EMERGENCY"
+at = [68, 58]
+y = 5.6
+facing = "south"
+size = 0.75
+color = "#ffffff"
+board = "#c0392b"
+neon = "#ff4d4d"
+
+[[landmark.park]]
+at = [32, 28]
+y = 30.8
+yaw = 0
+kind = "skylark_news"
+always = true
+
+# The parking garage: three decks over the ground floor and the roof, scissor ramps up the
+# east side (strips A and B), parapets, columns, lights under each deck.
+[[landmark]]
+key = "garage"
+name = "Civic Center Parking"
+cells = [[22, 34], [26, 37]]
+ground = "#7d7c78"
+
+[[landmark.slab]]
+rect = [2, 2, 64, 62]
+y = 3.05
+thick = 0.35
+color = "#a29e95"
+
+[[landmark.slab]]
+rect = [64, 2, 71, 24]
+y = 3.05
+thick = 0.35
+color = "#a29e95"
+
+[[landmark.slab]]
+rect = [64, 54, 71, 62]
+y = 3.05
+thick = 0.35
+color = "#a29e95"
+
+[[landmark.slab]]
+rect = [71, 2, 78, 62]
+y = 3.05
+thick = 0.35
+color = "#a29e95"
+
+[[landmark.slab]]
+rect = [2, 2, 71, 62]
+y = 6.45
+thick = 0.35
+color = "#a29e95"
+
+[[landmark.slab]]
+rect = [71, 2, 78, 24]
+y = 6.45
+thick = 0.35
+color = "#a29e95"
+
+[[landmark.slab]]
+rect = [71, 54, 78, 62]
+y = 6.45
+thick = 0.35
+color = "#a29e95"
+
+[[landmark.slab]]
+rect = [2, 2, 64, 62]
+y = 9.85
+thick = 0.35
+color = "#a8a49b"
+columns = 8
+
+[[landmark.slab]]
+rect = [64, 2, 71, 24]
+y = 9.85
+thick = 0.35
+color = "#a8a49b"
+
+[[landmark.slab]]
+rect = [64, 54, 71, 62]
+y = 9.85
+thick = 0.35
+color = "#a8a49b"
+
+[[landmark.slab]]
+rect = [71, 2, 78, 62]
+y = 9.85
+thick = 0.35
+color = "#a8a49b"
+columns = 8
+
+[[landmark.ramp]]
+rect = [64.3, 24, 70.7, 54]
+rise = "north"
+y0 = 0.02
+y1 = 3.4
+
+[[landmark.ramp]]
+rect = [71.3, 24, 77.7, 54]
+rise = "south"
+y0 = 3.4
+y1 = 6.8
+
+[[landmark.ramp]]
+rect = [64.3, 24, 70.7, 54]
+rise = "north"
+y0 = 6.8
+y1 = 10.2
+
+[[landmark.wall]]
+from = [2, 2]
+to = [64, 2]
+height = 0.45
+color = "#bdb8ad"
+
+[[landmark.wall]]
+from = [2, 2]
+to = [78, 2]
+y = 3.4
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [2, 62]
+to = [78, 62]
+y = 3.4
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [2, 2]
+to = [2, 62]
+y = 3.4
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [78, 2]
+to = [78, 62]
+y = 3.4
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [2, 2]
+to = [78, 2]
+y = 6.8
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [2, 62]
+to = [78, 62]
+y = 6.8
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [2, 2]
+to = [2, 62]
+y = 6.8
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [78, 2]
+to = [78, 62]
+y = 6.8
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [2, 2]
+to = [78, 2]
+y = 10.2
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [2, 62]
+to = [78, 62]
+y = 10.2
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [2, 2]
+to = [2, 62]
+y = 10.2
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.wall]]
+from = [78, 2]
+to = [78, 62]
+y = 10.2
+height = 1.1
+color = "#cdc8bd"
+
+[[landmark.lamp]]
+at = [20, 16]
+y = 2.95
+glow = 0.9
+[[landmark.lamp]]
+at = [44, 46]
+y = 2.95
+glow = 0.9
+[[landmark.lamp]]
+at = [20, 46]
+y = 6.35
+glow = 0.9
+[[landmark.lamp]]
+at = [44, 16]
+y = 6.35
+glow = 0.9
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/street_lamp"
+at = [20, 32]
+y = 10.2
+yaw = 90
+solid = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/street_lamp"
+at = [50, 32]
+y = 10.2
+yaw = 270
+solid = false
+
+[[landmark.sign]]
+text = "P"
+at = [6, 2]
+y = 8.6
+facing = "north"
+size = 2.2
+color = "#ffffff"
+board = "#1d4e89"
+neon = "#3ef0ff"
+
+[[landmark.sign]]
+text = "PUBLIC PARKING  $5 / HR"
+at = [36, 2]
+y = 3.95
+facing = "north"
+size = 0.6
+color = "#ffffff"
+board = "#1d4e89"
+
+[[landmark.park]]
+at = [10, 8]
+y = 3.4
+yaw = 180
+count = 4
+step = [5.5, 0]
+
+[[landmark.park]]
+at = [12, 54]
+y = 10.2
+yaw = 0
+count = 4
+step = [6, 0]
+
+[[landmark.park]]
+at = [10, 40]
+yaw = 90
+count = 3
+step = [0, 5]
+
+# The impound lot by SPPD Central: chain-link round rows of towed cars, a gate and a booth.
+[[landmark]]
+key = "impound"
+name = "SPPD Impound"
+crowds = false
+cells = [[10, 39], [13, 42]]
+ground = "#45474b"
+
+[[landmark.fence]]
+rect = [0.6, 0.6, 63.4, 63.4]
+height = 2.8
+gate = [{ side = "north", at = 32, width = 9 }]
+
+[[landmark.room]]
+rect = [24, 3, 28, 7]
+height = 3.0
+color = "#e3ded2"
+roof = "#5a5f64"
+door = [{ side = "east", at = 5.5, width = 0.9, height = 2.1 }]
+glass = [{ side = "north", from = 24.5, to = 27.5, sill = 1.0, top = 2.3, panes = 2 }]
+lights = 1
+walk = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/boom_barrier"
+at = [27.0, 1.6]
+yaw = 90
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/floodlight_mast"
+at = [2, 2]
+yaw = 135
+solid = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/floodlight_mast"
+at = [62, 62]
+yaw = 315
+solid = false
+
+[[landmark.sign]]
+text = "SPPD IMPOUND  /  CITY OF SAN PALOMA"
+at = [12, 0.4]
+y = 3.4
+facing = "north"
+size = 0.5
+color = "#ffffff"
+board = "#2f4a7a"
+pole = true
+
+[[landmark.park]]
+at = [8, 18]
+yaw = 0
+count = 8
+step = [6.5, 0]
+
+[[landmark.park]]
+at = [8, 30]
+yaw = 180
+count = 8
+step = [6.5, 0]
+
+[[landmark.park]]
+at = [11.25, 46]
+yaw = 0
+count = 6
+step = [6.5, 0]
+
+# Bang Bang Bros.: a dark storefront on Sunset Row with a rooftop GUNS & AMMO frame; inside, a
+# counter across the shop, racks of guns on the walls, ammunition shelves.
 [[landmark]]
 key = "gun_store"
 name = "Bang Bang Bros."
 cells = [[22, 26], [23, 27]]
-height = 7.0
 blip = "gun"
+ground = "#bdb8ae"
 
+[[landmark.room]]
+rect = [3, 1.5, 27, 17]
+height = 6.0
+color = "#3c4148"
+inside = "#d8d3c8"
+floor = "#6f6a62"
+roof = "#2f3338"
+parapet = 0.6
+lights = 3
+door = [{ side = "north", at = 15, width = 2.0, height = 2.5 }]
+glass = [
+  { side = "north", from = 4.2, to = 13.6, panes = 3, sill = 0.7, top = 3.0, frame = "#1d2024" },
+  { side = "north", from = 16.4, to = 25.8, panes = 3, sill = 0.7, top = 3.0, frame = "#1d2024" },
+]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/shop_counter"
+at = [11.31, 10]
+count = 4
+step = [2.46, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/gun_rack"
+at = [7.5, 16.5]
+count = 5
+step = [2.5, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/gun_rack"
+at = [3.5, 4.5]
+yaw = 90
+count = 2
+step = [0, 2.6]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/gun_rack"
+at = [26.5, 4.5]
+yaw = 270
+count = 2
+step = [0, 2.6]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/store_shelf"
+at = [7.2, 6.5]
+yaw = 90
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/store_shelf"
+at = [22.8, 6.5]
+yaw = 90
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/rooftop_sign_frame"
+at = [15, 2.6]
+y = 6.0
+
+[[landmark.sign]]
+text = "GUNS & AMMO"
+at = [15, 2.52]
+y = 7.9
+facing = "north"
+size = 1.3
+color = "#d23a2c"
+
+[[landmark.sign]]
+text = "BANG BANG BROS."
+at = [15, 1.5]
+y = 4.4
+facing = "north"
+size = 0.95
+color = "#f2c230"
+board = "#1d2024"
+neon = "#ff7a3d"
+
+[[landmark.sign]]
+text = "TARGETS  -  AMMO  -  ARMOR"
+at = [15, 16.7]
+y = 3.7
+facing = "north"
+size = 0.42
+color = "#f2c230"
+board = "#1d2024"
+
+# Paloma Customs: a drive-through body shop (in from Sunset Row, out the back to the street),
+# a lift in the bay, tools and tyres; the parts office beside it.
 [[landmark]]
 key = "customs"
 name = "Paloma Customs"
 cells = [[16, 26], [18, 27]]
-height = 8.0
 blip = "garage"
+ground = "#a9a49a"
 
+[[landmark.room]]
+rect = [2, 2, 30, 30]
+height = 7.0
+color = "#2f6f8f"
+material = "MAT/gtf/corrugated_metal #2f6f8f"
+inside = "#d8d4cb"
+floor = "#8a8b8d"
+roof = "#3a3f45"
+parapet = 0.5
+lights = 4
+door = [{ side = "north", at = 15, width = 6.0, height = 4.8 }, { side = "south", at = 15, width = 6.0, height = 4.8 }]
+
+[[landmark.room]]
+rect = [31, 2, 46, 16]
+height = 4.5
+color = "#e8e3d8"
+inside = "#f2efe8"
+floor = "#b9b4aa"
+roof = "#3a3f45"
+lights = 2
+door = [{ side = "north", at = 37, width = 1.8, height = 2.4 }]
+glass = [
+  { side = "north", from = 32, to = 35.8, panes = 1, sill = 0.7, top = 2.8 },
+  { side = "north", from = 38.2, to = 45, panes = 2, sill = 0.7, top = 2.8 },
+]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/car_lift"
+at = [23.5, 16]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/tool_chest"
+at = [3.0, 7]
+yaw = 90
+count = 3
+step = [0, 1.3]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/tool_chest"
+at = [27.0, 22]
+yaw = 270
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/tyre_stack"
+at = [26.5, 5]
+count = 3
+step = [0, 0.8]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/tyre_stack"
+at = [4, 26]
+count = 2
+step = [0.8, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/oil_drum"
+at = [26.5, 27.5]
+count = 3
+step = [-0.7, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/shop_counter"
+at = [38.5, 9.5]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/office_desk"
+at = [42, 13.5]
+yaw = 180
+
+[[landmark.sign]]
+text = "PALOMA CUSTOMS"
+at = [15, 2]
+y = 5.85
+facing = "north"
+size = 0.95
+color = "#ffffff"
+neon = "#3ef0ff"
+
+[[landmark.sign]]
+text = "PAINT  -  REPAIR  -  RESPRAY"
+at = [38.5, 2]
+y = 3.6
+facing = "north"
+size = 0.42
+color = "#2f6f8f"
+
+# Gas-N-Grab: a red canopy over two pump islands on Sunset Row, the store behind with shelves,
+# coolers and the counter by the door (the clerk behind it: the hold-up).
 [[landmark]]
 key = "gas"
 name = "Gas-N-Grab"
 cells = [[28, 26], [30, 27]]
-assembly = "open"
 blip = "shop"
+ground = "#b9b4a9"
 
+[[landmark.slab]]
+rect = [7, 2.5, 41, 15.5]
+y = 5.2
+thick = 0.7
+color = "#d23a2c"
+columns = 11
+column_color = "#e8e6e0"
+
+[[landmark.lamp]]
+at = [15, 6]
+y = 5.12
+glow = 0.8
+night = true
+[[landmark.lamp]]
+at = [33, 6]
+y = 5.12
+glow = 0.8
+night = true
+[[landmark.lamp]]
+at = [15, 12]
+y = 5.12
+glow = 0.8
+night = true
+[[landmark.lamp]]
+at = [33, 12]
+y = 5.12
+glow = 0.8
+night = true
+
+[[landmark.slab]]
+rect = [13, 7.6, 19, 10.4]
+thick = 0.18
+color = "#d8d4ca"
+
+[[landmark.slab]]
+rect = [29, 7.6, 35, 10.4]
+thick = 0.18
+color = "#d8d4ca"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/gas_pump"
+at = [14.6, 9]
+y = 0.18
+count = 2
+step = [2.8, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/gas_pump"
+at = [30.6, 9]
+y = 0.18
+count = 2
+step = [2.8, 0]
+
+[[landmark.room]]
+rect = [6, 19, 36, 30.6]
+height = 4.6
+color = "#f3ece0"
+inside = "#f6f3ec"
+floor = "#d8d4ca"
+roof = "#3d4247"
+parapet = 0.5
+lights = 3
+door = [{ side = "north", at = 27, width = 2.0, height = 2.4 }]
+glass = [
+  { side = "north", from = 7, to = 25.6, panes = 5, sill = 0.6, top = 3.0 },
+  { side = "north", from = 28.4, to = 35, panes = 2, sill = 0.6, top = 3.0 },
+]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/shop_counter"
+at = [29.9, 23]
+yaw = 270
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/drinks_cooler"
+at = [34.9, 23.5]
+yaw = 270
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/store_shelf"
+at = [9.5, 24]
+count = 4
+step = [2.5, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/drinks_cooler"
+at = [10, 29.9]
+count = 4
+step = [2.45, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/trash_bin"
+at = [37.5, 18]
+count = 2
+step = [1.2, 0]
+
+[[landmark.sign]]
+text = "GAS-N-GRAB"
+at = [24, 2.5]
+y = 5.55
+facing = "north"
+size = 0.55
+color = "#ffffff"
+
+[[landmark.sign]]
+text = "GAS-N-GRAB  24/7"
+at = [21, 19]
+y = 3.75
+facing = "north"
+size = 0.6
+color = "#d23a2c"
+board = "#ffffff"
+neon = "#ff5e5e"
+
+[[landmark.sign]]
+text = "REG 4.99"
+at = [2.5, 1.5]
+y = 5.2
+facing = "north"
+size = 0.7
+color = "#ffd166"
+board = "#d23a2c"
+pole = true
+
+[[landmark.park]]
+at = [16, 5.4]
+yaw = 90
+
+[[landmark.park]]
+at = [32, 12.6]
+yaw = 270
+
+# The Grind House: a brick coffee shop on Sunset Row's north side with a patio; the counter
+# runs across the room, the espresso bar behind it (the clerk: the second hold-up).
+[[landmark]]
+key = "grind_house"
+name = "The Grind House"
+cells = [[42, 22], [43, 23]]
+blip = "shop"
+ground = "#cbbfae"
+
+[[landmark.room]]
+rect = [8, 12, 31, 30.5]
+height = 5.2
+color = "#7a4a36"
+material = "MAT/gtf/brick #7a4a36"
+inside = "#efe2cf"
+floor = "MAT/oak_planks #9a7454"
+roof = "#4a3a30"
+parapet = 0.5
+lights = 3
+door = [{ side = "south", at = 19, width = 2.0, height = 2.5 }]
+glass = [
+  { side = "south", from = 9, to = 17.8, panes = 3, sill = 0.6, top = 3.2, frame = "#2b2420" },
+  { side = "south", from = 20.2, to = 30, panes = 3, sill = 0.6, top = 3.2, frame = "#2b2420" },
+  { side = "west", from = 13.5, to = 29.5, panes = 5, sill = 0.6, top = 3.2, frame = "#2b2420" },
+]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/shop_counter"
+at = [16.54, 18]
+yaw = 180
+count = 3
+step = [2.46, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/kitchenette"
+at = [19, 12.62]
+yaw = 180
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/espresso_machine"
+at = [17.6, 12.95]
+y = 0.9
+yaw = 180
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/cafe_table_set"
+at = [11.5, 22]
+yaw = 90
+count = 2
+step = [0, 4.5]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/cafe_table_set"
+at = [26.5, 22]
+yaw = 90
+count = 2
+step = [0, 4.5]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/cafe_table_set"
+at = [3.5, 16.5]
+count = 3
+step = [0, 5]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/beach_umbrella"
+at = [3.5, 16.5]
+count = 3
+step = [0, 5]
+solid = false
+
+[[landmark.sign]]
+text = "THE GRIND HOUSE"
+at = [19.5, 30.5]
+y = 4.25
+facing = "south"
+size = 0.75
+color = "#f6e7c8"
+board = "#3a2a22"
+neon = "#ff9a3c"
+
+[[landmark.sign]]
+text = "ESPRESSO 3  -  LATTE 5  -  COLD BREW 4"
+at = [19, 12.3]
+y = 3.3
+facing = "south"
+size = 0.3
+color = "#f2e6cf"
+board = "#2b2420"
+
+[[landmark.sign]]
+text = "COFFEE"
+at = [8, 21]
+y = 4.1
+facing = "west"
+size = 0.7
+color = "#f6e7c8"
+
+# The Freeway Diner: a chrome-and-cream diner on a pad at the back of its lot, booths along the
+# windows, a counter with stools, the kitchen behind; the lot in front with low walls, parked
+# cars and a dumpster (cover), a big pole sign for the boulevard and one for the freeway.
 [[landmark]]
 key = "diner"
 name = "Freeway Diner"
 cells = [[54, 22], [56, 23]]
-height = 6.0
 blip = "activity"
+ground = "#3f4146"
 
+[[landmark.slab]]
+rect = [2, 1, 34, 15.4]
+thick = 0.15
+color = "#bdb8ad"
+walk = true
+
+[[landmark.room]]
+rect = [4, 2, 32, 13]
+y = 0.15
+height = 5.0
+color = "#efe8da"
+inside = "#f6f1e8"
+floor = "MAT/checker_tiles #e9e6df"
+roof = "#c0392b"
+parapet = 0.7
+lights = 4
+door = [{ side = "south", at = 17, width = 2.0, height = 2.5 }, { side = "east", at = 7.5, width = 1.2, height = 2.2 }]
+glass = [
+  { side = "south", from = 5, to = 15.8, panes = 4, sill = 0.9, top = 2.9, frame = "#c9cdd1" },
+  { side = "south", from = 18.2, to = 31, panes = 5, sill = 0.9, top = 2.9, frame = "#c9cdd1" },
+  { side = "west", from = 3.5, to = 11.5, panes = 3, sill = 0.9, top = 2.9, frame = "#c9cdd1" },
+]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/diner_booth"
+at = [6.2, 12.1]
+y = 0.17
+count = 4
+step = [2.2, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/diner_booth"
+at = [21.0, 12.1]
+y = 0.17
+count = 4
+step = [2.2, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/shop_counter"
+at = [7.0, 5.6]
+y = 0.17
+yaw = 180
+count = 6
+step = [2.46, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/bar_stool"
+at = [6.5, 6.75]
+y = 0.17
+count = 9
+step = [1.5, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/kitchenette"
+at = [10, 2.62]
+y = 0.17
+yaw = 180
+count = 2
+step = [2.44, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/dumpster"
+at = [44, 4]
+yaw = 270
+cover = true
+count = 2
+step = [0, 3.4]
+
+[[landmark.wall]]
+from = [1, 31.2]
+to = [35, 31.2]
+height = 0.9
+cover = true
+color = "#d9cdb6"
+
+[[landmark.wall]]
+from = [45, 31.2]
+to = [47.4, 31.2]
+height = 0.9
+cover = true
+color = "#d9cdb6"
+
+[[landmark.wall]]
+from = [0.8, 15.5]
+to = [0.8, 17.5]
+height = 0.9
+cover = true
+color = "#d9cdb6"
+
+[[landmark.wall]]
+from = [0.8, 26.5]
+to = [0.8, 31.2]
+height = 0.9
+cover = true
+color = "#d9cdb6"
+
+[[landmark.wall]]
+from = [47.2, 1]
+to = [47.2, 31.2]
+height = 0.9
+cover = true
+color = "#d9cdb6"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/planter"
+at = [36, 14]
+cover = true
+count = 3
+step = [3.5, 0]
+
+[[landmark.park]]
+at = [6, 18.6]
+yaw = 0
+always = true
+count = 2
+step = [6, 0]
+
+[[landmark.park]]
+at = [9, 18.6]
+yaw = 0
+count = 7
+step = [3, 0]
+
+[[landmark.park]]
+at = [9, 28.4]
+yaw = 180
+count = 3
+step = [3.2, 0]
+
+[[landmark.park]]
+at = [24, 28.4]
+yaw = 180
+always = true
+
+[[landmark.sign]]
+text = "FREEWAY DINER"
+at = [17, 13]
+y = 4.0
+facing = "south"
+size = 0.8
+color = "#c0392b"
+neon = "#ff3ea5"
+
+[[landmark.sign]]
+text = "FREEWAY DINER"
+at = [41, 29]
+y = 8.0
+facing = "south"
+size = 1.3
+color = "#fff4e0"
+board = "#c0392b"
+neon = "#3ef0ff"
+pole = true
+
+[[landmark.sign]]
+text = "EAT"
+at = [47.1, 20]
+y = 9.0
+facing = "east"
+size = 2.4
+color = "#fff4e0"
+board = "#c0392b"
+neon = "#ff3ea5"
+pole = true
+
+# Luxe Motors: the glass showroom along the avenue (the panes break when a car comes through:
+# mission S3), cars on show, a sales lot and the service bay behind.
 [[landmark]]
 key = "luxe_motors"
 name = "Luxe Motors"
 cells = [[36, 29], [40, 32]]
-height = 9.0
 blip = "vehicle"
+ground = "#c7c3b9"
 
+[[landmark.room]]
+rect = [2, 6, 24, 58]
+height = 9.5
+color = "#ecebe6"
+inside = "#f4f3ef"
+floor = "#dedcd6"
+roof = "#3a3f45"
+parapet = 0.4
+lights = 5
+door = [{ side = "west", at = 50.4, width = 2.4, height = 3.0 }, { side = "east", at = 30, width = 5.0, height = 4.6 }]
+glass = [
+  { side = "west", from = 6.6, to = 48.9, panes = 12, sill = 0.0, top = 7.0, band = 1.05, breakable = true, frame = "#24282c" },
+  { side = "west", from = 51.9, to = 57.4, panes = 2, sill = 0.0, top = 7.0, band = 1.05, breakable = true, frame = "#24282c" },
+  { side = "north", from = 3, to = 22, panes = 5, sill = 0.25, top = 7.0, band = 1.05, frame = "#24282c" },
+]
+
+[[landmark.slab]]
+rect = [7, 14.5, 18, 19.5]
+thick = 0.07
+color = "#cfd3d6"
+solid = false
+
+[[landmark.slab]]
+rect = [7, 29.5, 18, 34.5]
+thick = 0.07
+color = "#cfd3d6"
+solid = false
+
+[[landmark.slab]]
+rect = [7, 42.5, 18, 47.5]
+thick = 0.07
+color = "#cfd3d6"
+solid = false
+
+[[landmark.park]]
+at = [12.5, 17]
+yaw = 270
+kind = "bravura_stallion"
+always = true
+
+[[landmark.park]]
+at = [12.5, 45]
+yaw = 270
+kind = "zephyr_wagon"
+always = true
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/office_desk"
+at = [19, 53]
+yaw = 270
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/office_chair"
+at = [17.9, 53]
+yaw = 90
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/sofa"
+at = [20.5, 10]
+yaw = 270
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/planter"
+at = [3, 7]
+count = 2
+step = [18, 0]
+
+[[landmark.sign]]
+text = "LUXE MOTORS"
+at = [2, 32]
+y = 8.25
+facing = "west"
+size = 1.5
+color = "#1d2125"
+neon = "#bfe8ff"
+
+[[landmark.sign]]
+text = "LUXE MOTORS  -  PRE-OWNED PRESTIGE"
+at = [1.0, 2.5]
+y = 6.0
+facing = "west"
+size = 0.55
+color = "#e8d9a8"
+board = "#1d2125"
+pole = true
+
+[[landmark.park]]
+at = [33, 12]
+yaw = 180
+count = 5
+step = [4.6, 0]
+
+[[landmark.park]]
+at = [33, 52]
+yaw = 0
+count = 5
+step = [4.6, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/street_lamp_double"
+at = [45, 32]
+count = 2
+step = [14, 0]
+solid = false
+
+[[landmark.room]]
+rect = [62, 6, 78, 24]
+height = 6.0
+color = "#d8d2c6"
+inside = "#e9e5dc"
+floor = "#8f8d88"
+roof = "#3a3f45"
+lights = 2
+door = [{ side = "west", at = 15, width = 5.0, height = 4.2 }]
+
+[[landmark.sign]]
+text = "SERVICE"
+at = [62, 15]
+y = 5.0
+facing = "west"
+size = 0.6
+color = "#1d2125"
+
+# The Ironclad Transit depot: a walled yard behind a guarded gate on the avenue (barrier up),
+# armoured trucks parked, the garage with three bays, the office, a fuel pump, floodlights.
 [[landmark]]
 key = "depot"
 name = "Ironclad Transit"
+crowds = false
 cells = [[48, 46], [52, 49]]
-height = 12.0
 blip = "heist"
+ground = "#9d9a93"
 
+[[landmark.fence]]
+rect = [0.6, 0.6, 79.4, 63.4]
+kind = "wall"
+height = 3.2
+color = "#c9c4b8"
+material = "MAT/gtf/concrete"
+gate = [{ side = "north", at = 40, width = 9 }]
+
+[[landmark.room]]
+rect = [45.2, 1.6, 48.8, 5.2]
+height = 3.0
+color = "#3d4a5a"
+roof = "#2b2f33"
+lights = 1
+door = [{ side = "west", at = 4.2, width = 0.9, height = 2.1 }]
+glass = [
+  { side = "north", from = 45.6, to = 48.4, panes = 2, sill = 1.0, top = 2.3 },
+  { side = "west", from = 1.9, to = 3.3, panes = 1, sill = 1.0, top = 2.3 },
+]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/boom_barrier"
+at = [44.5, 1.6]
+yaw = 90
+
+[[landmark.room]]
+rect = [42, 26, 78, 62]
+height = 8.0
+color = "#5a6b7c"
+material = "MAT/gtf/corrugated_metal #5a6b7c"
+inside = "#c9c6bf"
+floor = "#7a7b7d"
+roof = "#3d4247"
+lights = 4
+door = [
+  { side = "west", at = 32, width = 5.5, height = 4.6 },
+  { side = "west", at = 44, width = 5.5, height = 4.6 },
+  { side = "west", at = 56, width = 5.5, height = 4.6 },
+]
+
+[[landmark.room]]
+rect = [3, 30, 24, 46]
+height = 7.2
+color = "#d6d0c4"
+inside = "#ece8df"
+floor = "#a9a59c"
+roof = "#3d4247"
+lights = 2
+door = [{ side = "east", at = 39, width = 1.2, height = 2.3 }]
+glass = [
+  { side = "east", from = 31, to = 37.8, panes = 3, sill = 0.9, top = 2.6 },
+  { side = "east", from = 40.2, to = 45, panes = 2, sill = 0.9, top = 2.6 },
+  { side = "north", from = 4, to = 23, panes = 6, sill = 0.9, top = 2.6 },
+]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/office_desk"
+at = [8, 36]
+yaw = 0
+count = 3
+step = [5, 0]
+
+[[landmark.park]]
+at = [12, 13]
+yaw = 90
+kind = "ironclad_armored"
+always = true
+count = 3
+step = [0, 5]
+
+[[landmark.slab]]
+rect = [28, 48, 33, 52]
+thick = 0.18
+color = "#d8d4ca"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/gas_pump"
+at = [30.5, 50]
+y = 0.18
+yaw = 90
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/forklift"
+at = [8, 52]
+yaw = 0
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/floodlight_mast"
+at = [2, 2]
+yaw = 135
+solid = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/floodlight_mast"
+at = [78, 2]
+yaw = 225
+solid = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/floodlight_mast"
+at = [2, 62]
+yaw = 45
+solid = false
+
+[[landmark.sign]]
+text = "IRONCLAD TRANSIT"
+at = [25, 0.45]
+y = 1.9
+facing = "north"
+size = 0.85
+color = "#f2c230"
+board = "#1d2733"
+
+[[landmark.sign]]
+text = "SECURE LOGISTICS  -  AUTHORIZED VEHICLES ONLY"
+at = [58, 0.45]
+y = 1.6
+facing = "north"
+size = 0.38
+color = "#ffffff"
+board = "#c0392b"
+
+[[landmark.sign]]
+text = "IRONCLAD"
+at = [42, 44]
+y = 6.4
+facing = "west"
+size = 1.4
+color = "#f2c230"
+
+# The City Works yard: chain-link round a public works yard, the gate on its north street, the
+# maintenance shed with three bays, the gatehouse and site office, utility trucks, pipes,
+# barriers, a fuel tank, a gravel heap.
+[[landmark]]
+key = "cityworks"
+name = "City Works Yard"
+crowds = false
+cells = [[48, 52], [52, 56]]
+ground = "#4b4d51"
+
+[[landmark.fence]]
+rect = [0.6, 0.6, 79.4, 79.4]
+height = 2.6
+gate = [{ side = "north", at = 40, width = 10 }]
+
+[[landmark.wall]]
+from = [35, 0.6]
+to = [35, 5.5]
+height = 2.4
+kind = "fence"
+
+[[landmark.wall]]
+from = [45, 0.6]
+to = [45, 5.5]
+height = 2.4
+kind = "fence"
+
+[[landmark.room]]
+rect = [47.5, 2.0, 51.5, 6.0]
+height = 3.0
+color = "#e3ded2"
+roof = "#5a5f64"
+lights = 1
+door = [{ side = "west", at = 4.6, width = 0.9, height = 2.1 }]
+glass = [{ side = "north", from = 48.2, to = 50.8, panes = 2, sill = 1.0, top = 2.2 }]
+
+[[landmark.room]]
+rect = [3, 4, 15, 8.5]
+height = 3.2
+color = "#f0eee8"
+roof = "#c9c6bf"
+inside = "#f4f2ec"
+floor = "#9c9890"
+lights = 1
+door = [{ side = "south", at = 9, width = 0.9, height = 2.1 }]
+glass = [
+  { side = "south", from = 3.6, to = 8, panes = 2, sill = 1.0, top = 2.2 },
+  { side = "south", from = 10, to = 14.4, panes = 2, sill = 1.0, top = 2.2 },
+]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/office_desk"
+at = [6, 6]
+yaw = 180
+
+[[landmark.room]]
+rect = [42, 38, 78, 78]
+height = 9.0
+color = "#a3a8ab"
+material = "MAT/gtf/corrugated_metal"
+inside = "#c4c6c4"
+floor = "#6f7276"
+roof = "#7d8488"
+lights = 4
+door = [
+  { side = "west", at = 46, width = 6.0, height = 5.2 },
+  { side = "west", at = 58, width = 6.0, height = 5.2 },
+  { side = "west", at = 70, width = 6.0, height = 5.2 },
+]
+
+[[landmark.park]]
+at = [24, 30]
+yaw = 0
+kind = "city_works"
+always = true
+count = 2
+step = [7, 0]
+
+[[landmark.park]]
+at = [60, 70]
+yaw = 270
+kind = "city_works"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/pipe_stack"
+at = [60, 12]
+yaw = 90
+count = 2
+step = [0, 4]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/traffic_cone"
+at = [6, 20]
+count = 8
+step = [0.9, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/barricade"
+at = [6, 26]
+count = 4
+step = [2.8, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/jersey_barrier"
+at = [6, 33]
+count = 4
+step = [3.2, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/fuel_tank"
+at = [70, 22]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/pallet_stack"
+at = [66, 30]
+count = 3
+step = [1.6, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/oil_drum"
+at = [74, 30]
+count = 3
+step = [0.7, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/forklift"
+at = [26, 72]
+yaw = 0
+
+[[landmark.ramp]]
+rect = [6, 50, 16, 60]
+rise = "south"
+y0 = 0.02
+y1 = 2.4
+color = "#8c8578"
+kerbs = false
+
+[[landmark.ramp]]
+rect = [6, 60, 16, 68]
+rise = "north"
+y0 = 0.02
+y1 = 2.4
+color = "#8c8578"
+kerbs = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/floodlight_mast"
+at = [2, 2]
+yaw = 135
+solid = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/floodlight_mast"
+at = [78, 2]
+yaw = 225
+solid = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/floodlight_mast"
+at = [2, 78]
+yaw = 45
+solid = false
+
+[[landmark.sign]]
+text = "SAN PALOMA PUBLIC WORKS  -  CITY YARD 7"
+at = [26, 0.3]
+y = 3.4
+facing = "north"
+size = 0.5
+color = "#ffffff"
+board = "#1d4e89"
+pole = true
+
+[[landmark.sign]]
+text = "AUTHORIZED VEHICLES ONLY"
+at = [55, 0.3]
+y = 2.2
+facing = "north"
+size = 0.4
+color = "#c0392b"
+board = "#ffffff"
+pole = true
+
+[[landmark.sign]]
+text = "CITY WORKS"
+at = [42, 58]
+y = 7.3
+facing = "west"
+size = 1.3
+color = "#f2a51f"
+
+# The harbor warehouse (the Smart approach's swap): brick, a truck door on Harbor Gate Road, a
+# clear bay inside it for the armoured truck and a car, racks, an office box, a forklift. Rows
+# 58-60 only: the Harbor Spur's end runs over the docks south of it.
+[[landmark]]
+key = "warehouse"
+name = "Harbor Gate Freight"
+cells = [[37, 58], [42, 60]]
+ground = "#45474b"
+
+[[landmark.room]]
+rect = [4, 6, 92, 44]
+height = 12
+color = "#9a5a44"
+material = "MAT/gtf/brick #9a5a44"
+inside = "#cfc9bd"
+floor = "#7a7b7d"
+roof = "#6d7176"
+parapet = 0.6
+lights = 8
+door = [
+  { side = "north", at = 31, width = 7.0, height = 6.0 },
+  { side = "north", at = 45, width = 1.2, height = 2.2 },
+  { side = "east", at = 26, width = 6.0, height = 5.0 },
+]
+glass = [{ side = "north", from = 52, to = 88, panes = 12, sill = 7.5, top = 10.0, frame = "#2b2f33" }]
+
+[[landmark.room]]
+rect = [6, 8, 18, 18]
+height = 3.2
+color = "#d9d4c8"
+roof = "#a19c92"
+inside = "#efebe2"
+floor = "#9c9890"
+lights = 1
+door = [{ side = "east", at = 13, width = 1.0, height = 2.2 }]
+glass = [{ side = "east", from = 14.5, to = 17.4, panes = 2, sill = 1.0, top = 2.4 }]
+building = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/office_desk"
+at = [11, 12]
+yaw = 90
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/pallet_rack"
+at = [52.35, 14]
+count = 10
+step = [2.7, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/pallet_rack"
+at = [52.35, 24]
+yaw = 180
+count = 10
+step = [2.7, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/pallet_rack"
+at = [52.35, 25.05]
+count = 10
+step = [2.7, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/pallet_rack"
+at = [52.35, 36]
+yaw = 180
+count = 10
+step = [2.7, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/forklift"
+at = [46, 30]
+yaw = 90
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/pallet_stack"
+at = [24, 41]
+count = 4
+step = [1.6, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/shipping_container:blue"
+at = [66, 40.6]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/oil_drum"
+at = [8, 38]
+count = 4
+step = [0, 0.7]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/dumpster"
+at = [50, 3.5]
+
+[[landmark.sign]]
+text = "HARBOR GATE FREIGHT CO."
+at = [31, 6]
+y = 8.6
+facing = "north"
+size = 1.5
+color = "#efe6d2"
+
+[[landmark.sign]]
+text = "NO PARKING  -  TRUCK DOOR"
+at = [31, 6]
+y = 6.6
+facing = "north"
+size = 0.38
+color = "#ffffff"
+board = "#c0392b"
+
+# Palisade Pier's end: a plank deck on piles with railings, the arcade and food stalls on the
+# landward half, the Big Wheel at the outer end (turning: drawn by the game), the PALISADE PIER
+# arch where the pier leaves the boardwalk, and stalls along the boardwalk.
 [[landmark]]
 key = "pier"
 name = "Palisade Pier"
 cells = [[18, 64], [23, 69]]
-assembly = "open"
 blip = "activity"
+
+[[landmark.slab]]
+rect = [16, 0, 80, 96]
+y = -0.38
+thick = 0.4
+color = "MAT/gtf/wood_boardwalk #9c8466"
+walk = true
+piles = 6
+
+[[landmark.wall]]
+from = [16, 0]
+to = [16, 96]
+kind = "rail"
+height = 1.1
+
+[[landmark.wall]]
+from = [80, 0]
+to = [80, 96]
+kind = "rail"
+height = 1.1
+
+[[landmark.wall]]
+from = [16, 96]
+to = [80, 96]
+kind = "rail"
+height = 1.1
+
+[[landmark.wall]]
+from = [16, 0.2]
+to = [32, 0.2]
+kind = "rail"
+height = 1.1
+
+[[landmark.wall]]
+from = [64, 0.2]
+to = [80, 0.2]
+kind = "rail"
+height = 1.1
+
+[[landmark.room]]
+rect = [18, 6, 31, 26]
+height = 6.5
+color = "#3a2a5a"
+inside = "#2a2340"
+floor = "#1f1b2d"
+roof = "#2a2340"
+parapet = 1.2
+lights = 2
+door = [{ side = "east", at = 13, width = 2.4, height = 2.6 }, { side = "east", at = 20, width = 2.4, height = 2.6 }]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/arcade_cabinet"
+at = [19.2, 8]
+yaw = 90
+count = 5
+step = [0, 1.0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/arcade_cabinet"
+at = [19.2, 18]
+yaw = 90
+count = 6
+step = [0, 1.0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/arcade_cabinet"
+at = [25, 8.5]
+yaw = 180
+count = 3
+step = [1.0, 0]
+
+[[landmark.sign]]
+text = "PALISADE ARCADE"
+at = [31, 16]
+y = 5.2
+facing = "east"
+size = 1.0
+color = "#ffd166"
+neon = "#ff3ea5"
+
+[[landmark.sign]]
+text = "PLAY  -  WIN  -  REPEAT"
+at = [31, 16]
+y = 3.6
+facing = "east"
+size = 0.45
+color = "#3ef0ff"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/food_stall"
+at = [72, 6]
+yaw = 270
+count = 3
+step = [0, 7]
+
+[[landmark.sign]]
+text = "TACOS"
+at = [70.84, 6]
+y = 2.71
+facing = "west"
+size = 0.38
+color = "#c0392b"
+[[landmark.sign]]
+text = "CHURROS"
+at = [70.84, 13]
+y = 2.71
+facing = "west"
+size = 0.38
+color = "#7a3fd1"
+[[landmark.sign]]
+text = "LEMONADE"
+at = [70.84, 20]
+y = 2.71
+facing = "west"
+size = 0.38
+color = "#d9a400"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/bench"
+at = [40, 30]
+yaw = 90
+count = 3
+step = [0, 4]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/trash_can_beach"
+at = [44, 30]
+count = 2
+step = [0, 8]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/street_lamp_double"
+at = [48, 4]
+count = 3
+step = [0, 18]
+solid = false
+
+[[landmark.wheel]]
+at = [48, 76]
+hub = 25.6
+radius = 22
+yaw = 330
+cars = 16
+period = 150
+rim = "LIB/gtf_city/big_wheel_rim"
+rim_hub = 23.02
+car = "LIB/gtf_city/big_wheel_car"
+car_pivot = 2.68
+
+[[landmark.sign]]
+text = "THE BIG WHEEL"
+at = [40, 86]
+y = 2.3
+facing = "north"
+size = 0.6
+color = "#ffd166"
+board = "#1d4e89"
+neon = "#ff3ea5"
+pole = true
+
+[[landmark.mass]]
+rect = [33, -80.6, 34.2, -79.4]
+height = 7.4
+color = "#e9e4d8"
+building = false
+
+[[landmark.mass]]
+rect = [61.8, -80.6, 63, -79.4]
+height = 7.4
+color = "#e9e4d8"
+building = false
+
+[[landmark.slab]]
+rect = [33, -80.6, 63, -79.4]
+y = 6.0
+thick = 1.4
+color = "#1d4e89"
+
+[[landmark.sign]]
+text = "PALISADE PIER"
+at = [48, -80.6]
+y = 6.7
+facing = "north"
+size = 0.95
+color = "#ffd166"
+neon = "#3ef0ff"
+
+[[landmark.sign]]
+text = "PALISADE PIER"
+at = [48, -79.4]
+y = 6.7
+facing = "south"
+size = 0.95
+color = "#ffd166"
+neon = "#3ef0ff"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/food_stall"
+at = [8, -84]
+count = 3
+step = [9, 0]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/food_stall"
+at = [70, -84]
+count = 3
+step = [9, 0]
+
+[[landmark.sign]]
+text = "HOT DOGS"
+at = [8, -85.16]
+y = 2.71
+facing = "north"
+size = 0.38
+color = "#c0392b"
+[[landmark.sign]]
+text = "FRIED EVERYTHING"
+at = [17, -85.16]
+y = 2.71
+facing = "north"
+size = 0.28
+color = "#d9a400"
+[[landmark.sign]]
+text = "SHAVE ICE"
+at = [26, -85.16]
+y = 2.71
+facing = "north"
+size = 0.38
+color = "#2e86c1"
+[[landmark.sign]]
+text = "FISH & CHIPS"
+at = [70, -85.16]
+y = 2.71
+facing = "north"
+size = 0.36
+color = "#1d4e89"
+[[landmark.sign]]
+text = "SMOOTHIES"
+at = [79, -85.16]
+y = 2.71
+facing = "north"
+size = 0.38
+color = "#3fa45b"
+[[landmark.sign]]
+text = "FUNNEL CAKE"
+at = [88, -85.16]
+y = 2.71
+facing = "north"
+size = 0.36
+color = "#c0392b"
+
+# The freighter moored at Harbor Gate's quay, clear of the broken ramp's flight: a long hull
+# with its bow east, containers on deck, the white superstructure aft, a gangway from the quay.
+[[landmark]]
+key = "freighter"
+name = "MV Pacific Star"
+cells = [[47, 64], [56, 66]]
+
+[[landmark.hull]]
+rect = [2, 2, 158, 26]
+bow = "east"
+deck = 9
+house = [6, 4, 26, 24]
+house_height = 14
+
+[[landmark.ramp]]
+rect = [110, 0.1, 140, 1.9]
+rise = "west"
+y0 = 0.02
+y1 = 9.2
+color = "#7d8488"
+kerbs = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/shipping_container:orange"
+at = [40, 8.4]
+y = 9.0
+count = 7
+step = [13, 0]
+[[landmark.prop]]
+asset = "LIB/gtf_city/shipping_container:blue"
+at = [40, 11.0]
+y = 9.0
+count = 7
+step = [13, 0]
+[[landmark.prop]]
+asset = "LIB/gtf_city/shipping_container"
+at = [40, 13.6]
+y = 9.0
+count = 7
+step = [13, 0]
+[[landmark.prop]]
+asset = "LIB/gtf_city/shipping_container:green"
+at = [40, 16.2]
+y = 9.0
+count = 7
+step = [13, 0]
+[[landmark.prop]]
+asset = "LIB/gtf_city/shipping_container:grey"
+at = [40, 18.8]
+y = 9.0
+count = 7
+step = [13, 0]
+[[landmark.prop]]
+asset = "LIB/gtf_city/shipping_container:orange"
+at = [53, 11.0]
+y = 11.59
+count = 5
+step = [13, 0]
+[[landmark.prop]]
+asset = "LIB/gtf_city/shipping_container:blue"
+at = [53, 16.2]
+y = 11.59
+count = 5
+step = [13, 0]
+
+[[landmark.sign]]
+text = "PACIFIC STAR"
+at = [140, 2]
+y = 6.6
+facing = "north"
+size = 1.6
+color = "#f4f1ea"
+
+# Safehouses (PLAN.md §5.4): each protagonist's place, with a bed (the save point: `<who>_bed`).
+# Dez: a ground-floor unit of a two-storey apartment block in Los Mirados.
+[[landmark]]
+key = "dez_apartment"
+name = "Dez's apartment"
+crowds = false
+cells = [[10, 15], [11, 16]]
+ground = "#c9c4b8"
+
+[[landmark.room]]
+rect = [9, 5, 18, 16]
+height = 3.4
+color = "#f1caa1"
+material = "MAT/gtf/stucco #f1caa1"
+inside = "#f3ece0"
+floor = "MAT/oak_planks #8a6a4c"
+roof = "#e9dcc4"
+lights = 2
+door = [{ side = "west", at = 9, width = 1.0, height = 2.2 }]
+glass = [{ side = "west", from = 11, to = 14.6, panes = 2, sill = 0.9, top = 2.4 }]
+
+[[landmark.mass]]
+rect = [9, 5, 18, 16]
+y = 3.4
+height = 3.4
+color = "#f1caa1"
+material = "MAT/gtf/stucco_windows"
+cap = "#b5563a"
+
+[[landmark.mass]]
+rect = [18, 5, 27, 27]
+height = 6.8
+color = "#f1caa1"
+material = "MAT/gtf/stucco_windows"
+cap = "#b5563a"
+
+[[landmark.mass]]
+rect = [9, 16, 18, 27]
+height = 6.8
+color = "#f1caa1"
+material = "MAT/gtf/stucco_windows"
+cap = "#b5563a"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/bed"
+at = [15.4, 14.55]
+yaw = 0
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/sofa"
+at = [11.3, 7.0]
+yaw = 90
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/tv_stand"
+at = [17.45, 7.0]
+yaw = 270
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/kitchenette"
+at = [14.0, 5.62]
+yaw = 180
+
+[[landmark.sign]]
+text = "1A"
+at = [9, 10.4]
+y = 2.6
+facing = "west"
+size = 0.3
+color = "#2b2a28"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/palm_short"
+at = [4, 22]
+solid = false
+
+# Mack: a modern house on Mirador Drive, glass to the south over the city, a pool deck and a
+# carport for the SUV.
+[[landmark]]
+key = "mack_house"
+name = "Mack's house"
+crowds = false
+cells = [[19, 10], [21, 11]]
+level = true
+ground = "#bdb6a6"
+
+[[landmark.room]]
+rect = [6, 10, 34, 24]
+height = 3.6
+color = "#e9e6df"
+inside = "#f3f1ec"
+floor = "MAT/oak_planks #7a5a3c"
+roof = "#3a3d40"
+parapet = 0.3
+lights = 3
+door = [{ side = "north", at = 17, width = 1.8, height = 2.4 }]
+glass = [
+  { side = "south", from = 7, to = 33, panes = 6, sill = 0.3, top = 3.0, frame = "#2b2f33" },
+  { side = "north", from = 21, to = 32, panes = 3, sill = 1.0, top = 2.6, frame = "#2b2f33" },
+]
+
+[[landmark.mass]]
+rect = [14, 9, 34, 20]
+y = 3.6
+height = 3.2
+color = "#7a5a3c"
+material = "MAT/oak_planks #7a5a3c"
+cap = "#3a3d40"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/bed"
+at = [32.55, 11.5]
+yaw = 270
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/sofa"
+at = [20, 19.5]
+yaw = 180
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/tv_stand"
+at = [20, 22.6]
+yaw = 0
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/kitchenette"
+at = [10, 10.62]
+yaw = 180
+
+[[landmark.slab]]
+rect = [6, 24, 34, 31]
+thick = 0.25
+color = "#d8cfbf"
+walk = true
+
+[[landmark.slab]]
+rect = [9, 25, 24, 29.5]
+y = 0.2
+thick = 0.06
+color = "#3fa4c9"
+solid = false
+
+[[landmark.slab]]
+rect = [36, 3, 46, 15]
+y = 2.6
+thick = 0.25
+color = "#3a3d40"
+columns = 5
+
+[[landmark.park]]
+at = [41, 9]
+yaw = 0
+kind = "daimon_titan"
+always = true
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/palm_tall"
+at = [3, 26]
+scale = 0.7
+solid = false
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/palm_tall"
+at = [36, 28]
+scale = 0.6
+solid = false
+
+# Roxy: a single-wide trailer on a fenced gravel lot in The Flats, a picnic table and a grill, a
+# kicker ramp for practice, tyres.
+[[landmark]]
+key = "roxy_trailer"
+name = "Roxy's trailer"
+crowds = false
+cells = [[37, 46], [39, 47]]
+ground = "#8c8578"
+
+[[landmark.fence]]
+rect = [1, 1, 47, 31]
+height = 2.0
+gate = [{ side = "north", at = 24, width = 5 }]
+
+[[landmark.slab]]
+rect = [17.6, 6, 32.4, 10.6]
+thick = 0.3
+color = "#a7a39a"
+
+[[landmark.room]]
+rect = [18, 6, 32, 10.6]
+y = 0.3
+height = 3.2
+color = "#e8e1cf"
+material = "MAT/gtf/corrugated_metal #e8e1cf"
+inside = "#e9dfcb"
+floor = "#8a7a62"
+roof = "#c9c2b0"
+lights = 2
+door = [{ side = "west", at = 8.3, width = 0.9, height = 2.1 }]
+glass = [
+  { side = "north", from = 20, to = 23, panes = 1, sill = 1.0, top = 2.2 },
+  { side = "north", from = 26, to = 29, panes = 1, sill = 1.0, top = 2.2 },
+  { side = "south", from = 22, to = 26, panes = 2, sill = 1.0, top = 2.2 },
+]
+
+[[landmark.slab]]
+rect = [16.6, 7.6, 18, 9.0]
+thick = 0.15
+color = "#8f8b84"
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/bed"
+at = [30.55, 8.3]
+y = 0.3
+yaw = 270
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/sofa"
+at = [22, 9.8]
+y = 0.3
+yaw = 0
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/kitchenette"
+at = [22, 6.62]
+y = 0.3
+yaw = 180
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/picnic_table"
+at = [10, 20]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/bbq_grill"
+at = [13.5, 22.5]
+
+[[landmark.prop]]
+asset = "LIB/gtf_city/tyre_stack"
+at = [42, 6]
+count = 3
+step = [0, 0.8]
+
+[[landmark.ramp]]
+rect = [30, 18, 35, 25]
+rise = "north"
+y0 = 0.02
+y1 = 1.3
+color = "#b08a5a"
+kerbs = false
+
+[[landmark.park]]
+at = [8, 9]
+yaw = 0
+kind = "marlin_bay"
+always = true
 
 [[landmark]]
 key = "sign"
@@ -375,7 +2831,7 @@ yaw = 0.0
 
 [[spot]]
 name = "mack_diner"
-at = [55.0, 21.3]
+at = [55.5625, 22.9125]
 yaw = 180.0
 
 [[spot]]
@@ -397,6 +2853,129 @@ yaw = 180.0
 name = "roxy_flats"
 at = [50.0, 49.3]
 yaw = 0.0
+
+# Landmark places (map cell coordinates; `y`: metres above the ground, on a deck or a roof).
+[[spot]]   # Luxe Motors: the empty display pad, facing the glass
+name = "luxe_showroom"
+at = [36.78125, 31.0]
+yaw = 270.0
+
+[[spot]]   # the avenue outside the showroom glass
+name = "luxe_front"
+at = [35.4, 31.0]
+yaw = 0.0
+
+[[spot]]   # City Works: the yard inside the gate
+name = "cityworks_yard"
+at = [49.875, 53.25]
+yaw = 0.0
+
+[[spot]]   # the street at the City Works gate
+name = "cityworks_gate"
+at = [50.5, 51.5]
+yaw = 180.0
+
+[[spot]]   # Harbor Gate Freight: the bay inside the truck door
+name = "warehouse_bay"
+at = [38.9375, 59.625]
+yaw = 180.0
+
+[[spot]]   # outside the truck door
+name = "warehouse_door"
+at = [38.9375, 58.125]
+yaw = 180.0
+
+[[spot]]   # Gas-N-Grab: the customer's side of the counter
+name = "gas_counter"
+at = [29.7875, 27.4375]
+yaw = 90.0
+
+[[spot]]   # behind the counter
+name = "gas_clerk"
+at = [29.95625, 27.4375]
+yaw = 270.0
+
+[[spot]]   # The Grind House: the customer's side of the counter
+name = "grind_counter"
+at = [43.1875, 23.225]
+yaw = 0.0
+
+[[spot]]   # behind the counter
+name = "grind_clerk"
+at = [43.1875, 22.95]
+yaw = 180.0
+
+[[spot]]   # the Freeway Diner's lot, between the rows of cars
+name = "diner_lot"
+at = [55.5, 23.46875]
+yaw = 0.0
+
+[[spot]]   # outside the diner's door
+name = "diner_door"
+at = [55.0625, 22.925]
+yaw = 0.0
+
+[[spot]]   # the avenue at Ironclad Transit's gate
+name = "depot_gate"
+at = [50.5, 45.6]
+yaw = 180.0
+
+[[spot]]   # Ironclad Transit: the yard
+name = "depot_yard"
+at = [49.875, 47.0]
+yaw = 0.0
+
+[[spot]]   # Palisade Pier: in front of the Big Wheel
+name = "pier_wheel"
+at = [20.8125, 68.425]
+yaw = 150.0
+
+[[spot]]   # the boardwalk's food stalls by the pier
+name = "boardwalk_stalls"
+at = [19.0625, 58.4375]
+yaw = 180.0
+
+[[spot]]   # Bang Bang Bros.: the counter (the shop's menu)
+name = "gun_counter"
+at = [22.9375, 26.525]
+yaw = 180.0
+
+[[spot]]   # Paloma Customs: the bay (drive in)
+name = "customs_bay"
+at = [16.9375, 27.0]
+yaw = 180.0
+
+[[spot]]   # Dez's apartment: by the bed (saving)
+name = "dez_bed"
+at = [10.825, 15.85]
+yaw = 90.0
+
+[[spot]]   # Mack's house: by the bed (saving)
+name = "mack_bed"
+at = [20.825, 10.7125]
+yaw = 90.0
+
+[[spot]]   # Roxy's trailer: by the bed (saving)
+name = "roxy_bed"
+at = [38.725, 46.51875]
+yaw = 90.0
+
+[[spot]]   # Civic Center Parking: the roof deck
+name = "garage_top"
+at = [24.5, 35.875]
+yaw = 0.0
+y = 10.2
+
+[[spot]]   # SPPD Impound: between the rows
+name = "impound_lot"
+at = [12.0, 40.5]
+yaw = 0.0
+
+[[spot]]   # St. Brigid's roof beside the helipad
+name = "hospital_roof"
+at = [31.125, 35.75]
+yaw = 270.0
+y = 30.5
 
 # Route 404: the elevated freeway down the east corridor, turning west over the docks as the
 # Harbor Spur to the broken construction ramp, which ends high above the harbor road (the avenue)

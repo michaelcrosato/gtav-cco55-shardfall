@@ -16,7 +16,7 @@ use glam::{IVec2, Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 
 use crate::sim::Sim;
-use crate::statics::{Block, CHUNK_SIZE, Decor, RegionKey, StaticProp};
+use crate::statics::{Block, CHUNK_SIZE, Decor, Ladder, RegionKey, StaticProp};
 use crate::terrain::TerrainPatch;
 use crate::zones::{Label, Zone};
 
@@ -33,6 +33,8 @@ pub struct RegionFill {
     pub props: Vec<StaticProp>,
     pub labels: Vec<Label>,
     pub zones: Vec<Zone>,
+    /// Climbable zones (a ladder up a wall).
+    pub ladders: Vec<Ladder>,
 }
 
 /// A game's generator of world regions.
@@ -221,6 +223,9 @@ impl Sim {
         }
         for zn in fill.zones {
             st.statics.add_zone_to(key, zn);
+        }
+        for l in fill.ladders {
+            st.statics.add_ladder_to(key, l);
         }
     }
 }

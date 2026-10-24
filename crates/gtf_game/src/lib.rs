@@ -32,6 +32,7 @@ pub mod enemies;
 pub mod fate;
 pub mod frontend;
 pub mod gallery;
+pub mod glass;
 pub mod gps;
 pub mod heat;
 pub mod hud;
@@ -1107,6 +1108,10 @@ impl Game for Freeway {
             BTreeMap::new()
         };
         self.combat.update(sim, dt);
+        // Glass a vehicle is about to go through breaks before it touches.
+        if let Some(city) = self.city.clone() {
+            glass::vehicles(sim, &city, events);
+        }
         events.extend(sounds.into_iter().map(|cue| SimEvent::Sound { cue: cue.into(), pos: None, gain: 1.0, pitch: 1.0 }));
         out
     }
@@ -1561,6 +1566,7 @@ impl Game for Freeway {
         }
         if let Some(c) = &self.city {
             world::signal_lamps(c, self.camera(sim).target, self.time, &mut draw.prims);
+            world::wheels(c, self.camera(sim).eye, self.time, &mut draw.assets);
         }
         self.combat.draw(&mut draw);
         if let (Some((from, vel)), true) = (self.combat.arc, page == Page::Play && self.combat.aiming) {

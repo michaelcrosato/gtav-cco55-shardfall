@@ -24,7 +24,7 @@ const ADS: &[&str] = &[
     "PALOMA SAVINGS & TRUST: YOUR MONEY, PROBABLY",
     "DOUBLE THE HORSEPOWER, HALF THE MANNERS",
     "DR. KALE'S JUICE CLEANSE: TRUST US",
-    "FREEWAY FM 99.4 — STUCK IN TRAFFIC? US TOO",
+    "FREEWAY FM 104.04 — STUCK IN TRAFFIC? US TOO",
     "EGO CHASER ENERGY BARS",
     "CRYPTO? NOT MAD. JUST DISAPPOINTED",
     "BRISA GT: PARKING IS FOR OTHER PEOPLE",
@@ -61,14 +61,23 @@ fn bench(at: Vec3, toward: Vec3, out: &mut Vec<StaticProp>) {
 }
 
 fn billboard(at: Vec3, toward: Vec3, text: &str, out: &mut Out) {
+    use pav_core::statics::Facing;
     out.props.push(prop("LIB/gtf_city/billboard", at, yaw_to(toward), 1.0, 0));
+    // The ad on the board's face, as big as fits across its 12.4 m.
+    let facing = if toward.z.abs() > toward.x.abs() {
+        if toward.z < 0.0 { Facing::North } else { Facing::South }
+    } else if toward.x > 0.0 {
+        Facing::East
+    } else {
+        Facing::West
+    };
     out.labels.push(Label {
         text: text.to_string(),
-        pos: at + Vec3::Y * 11.4 + toward * 1.0,
-        size: 0.85,
+        pos: at + Vec3::Y * 11.4 + toward * 0.08,
+        size: (11.0 / crate::parts::text_width(text, 1.0).max(1.0)).min(0.85),
         color: Color::hex("#e8433a"),
-        mode: LabelMode::Billboard,
-        facing: Default::default(),
+        mode: LabelMode::Wall,
+        facing,
     });
 }
 

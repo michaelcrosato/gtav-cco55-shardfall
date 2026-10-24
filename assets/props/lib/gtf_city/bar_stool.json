@@ -1,0 +1,16 @@
+{"format":2,"name":"bar_stool","unit":"cm",
+"description":"A diner counter stool: a red vinyl seat on a chrome post with a footrest ring and a round foot.",
+"tags":["stool","bar","diner","seat","chrome"],
+"category":"furniture",
+"materials":{
+"chrome":{"base":"MAT/gtf/chrome","color":"#c9cdd1"},
+"vinyl":{"color":"#c0392b","roughness":0.4}},
+"parts":{
+"foot":{"type":"cylinder","radius":22,"height":3,"pos":[0,1.5,0],"mat":"chrome"},
+"post":{"type":"cylinder","radius":3.5,"from":[0,3,0],"to":[0,67,0],"mat":"chrome"},
+"rim":{"type":"cylinder","radius":21,"height":3,"pos":[0,68.5,0],"mat":"chrome"},
+"ring":{"type":"torus","radius":16,"minor_radius":1.5,"pos":[0,30,0],"mat":"chrome"},
+"seat":{"type":"cylinder","radius":20,"height":9,"pos":[0,74.5,0],"mat":"vinyl"},
+"strut":{"type":"box","size":[16,1.5,1.5],"pos":[8,30,0],"mat":"chrome","mirror":"x"}},
+"sockets":{
+"sit":{"pos":[0,79,0]}}}

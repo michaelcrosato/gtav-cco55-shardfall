@@ -338,6 +338,8 @@ pub struct Outcome {
     pub killed: Vec<(EntityId, Vec3)>,
     /// Vehicles the shots struck.
     pub vehicles: Vec<EntityId>,
+    /// Where shots struck the fixed world, and where from (glass breaks).
+    pub walls: Vec<(Vec3, Vec3)>,
     /// Shots to the head, and the damage done to people.
     pub headshots: u32,
     pub dealt: f32,
@@ -531,6 +533,9 @@ impl Combat {
                 }
             } else if hit.is_some() {
                 events.push(sound("bullet.wall", point, 0.6));
+                if entity.is_none() {
+                    out.walls.push((point, muzzle));
+                }
             }
             self.traces.push(Trace { from: muzzle, to: point, normal, person: struck.is_some(), age: 0.0 });
         }

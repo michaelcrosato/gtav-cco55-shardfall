@@ -1,0 +1,15 @@
+{"format":2,"name":"fuel_tank","unit":"cm",
+"description":"An above-ground fuel tank, 4 m: a white steel cylinder on two saddles, a ladder and a red warning band.",
+"tags":["tank","fuel","yard","industrial","diesel"],
+"category":"container",
+"materials":{
+"dark":{"color":"#3a3d40"},
+"red":{"color":"#d23a2c"},
+"saddle":{"base":"MAT/gtf/concrete","color":"#a7a39a"},
+"steel":{"base":"MAT/gtf/painted_metal","color":"#ecebe6"}},
+"parts":{
+"band":{"type":"cylinder","radius":81,"height":30,"pos":[0,130,0],"axis":"x","mat":"red"},
+"hatch":{"type":"cylinder","radius":20,"height":10,"pos":[80,213,0],"mat":"dark"},
+"pipe":{"type":"cylinder","radius":4,"from":[-150,60,60],"to":[-150,0,60],"mat":"dark"},
+"saddle":{"type":"box","size":[30,50,160],"pos":[130,25,0],"mat":"saddle","mirror":"x"},
+"tank":{"type":"cylinder","radius":80,"height":400,"pos":[0,130,0],"axis":"x","mat":"steel"}}}
