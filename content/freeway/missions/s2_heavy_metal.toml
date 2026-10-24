@@ -1,0 +1,140 @@
+# s2 Heavy Metal (PLAN.md §5.7): the second heist setup. Roxy takes a City Works utility truck
+# from its yard in the Flats, quietly past the night shift or loudly through it, and parks it
+# under Route 404. Teaches the stealth-or-loud choice and heavy vehicles.
+
+key = "s2_heavy_metal"
+title = "Heavy Metal"
+protagonist = "roxy"
+text = "The job needs a truck nobody looks at twice."
+contact = "mack"
+blip = { letter = "H", at = "spot:s2_start" }
+start = "spot:s2_start"
+unlock = ["m3_overdrive"]
+time = { at = "22:40", lock = true }
+weather = "clear"
+reward = { cash = 1200, text = ["mack", "A city truck under the freeway. Nobody will ever look there. Nobody ever does. - M"] }
+names = { foreman = "FOREMAN" }
+
+[[medals]]
+id = "ghost"
+text = "Take the truck unseen"
+undetected = true
+
+[[medals]]
+id = "fast"
+text = "Finish within 3:30"
+time_under = 210.0
+
+[[spawn]]
+id = "truck"
+vehicle = "city_works"
+at = "at:290,216"
+yaw = 0.0
+blip = "target"
+name = "Utility truck"
+
+[[spawn]]
+id = "truck2"
+vehicle = "city_works"
+at = "at:310,226"
+yaw = 0.0
+
+[[spawn]]
+id = "w1"
+enemy = "works"
+at = "at:276,205"
+yaw = 90.0
+weapon = "p9"
+behaviour = "guard"
+health = 45.0
+
+[[spawn]]
+id = "w2"
+enemy = "works"
+at = "at:300,236"
+yaw = 270.0
+weapon = "p9"
+behaviour = "guard"
+health = 45.0
+
+[[spawn]]
+id = "w3"
+enemy = "works"
+at = "at:320,206"
+yaw = 180.0
+weapon = "pump"
+behaviour = "guard"
+health = 50.0
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "City Works yard. The trucks have flashing lights and nobody asks them anything.", seconds = 3.4 },
+  { who = "roxy", text = "Quiet or loud?", seconds = 1.4 },
+  { who = "mack", text = "Your call. You're the professional. Allegedly.", seconds = 2.4 },
+]
+on_start = [{ traffic = 0.35 }, { heat_cap = 0 }, { give = { weapon = "p9", ammo = 48 } }]
+
+[[step]]
+kind = "choose"
+options = [
+  { id = "quiet", title = "Quiet", lines = ["Crouch past the night shift.", "Nobody gets hurt.", "Medal: take it unseen."] },
+  { id = "loud", title = "Loud", lines = ["Three guards, one Roxy.", "Quick, if messy."] },
+]
+
+[[step]]
+kind = "branch"
+flag = "loud"
+to = "loud_way"
+
+[[step]]
+kind = "stealth"
+target = "actor:truck"
+watchers = ["w1", "w2", "w3"]
+radius = 4.0
+checkpoint = true
+objective = "Sneak to the ~y~utility truck~s~."
+help = "~btn:l3~ crouches: the guards see half as far. Stay out of their sight."
+
+[[step]]
+kind = "branch"
+flag = "quiet"
+to = "take"
+
+[[step]]
+kind = "kill"
+label = "loud_way"
+targets = ["w1", "w2", "w3"]
+checkpoint = true
+objective = "Take out the ~r~City Works security~s~."
+on_start = [{ alert = true }]
+
+[[step]]
+kind = "enter_vehicle"
+label = "take"
+target = "actor:truck"
+objective = "Get in the ~y~utility truck~s~."
+help = "Heavy trucks are slow to stop. Brake early."
+
+[[step]]
+kind = "deliver"
+target = "spot:s2_stash"
+vehicle = "truck"
+radius = 10.0
+checkpoint = true
+objective = "Park it ~b~under Route 404~s~ and get out."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "roxy", text = "One truck, under one freeway. Do I get a hard hat?", seconds = 2.6 },
+  { who = "mack", text = "You get a cut. Hard hats are extra.", seconds = 2.2 },
+]
+
+[[fail]]
+when = { destroyed = "truck" }
+reason = "The utility truck was wrecked."
+
+[[fail]]
+when = { died = "player" }
+reason = "Roxy was taken out."

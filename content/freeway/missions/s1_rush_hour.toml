@@ -1,0 +1,125 @@
+# s1 Rush Hour (PLAN.md §5.7): the first heist setup. Mack tails an Ironclad armoured truck from
+# downtown to its depot without being made, then photographs the guards and the dispatcher's
+# route sheet from across the avenue. Teaches following, stealth and the phone camera.
+
+key = "s1_rush_hour"
+title = "Rush Hour"
+protagonist = "mack"
+text = "Learn the armoured truck's route. Quietly."
+contact = "mack"
+blip = { letter = "H", at = "spot:s1_start" }
+start = "spot:s1_start"
+unlock = ["m3_overdrive"]
+time = { at = "08:20", lock = true }
+weather = "hazy"
+reward = { cash = 1200, text = ["mack", "Route sheet says the truck takes 404 south every Thursday at nine. Beautiful. - M"] }
+names = { dispatcher = "DISPATCHER" }
+
+[[medals]]
+id = "ghost"
+text = "Never get spotted"
+undetected = true
+
+[[medals]]
+id = "fast"
+text = "Finish within 4:30"
+time_under = 270.0
+
+[[spawn]]
+id = "mack_car"
+vehicle = "daimon_titan"
+at = "spot:s1_car"
+blip = "vehicle"
+name = "Titan"
+
+[[spawn]]
+id = "truck"
+vehicle = "ironclad_armored"
+at = "spot:s1_truck"
+driver = "truck_driver"
+behaviour = "idle"
+blip = "target"
+name = "Ironclad truck"
+
+[[spawn]]
+id = "truck_driver"
+ped = "security"
+at = "spot:s1_truck"
+
+[[spawn]]
+id = "guard1"
+ped = "security"
+at = "at:280,98"
+yaw = 0.0
+later = true
+name = "Guard"
+
+[[spawn]]
+id = "guard2"
+ped = "security"
+at = "at:301,98"
+yaw = 0.0
+later = true
+name = "Guard"
+
+[[spawn]]
+id = "dispatcher"
+ped = "worker"
+at = "at:291,100"
+yaw = 0.0
+later = true
+name = "Route sheet"
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Ironclad Transit. They move cash like it's laundry. Let's see where it goes.", seconds = 3.4 },
+]
+on_start = [{ traffic = 0.4 }, { heat_cap = 0 }]
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:mack_car"
+objective = "Get in your ~b~Titan~s~."
+
+[[step]]
+kind = "follow"
+target = "actor:truck"
+distance = 90.0
+min = 14.0
+checkpoint = true
+objective = "Tail the ~y~armoured truck~s~. Not too close."
+help = "Keep it in sight but stay back: closer than a few car lengths and the crew will notice."
+on_start = [{ behaviour = { actor = "truck", act = "goto:spot:s1_truck_end" } }, { spawn = "guard1" }, { spawn = "guard2" }, { spawn = "dispatcher" }]
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Home sweet depot. The man with the clipboard has the route sheet.", seconds = 3.0 },
+]
+
+[[step]]
+kind = "goto"
+target = "spot:s1_watch"
+radius = 9.0
+objective = "Watch the depot gate from ~y~across the avenue~s~."
+
+[[step]]
+kind = "photograph"
+targets = ["guard1", "guard2", "dispatcher"]
+checkpoint = true
+objective = "Photograph the ~y~guards~s~ and the ~y~route sheet~s~."
+help = "~btn:up~ brings up the phone; the camera is the third tile. Stay out of the guards' sight."
+fail = [{ when = { spotted = ["guard1", "guard2"] }, reason = "The guards made you." }]
+
+[[step]]
+kind = "goto"
+target = "spot:s1_away"
+radius = 6.0
+objective = "Get clear of the ~y~depot~s~."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Two guards, one sheet, nine o'clock Thursdays. They're creatures of habit. So am I.", seconds = 3.6 },
+]

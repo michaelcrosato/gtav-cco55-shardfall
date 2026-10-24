@@ -1,0 +1,110 @@
+# m1 Repo Man (PLAN.md §5.7): Dez repossesses a Bravura from a Los Mirados curb, outruns its
+# furious owner and delivers it to Paloma Customs. Teaches driving, the handbrake, the GPS
+# ribbon, the radio and the respray.
+
+key = "m1_repo_man"
+title = "Repo Man"
+protagonist = "dez"
+text = "Big Hal wants a Bravura back. The owner wants it more."
+contact = "mack"
+blip = { letter = "D", at = "spot:dez_home" }
+start = "spot:m1_start"
+time = { at = "17:30", lock = true }
+weather = "clear"
+reward = { cash = 1500, text = ["mack", "Saw your little parade down Sunset Row, kid. Freeway Diner, when you're free. Bring an appetite. - M"] }
+names = { hal = "BIG HAL", owner = "OWNER" }
+
+[[medals]]
+id = "fast"
+text = "Deliver the car within 3:00"
+time_under = 180.0
+
+[[medals]]
+id = "clean"
+text = "Deliver it with less than 20% damage"
+vehicle_health_over = { actor = "repo_car", value = 0.8 }
+
+[[spawn]]
+id = "repo_car"
+vehicle = "bravura_stallion"
+at = "spot:m1_car"
+paint = 0
+blip = "vehicle"
+name = "Bravura"
+
+[[spawn]]
+id = "owner_car"
+vehicle = "marlin_bay"
+at = "spot:m1_owner_car"
+driver = "owner"
+behaviour = "idle"
+
+[[spawn]]
+id = "owner"
+ped = "local"
+at = "spot:m1_owner_car"
+name = "Owner"
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "hal", text = "Dez. Blue Bravura on the park street. Owner stopped paying in May.", seconds = 3.2 },
+  { who = "dez", text = "And he's just going to hand me the keys?", seconds = 2.2 },
+  { who = "hal", text = "He's going to be very upset. Be quicker than upset.", seconds = 2.8 },
+]
+on_start = [{ traffic = 0.4 }, { heat_cap = 0 }]
+
+[[step]]
+kind = "goto"
+target = "actor:repo_car"
+radius = 5.0
+objective = "Go to the ~y~Bravura~s~."
+help = "Move with ~btn:left_stick~. Hold ~btn:south~ to sprint."
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:repo_car"
+checkpoint = true
+objective = "Get in the ~y~Bravura~s~."
+help = "~btn:north~ gets in. A locked car's window can be smashed; this one is open."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "owner", text = "HEY! That's my car! I'm making payments! Emotionally!", seconds = 2.8 },
+  { who = "dez", text = "Big Hal says hi.", seconds = 1.6 },
+]
+on_start = [{ behaviour = { actor = "owner_car", act = "chase_player" } }, { blip = { actor = "owner_car", kind = "enemy" } }]
+
+[[step]]
+kind = "escape"
+pursuers = ["owner_car"]
+distance = 140.0
+checkpoint = true
+objective = "Lose the ~r~owner~s~."
+help = "~btn:r2~ accelerates, ~btn:l2~ brakes and reverses, ~btn:r1~ is the handbrake for tight turns."
+
+[[step]]
+kind = "deliver"
+target = "spot:dez_customs"
+vehicle = "repo_car"
+radius = 9.0
+objective = "Take the car to ~b~Paloma Customs~s~ and get out."
+help = "Follow the GPS line on the road. ~btn:left~ and ~btn:right~ change the radio station."
+on_start = [{ behaviour = { actor = "owner_car", act = "wander" } }, { unblip = "owner_car" }]
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "dez", text = "One Bravura, slightly pre-owned.", seconds = 2.0 },
+  { who = "hal", text = "Beautiful. Paloma Customs paints anything that comes in hot. Remember that.", seconds = 3.4 },
+]
+on_start = [{ note = { title = "Paloma Customs", body = "Drive in with the police off your back and a respray clears your wanted level." } }]
+
+[[fail]]
+when = { destroyed = "repo_car" }
+reason = "The Bravura was wrecked."
+
+[[fail]]
+when = { abandoned = { actor = "repo_car", distance = 150.0 } }
+reason = "You abandoned the Bravura."

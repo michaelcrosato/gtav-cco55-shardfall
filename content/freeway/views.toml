@@ -62,9 +62,9 @@ time = "16:00"
 
 [[view]]
 name = "broken_ramp"
-about = "The end of the Harbor Spur, high over the water (the stunt jump)"
-eye = [140.0, 5.0, 452.0]
-target = [208.0, 6.0, 400.0]
+about = "The end of the Harbor Spur, high over the harbor road (the stunt jump and the heist's getaway)"
+eye = [30.0, 4.0, 392.0]
+target = [104.0, 9.0, 361.0]
 time = "17:00"
 
 [[view]]
@@ -73,3 +73,10 @@ about = "Above The Ditch: the channel, its bridges and ramps"
 eye = [150.0, 45.0, 60.0]
 target = [208.0, -6.0, 180.0]
 time = "15:00"
+
+[[view]]
+name = "spur_above"
+about = "Above the Harbor Spur's broken end and the harbor road below it (the getaway jump)"
+eye = [30.0, 70.0, 430.0]
+target = [150.0, 6.0, 340.0]
+time = "17:30"

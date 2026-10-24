@@ -8,14 +8,16 @@ do not edit. A CC-BY credit travels with every copy and fork.
 
 - STYLE100 (embedded): CC-BY-4.0. Credit: 100STYLE, Mason, Starke and Komura.
 - STYLE100_BACK … STYLE100_SIDERUN (6 sets, on disk): CC-BY-4.0. Credit: 100STYLE, Mason, Starke and Komura.
+- WORKSHOP (embedded): CC0-1.0. Credit: Animation workshop. Each source entry retains its source credit and license.
 - MESH2MOTION (embedded): CC0-1.0. Credit: Mesh2Motion's human animations (mesh2motion.org, CC0 1.0): Quaternius' Universal Animation Library clips as Mesh2Motion re-exported them, clips its contributors animated, and its own motion captures. Each clip's src names which, and orig the Quaternius clip a re-export was made from.
 - QUATERNIUS (embedded): CC0-1.0. Credit: Universal Animation Library 1 and 2 by Quaternius (quaternius.com), CC0 1.0 (public domain).
 - CMU_01 … CMU_94 (113 sets, on disk): LicenseRef-CMU. Credit: CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu), free for all uses; created with funding from NSF EIA-0196217. Terms: CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu): free to use, copy, modify and redistribute; the data may not be resold, even in converted form (reviewed 2026-10-15, §14 Q4).
 - CMU (embedded): LicenseRef-CMU. Credit: CMU motion capture (free for all uses (may be copied, modified, or redistributed without permission)). Terms: CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu): free to use, copy, modify and redistribute; the data may not be resold, even in converted form (reviewed 2026-10-15, §14 Q4).
+- WORKSHOP (embedded): refused: Author-defined. Credit: Animation workshop. Each source entry retains its source credit and license.
 
 ## Objects
 
-- LIB/gtf_city, LIB/gtf_vehicles (on disk): CC0-1.0. Credit: Grand Theft Freeway-BX contributors (own work).
+- LIB/gtf_city, LIB/gtf_vehicles, LIB/gtf_weapons (on disk): CC0-1.0. Credit: Grand Theft Freeway-BX contributors (own work).
 - LIB/kaykit_adventurers (on disk): CC0-1.0. Credit: Kay Lousberg (www.kaylousberg.com).
 - LIB/kenney_mini_dungeon (on disk): CC0-1.0. Credit: Kenney (www.kenney.nl).
 - LIB/quaternius_medieval_village (on disk): CC0-1.0. Credit: Quaternius (quaternius.com).

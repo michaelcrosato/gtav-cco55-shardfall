@@ -37,3 +37,33 @@ pants = ["#22262c"]
 shoes = ["#111111"]
 height = [1.75, 1.95]
 build = [1.1, 1.35]
+
+[side.works]
+name = "City Works Security"
+prefix = "works"
+weapons = ["p9", "p9", "pump"]
+accuracy = 0.4
+damage = 0.35
+retreat = 0.3
+grenades = 0
+skin = ["#f1c9a5", "#e0ac83", "#c68a62", "#8d5a3b", "#6b4428"]
+shirt = ["#f29a1f", "#e8c21c"]
+pants = ["#2d3f5c", "#33363d"]
+shoes = ["#4a3524", "#111111"]
+height = [1.68, 1.9]
+build = [1.0, 1.3]
+
+[side.swat]
+name = "SPPD Tactical"
+prefix = "swat"
+weapons = ["c4r", "pump"]
+accuracy = 0.45
+damage = 0.35
+retreat = 0.0
+grenades = 0
+skin = ["#f1c9a5", "#e0ac83", "#c68a62", "#8d5a3b", "#6b4428"]
+shirt = ["#1f2a3a"]
+pants = ["#1a2230"]
+shoes = ["#111111"]
+height = [1.75, 1.95]
+build = [1.15, 1.35]

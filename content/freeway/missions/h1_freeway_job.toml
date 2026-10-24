@@ -1,0 +1,413 @@
+# h1 The Freeway Job (PLAN.md §5.7): the heist, played as the approach picked on the board (h0
+# keeps `loud` or `smart`). LOUD: Roxy blocks Route 404 with the City Works truck, Mack breaches
+# the Ironclad truck and the crew grabs the bags and holds off the SWAT; Dez takes the Okami Kaze
+# off the Harbor Spur's broken end onto the harbor road and loses the police. SMART: Roxy's fake
+# roadwork sends the truck to a harbor warehouse, Dez tails it there in a city truck, Mack swaps
+# the cargo, and Mack drives out in a hard hat, one star at most. Every switch is the story's.
+
+key = "h1_freeway_job"
+title = "The Freeway Job"
+protagonist = "roxy"
+text = "Thursday, nine sharp. The Freeway Job."
+contact = "mack"
+blip = { letter = "H", at = "spot:mack_home" }
+start = "deck:458,-24"
+unlock = ["h0_board"]
+time = { at = "21:00", lock = true }
+weather = "clear"
+reward = { cash = 0, text = ["mack", "Thursday, we were legends. Friday, we're three people who've never met. Spend it slowly."] }
+names = { guard = "GUARD" }
+
+[[medals]]
+id = "fast"
+text = "Finish within 8:00"
+time_under = 480.0
+
+[[medals]]
+id = "tough"
+text = "Finish with half your health or more"
+health_over = 0.5
+
+# ---- LOUD ----
+
+[[spawn]]
+id = "block"
+vehicle = "city_works"
+at = "deck:463,-10"
+yaw = 90.0
+locked = true
+later = true
+
+[[spawn]]
+id = "truck"
+vehicle = "ironclad_armored"
+at = "deck:462,-170"
+yaw = 180.0
+driver = "truck_driver"
+behaviour = "idle"
+blip = "target"
+name = "Ironclad truck"
+later = true
+
+[[spawn]]
+id = "truck_driver"
+ped = "security"
+at = "deck:462,-170"
+later = true
+
+[[spawn]]
+id = "mack_body"
+protagonist = "mack"
+at = "deck:470,-18"
+later = true
+
+[[spawn]]
+id = "g1"
+enemy = "guard"
+at = "deck:458,-40"
+weapon = "p9"
+health = 50.0
+later = true
+
+[[spawn]]
+id = "g2"
+enemy = "guard"
+at = "deck:467,-42"
+weapon = "p9"
+health = 50.0
+later = true
+
+[[spawn]]
+id = "g3"
+enemy = "guard"
+at = "deck:462,-48"
+weapon = "c4r"
+health = 50.0
+later = true
+
+[[spawn]]
+id = "bag1"
+pickup = "cash"
+at = "deck:460,-36"
+later = true
+
+[[spawn]]
+id = "bag2"
+pickup = "cash"
+at = "deck:464,-37"
+later = true
+
+[[spawn]]
+id = "bag3"
+pickup = "cash"
+at = "deck:462,-39"
+later = true
+
+[[spawn]]
+id = "s1"
+enemy = "swat"
+at = "deck:458,-110"
+weapon = "c4r"
+health = 45.0
+later = true
+
+[[spawn]]
+id = "s2"
+enemy = "swat"
+at = "deck:467,-115"
+weapon = "c4r"
+health = 45.0
+later = true
+
+[[spawn]]
+id = "s3"
+enemy = "swat"
+at = "deck:460,40"
+weapon = "pump"
+health = 45.0
+later = true
+
+[[spawn]]
+id = "s4"
+enemy = "swat"
+at = "deck:467,44"
+weapon = "c4r"
+health = 45.0
+later = true
+
+[[spawn]]
+id = "kaze"
+vehicle = "okami_kaze"
+at = "deck:184,359"
+yaw = 270.0
+paint = 0
+driver = "dez_body"
+later = true
+
+[[spawn]]
+id = "dez_body"
+protagonist = "dez"
+at = "deck:184,359"
+later = true
+
+# ---- SMART ----
+
+[[spawn]]
+id = "smart_truck"
+vehicle = "ironclad_armored"
+at = "spot:h1_depot"
+driver = "smart_driver"
+behaviour = "idle"
+blip = "target"
+name = "Ironclad truck"
+later = true
+
+[[spawn]]
+id = "smart_driver"
+ped = "security"
+at = "spot:h1_depot"
+later = true
+
+[[spawn]]
+id = "van"
+vehicle = "city_works"
+at = "spot:h1_van"
+driver = "dez_van"
+later = true
+
+[[spawn]]
+id = "dez_van"
+protagonist = "dez"
+at = "spot:h1_van"
+later = true
+
+[[spawn]]
+id = "mack_wh"
+protagonist = "mack"
+at = "spot:h1_mack"
+later = true
+
+[[spawn]]
+id = "mack_van"
+vehicle = "city_works"
+at = "spot:h1_mack_car"
+name = "City Works truck"
+later = true
+
+[[spawn]]
+id = "loot1"
+pickup = "cash"
+at = "spot:h1_loot"
+later = true
+
+[[spawn]]
+id = "loot2"
+pickup = "package"
+at = "spot:h1_loot"
+later = true
+
+[[step]]
+kind = "branch"
+flag = "smart"
+to = "smart"
+on_start = [{ traffic = 0.3 }, { heat_cap = 0 }, { dispatch = false }]
+
+# LOUD: the block.
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Roxy, the truck's at the Pretzel. Block the southbound lanes.", seconds = 3.0 },
+  { who = "roxy", text = "City Works, ma'am. Freeway's closed. For explosions.", seconds = 2.6 },
+]
+on_start = [{ flag = "loud_way" }, { traffic = 0.0 }, { teleport = "deck:458,-24" }, { spawn = "block" }, { spawn = "mack_body" }]
+
+[[step]]
+kind = "interact"
+target = "actor:block"
+prompt = "Light the flares"
+seconds = 1.5
+radius = 4.0
+checkpoint = true
+objective = "Light the flares by the ~y~City Works truck~s~."
+help = "Hold ~btn:right~ by the truck."
+on_done = [{ spawn = "truck" }, { behaviour = { actor = "truck", act = "goto:deck:462,-30" } }]
+
+[[step]]
+kind = "goto"
+target = "actor:truck"
+radius = 40.0
+objective = "Wait for the ~y~armoured truck~s~."
+help = "Here it comes. It stops for the flares."
+
+[[step]]
+kind = "switch"
+to = "mack"
+objective = "Switch to ~p~Mack~s~ for the doors."
+help = "Hold ~btn:down~ and push toward Mack."
+
+[[step]]
+kind = "interact"
+target = "actor:truck"
+prompt = "Breach the doors"
+seconds = 2.0
+radius = 5.5
+checkpoint = true
+objective = "Breach the ~y~armoured truck's~s~ doors."
+on_start = [{ give = { weapon = "c4r", ammo = 150 } }, { armor = 100 }]
+on_done = [{ spawn = "g1" }, { spawn = "g2" }, { spawn = "g3" }, { alert = true }]
+
+[[step]]
+kind = "kill"
+targets = ["g1", "g2", "g3"]
+objective = "Take out the ~r~guards~s~."
+help = "~btn:r1~ takes cover. Mack's Deadeye (~btn:l3~ + ~btn:r3~) slows time."
+on_done = [{ spawn = "bag1" }, { spawn = "bag2" }, { spawn = "bag3" }]
+
+[[step]]
+kind = "collect"
+targets = ["bag1", "bag2", "bag3"]
+checkpoint = true
+objective = "Grab the ~g~bags~s~."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "That's the money. And that's the SWAT. Hold them off, Dez is coming.", seconds = 3.4 },
+]
+on_start = [{ heat_cap = 5 }, { heat = 4 }]
+
+[[step]]
+kind = "survive"
+waves = [["s1", "s2"], ["s3", "s4"]]
+checkpoint = true
+objective = "Hold off the ~r~SWAT~s~."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "dez", text = "I'm on the spur. Hop on the radio, I'll take it from here.", seconds = 2.8 },
+]
+on_start = [{ spawn = "kaze" }]
+
+[[step]]
+kind = "switch"
+to = "dez"
+objective = "Switch to ~p~Dez~s~ in the Okami Kaze."
+
+[[step]]
+kind = "jump"
+gates = ["deck:184,359", "deck:112,360"]
+target = "at:62,361"
+radius = 30.0
+vehicle = "kaze"
+checkpoint = true
+objective = "Floor it off the ~y~broken ramp~s~ onto the harbor road."
+help = "Straight and fast: the broken end is a ramp to the street below."
+on_done = [{ dispatch = true }, { heat = 0 }, { heat = 2 }]
+
+[[step]]
+kind = "lose_heat"
+stars = 0
+checkpoint = true
+objective = "Lose the ~b~cops~s~."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "dez", text = "Clean. Well. Clean-ish.", seconds = 1.8 },
+  { who = "mack", text = "Loud and paid. The cut's in your accounts.", seconds = 2.4 },
+]
+on_start = [{ pay = { who = "mack", cash = 72000 } }, { pay = { who = "dez", cash = 54000 } }, { pay = { who = "roxy", cash = 54000 } }, { story = "heist_done" }]
+
+[[step]]
+kind = "branch"
+flag = "loud_way"
+to = "done"
+
+# SMART: the roadwork, the warehouse, the swap.
+[[step]]
+kind = "dialogue"
+label = "smart"
+lines = [
+  { who = "mack", text = "Roxy, cones on the truck's street. Make it look official.", seconds = 2.8 },
+  { who = "roxy", text = "Nothing says official like a cone.", seconds = 1.8 },
+]
+on_start = [{ teleport = "spot:h1_smart_start" }]
+
+[[step]]
+kind = "interact"
+target = "spot:h1_cones"
+prompt = "Set out the roadwork"
+seconds = 2.0
+radius = 3.0
+checkpoint = true
+objective = "Set out the ~y~fake roadwork~s~."
+help = "Hold ~btn:right~ by the spot."
+on_done = [{ spawn = "smart_truck" }, { spawn = "van" }, { spawn = "mack_wh" }, { spawn = "mack_van" }]
+
+[[step]]
+kind = "switch"
+to = "dez"
+objective = "Switch to ~p~Dez~s~ in the city truck."
+
+[[step]]
+kind = "follow"
+target = "actor:smart_truck"
+distance = 90.0
+min = 12.0
+checkpoint = true
+objective = "Follow the ~y~truck~s~ to the warehouse. Stay back."
+on_start = [{ behaviour = { actor = "smart_truck", act = "goto:spot:h1_wh_door" } }]
+
+[[step]]
+kind = "switch"
+to = "mack"
+objective = "Switch to ~p~Mack~s~ at the warehouse."
+
+[[step]]
+kind = "interact"
+target = "actor:smart_truck"
+prompt = "Swap the cargo"
+seconds = 4.0
+radius = 5.5
+checkpoint = true
+objective = "Swap the ~y~cargo~s~ for scrap."
+on_done = [{ spawn = "loot1" }, { spawn = "loot2" }]
+
+[[step]]
+kind = "collect"
+targets = ["loot1", "loot2"]
+objective = "Load the ~g~money~s~."
+on_done = [{ dispatch = true }, { heat_cap = 5 }]
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:mack_van"
+objective = "Get in the other ~b~City Works truck~s~."
+on_start = [{ blip = { actor = "mack_van", kind = "vehicle" } }]
+
+[[step]]
+kind = "drive_to"
+target = "spot:h1_lockup"
+radius = 8.0
+checkpoint = true
+objective = "Drive to the ~b~lock-up~s~ in your hard hat. One star at most."
+help = "Ironclad is on the phone to the police by now. Nobody looks twice at a City Works truck, unless it hits something: two stars and the disguise is blown."
+on_start = [{ unblip = "mack_van" }]
+fail = [{ when = { heat_over = 1 }, reason = "The disguise didn't hold." }]
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Nobody shot, nobody chased, everybody paid. Smart.", seconds = 2.6 },
+]
+on_start = [{ pay = { who = "mack", cash = 60000 } }, { pay = { who = "dez", cash = 45000 } }, { pay = { who = "roxy", cash = 45000 } }, { story = "heist_done" }]
+
+[[step]]
+kind = "wait"
+label = "done"
+seconds = 1.0
+
+[[fail]]
+when = { died = "player" }
+reason = "The crew lost one of their own."
