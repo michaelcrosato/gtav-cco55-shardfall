@@ -762,6 +762,20 @@ impl StaticWorld {
         out
     }
 
+    /// Alive blocks whose middles lie inside a box.
+    pub fn blocks_centred_in(&self, min: Vec3, max: Vec3) -> Vec<BlockRef> {
+        let mut out = Vec::new();
+        for (key, chunk) in self.regions_in(min, max) {
+            for (i, b) in chunk.blocks.iter().enumerate() {
+                let c = b.center();
+                if b.alive && c.cmpge(min).all() && c.cmple(max).all() {
+                    out.push(BlockRef { region: *key, index: i as u32 });
+                }
+            }
+        }
+        out
+    }
+
     pub fn iter_alive(&self) -> impl Iterator<Item = (BlockRef, &Block)> {
         self.chunks.iter().flat_map(|(k, c)| {
             c.blocks.iter().enumerate().filter(|(_, b)| b.alive).map(move |(i, b)| (BlockRef { region: *k, index: i as u32 }, b))

@@ -54,6 +54,25 @@ impl Sim {
         Some((c, half, color))
     }
 
+    /// Breaks the destructible blocks whose middles lie inside a box (a pane of glass and its
+    /// frame) into debris flying away from `from`, about a piece per square metre of each (two to
+    /// twelve), and returns how many broke. A game's breakable glass: smashed by a car just before
+    /// it touches (so it keeps its speed), or by a shot; explosions break such blocks themselves.
+    pub fn break_blocks_in(&mut self, min: Vec3, max: Vec3, from: Vec3) -> usize {
+        let hit = self.state.statics.blocks_centred_in(min, max);
+        let mut n = 0;
+        for r in hit {
+            let Some(b) = self.state.statics.get(r).filter(|b| b.has(block_flags::DESTRUCTIBLE)) else { continue };
+            let s = b.half() * 2.0;
+            let area = (s.x * s.y).max(s.z * s.y).max(s.x * s.z);
+            let pieces = (area.round() as u32).clamp(2, 12);
+            if self.shatter(r, from, pieces).is_some() {
+                n += 1;
+            }
+        }
+        n
+    }
+
     /// Crumbling tiles: start under characters, fall when their time is up, regrow later.
     pub(crate) fn update_crumbles(&mut self, dt: f32, events: &mut Vec<SimEvent>) {
         // Tiles under characters start crumbling.
