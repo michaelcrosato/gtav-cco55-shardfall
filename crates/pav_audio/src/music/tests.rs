@@ -151,6 +151,29 @@ fn levels() {
     }
 }
 
+/// What a second of each genre's chorus (and the talk station) costs to render at 48 kHz
+/// (`cargo test --release -p pav_audio cost -- --ignored --nocapture`).
+#[test]
+#[ignore]
+fn cost() {
+    let sr = 48_000.0;
+    let mut targets: Vec<(&str, MusicTarget)> = BANDS
+        .iter()
+        .map(|(g, _)| {
+            let t = target(g, 0.0);
+            let at = start_of(&t, Part::Chorus);
+            (*g, MusicTarget { offset: at, ..t })
+        })
+        .collect();
+    targets.push(("talk", MusicTarget { offset: 4.0, ..talk_station() }));
+    for (g, t) in targets {
+        let start = std::time::Instant::now();
+        let out = render(&t, 10.0, sr);
+        let ms = start.elapsed().as_secs_f64() * 1000.0 / 10.0;
+        eprintln!("{g}: {ms:.2} ms per second of sound ({:.1}% of a core), rms {:.3}", ms / 10.0, rms(&out));
+    }
+}
+
 #[test]
 fn every_genre_plays_in_range_and_about_as_loud_as_the_others() {
     let mut levels = Vec::new();

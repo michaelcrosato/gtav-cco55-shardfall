@@ -498,6 +498,9 @@ offset, volume, muffle, `segments`) in its `AudioScene`; `pav_audio::music` rend
   `voice.radio` (`pitch` 1 = 120 Hz, `param` liveliness), e.g. a police scanner.
 - **Mix:** `AudioScene.ducking` is the decibels the radio and the ambience beds duck by
   (dialogue, menus); the mixer glides to it.
+- **Listening:** `audio_capture` renders a run's mix (events, loops, the radio and its talk) to
+  .wav; a game's CLI calls `pav_tools::tools::register_sounds(its cue file)` so its own cues
+  are in it. `music::render` and `voice::render` render a song or a line alone.
 
 ## Urban kit (pav_world)
 `pav_world` turns a district file (TOML) into an immutable `City` (`City::from_toml`, a pure

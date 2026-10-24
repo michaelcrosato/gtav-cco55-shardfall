@@ -189,7 +189,8 @@ crate calls `games::register(&ENTRY)` from its binaries and tests (`crates/gtf_g
   player with the level's `[camera]` settings (keep levels about 20 m across).
 - Sounds: `SimEvent::Sound { cue, .. }` plays a cue from the sound bank (engine cues in
   `crates/pav_audio/src/default_bank.toml`; a game's binary adds its own); the older events
-  (`Coin`, `Hit`...) still play their fixed sounds.
+  (`Coin`, `Hit`...) still play their fixed sounds. Radio stations by genre, talk segments and
+  babble voices: `docs/REFERENCE.md` → Radio and voices.
 - A game can live in its own crate (`crates/gtf_game`, `games::register`), or compile into
   `pav_core/src/games/` beside Shardfall.
 - The window's controls card lists the engine demo's keys unless the game presents itself.
