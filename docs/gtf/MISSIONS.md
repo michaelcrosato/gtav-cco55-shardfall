@@ -28,6 +28,7 @@ contact = "mack"               # calling them on the phone starts it (optional)
 blip = { letter = "D", at = "spot:los_mirados_driveway" }   # the map letter and the marker
 start = "at:-30,-26"           # where the player stands when it is played straight away
 unlock = ["m0_intro"]          # missions to pass first
+activity = false               # true: an activity (the race, a hold-up), counted as one for completion
 time = { at = "17:30", lock = true }   # the clock (held while it runs)
 weather = "clear"
 reward = { cash = 1500, unlock = ["switch"], text = ["mack", "Nice work, kid."] }

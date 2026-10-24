@@ -5,30 +5,36 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase (2026-10-24, session 4):** M0-M6 done; **M7 (content: the vertical slice) is next**,
-  then M8-M10. Read `HANDOFF.md` first, then this file. **Remaining work** (below the
-  milestones) lists everything M7-M10 still needs, from a gap inventory of the code against
-  PLAN. Sessions 3 and 4 only checked the environment (Log). Wasm clippy (D1) still fails on
-  vendored engine code (Open issues). The `.mcp.json` server now runs `gtf mcp`; the old `pav`
-  command timed out at startup. Nothing is running.
+- **Phase (2026-10-24, session 4):** M0-M6 done; **M7 is under way.**
+  - **Done this session:** D1 (wasm clippy clean); the story missions m1-m3, s1-s3, h0 and
+    h1 (Loud and Smart); the radio (D10's radio part, merged from a helper branch); the
+    landmarks and interiors (D2, merged from a helper branch).
+  - **Next:** the activities, then completion and stats, bodies and looks, and the §7.8 suites.
+  - Read `HANDOFF.md` first, then this file. **Remaining work** (below the milestones) is the
+    checklist.
+- **Missions:** the bot wins every story mission on seeds 1-3 (release `gtf`, `play bot=true
+  seeds=3`): m1, m2, m3, s1, s2 quiet and loud, s3, h0, h1 Loud and h1 Smart. It also still
+  wins `dev_test` and `dev_test2`. `tests/missions.rs` has an ignored `story_*` test per
+  mission (`cargo test --release -p gtf_game --test missions -- --ignored story_`).
 - **Session 2:** M3-M5 (driving, traffic, `LIB/gtf_vehicles`, heat and the police, cover,
   grenades, armed opponents, WORKSHOP clips, guns in hand, drive-bys, the respray and car swap,
   the evasion bot, the map's edge) and M6: the mission DSL with its validator, runtime and bot
-  (`docs/gtf/MISSIONS.md`), two test missions using all 25 step kinds, the three protagonists
-  (switch wheel, sky-cam, abilities, life spots), the phone (nine apps, texts, the camera), the
-  shops (Bang Bang Bros., Paloma Customs, Gas-N-Grab), saves (three slots, autosave, Continue)
-  and two engine additions (district `[[spot]]`s, `VehicleInput.grip`).
-- **Soaks (release `gtf`):** traffic 600 s seeds 1-2 and peds 600 s pass every limit; roam
-  900 s seeds 2-3 pass, seed 1 gives up one stuck car at a dead-end turnaround (open issue).
-- **Perf:** `gtf perf view=all` (release) passed every budget with traffic and crowds in session
-  2 (downtown: 110 vehicles, 94 people, 2.8-3.2 ms to build a frame, 1.4-2.2 ms a tick). On the
-  session 3 container the same view took 4.7-5.4 ms and 2.8-3.6 ms. On session 4's it passes
-  all ten views (downtown 3.6-3.9 ms and 2.0-2.1 ms; thin margin, open issue).
-- **Tests:** pav_core 305, pav_view 44, pav_world 11, gtf_game 98 (+8 ignored reports), all
-  green; clippy -D warnings clean on the touched crates; `cargo check --workspace --all-targets`
-  clean.
+  (`docs/gtf/MISSIONS.md`), the three protagonists (switch wheel, sky-cam, abilities, life
+  spots), the phone, the shops, saves and two engine additions (district `[[spot]]`s,
+  `VehicleInput.grip`).
+- **Soaks (release `gtf`, session 2):** traffic 600 s seeds 1-2 and peds 600 s pass every
+  limit; roam 900 s seeds 2-3 pass, seed 1 gives up one stuck car at a dead-end turnaround
+  (open issue). Not re-run since the traffic and landmark changes: M9.
+- **Perf:** session 4's container passed `gtf perf view=all` before the session's work
+  (downtown 3.6-3.9 ms a frame, 2.0-2.1 ms a tick). The landmarks helper measured every view
+  at or under 3.60 ms with the landmarks in (interleaved A/B, best of 2-4). Thin margin: M9.
+- **Tests (merged tree, 2026-10-24):**
+  - pav_core, pav_audio, pav_ui, pav_tools, pav_world, gtf_game and gtf_app: green.
+  - gtf_game: 114 passed, 8 ignored, plus the new `story_*` ones.
+  - clippy `-D warnings` clean on the touched crates.
 - **Helpers:** none running.
-- **Branch / PR:** `claude/keen-cerf-g5vksy`, draft PR #2.
+- **Branch / PR:** `claude/keen-cerf-g5vksy`, draft PR #2 (description current to the radio
+  and landmark merges).
 
 ## Milestones (PLAN.md §9 has the full task lists and acceptance criteria)
 - [x] **M0 Bootstrap** — engine vendored; baseline tests; E1 registry, `pav_tools::cli`, `pav_app`
@@ -99,26 +105,52 @@ Two read-only audits of the code against PLAN §2, §5, §7.8 and §9 found thes
 claims were spot-checked. Tick items as they land and move the evidence to the milestone entries
 and the DoD table. PLAN stays the source of truth: this list says what is missing, not the design.
 
-**First:** fix the D1 wasm-clippy lints (Open issues) in one `engine:` commit.
+- [x] **First:** fix the D1 wasm-clippy lints in one `engine:` commit (`1dfb757`, 2026-10-24:
+      `cargo clippy -p pav_app -p gtf_app --target wasm32-unknown-unknown -- -D warnings` clean).
 
 **M7 content** (in PLAN §2's order of value: the heist path first)
-- [ ] **Missions.** Only `dev_test` and `dev_test2` exist. Write `m1_repo_man`, `m2_midlife`,
-      `m3_overdrive`, `s1_rush_hour`, `s2_heavy_metal`, `s3_test_drive`, `h0_board` and
-      `h1_freeway_job` (Loud and Smart) with dialogue and shots. Add each to `FILES`, validate
-      it and give it a bot test on 3 seeds (both heist approaches). The `choose` step already
-      shows a `mission/board` Cards screen and freezes the world; `h0` adds the crew's cut.
-- [ ] **Landmarks.** These are placeholder masses with a sign (`pav_world/src/lots.rs`
-      `landmark`): the bank, police, hospital, gun store, Paloma Customs, Freeway Diner, Luxe
-      Motors and the Ironclad depot. City hall and the gas station are paving only. Missing
-      altogether:
-      - the Big Wheel (turning), the pier arcade and its food stalls, and the freighter;
-      - the Grind House, the City Works yard, the harbor warehouse, a parking garage and an
-        impound lot;
-      - the Skylark on the hospital roof, the shop names on Sunset Row's sign bands, and neon
-        signs.
-- [ ] **Interiors.** None exist: shops are menus at door spots and safehouses are spots. Build the
-      gun store, mod shop bay, Gas-N-Grab, Grind House, Freeway Diner, the safehouses and the
-      warehouse.
+- [x] **Missions** (2026-10-24). The story missions are written in the DSL, validated, and
+      added to `FILES`: `m1_repo_man`, `m2_midlife`, `m3_overdrive`, `s1_rush_hour`,
+      `s2_heavy_metal` (quiet or loud), `s3_test_drive`, `h0_board` (the board, the cut) and
+      `h1_freeway_job`.
+      - **h1 Loud:** Roxy blocks Route 404 with the City Works truck, Mack breaches the Ironclad
+        truck and fights off the guards, the bags, two SWAT waves at 4★, then Dez takes the
+        Okami Kaze off the Harbor Spur's broken end onto the harbor road and loses the police.
+      - **h1 Smart:** the fake roadwork, Dez tails the truck to the harbor warehouse, Mack swaps
+        the cargo and drives out in a City Works truck at ≤ 1★.
+      - **New for missions:** a `jump` step, `deck:` anchors, the `pay` and `armor` actions,
+        vehicle spawn health, actors that wait for their ground, `mission story <flag>`, and
+        `play seeds=N cmd=`.
+      - **Evidence:** release `gtf`, `play bot=true seeds=3` (`cmd="mission story smart"` for
+        Smart, `cmd="mission choose loud"` for s2 loud): 3/3 on every one. Game seconds per
+        run: m1 113-115, m2 85-109, m3 236-277, s1 242-294, s2 89-117, s3 192-229, h0 21,
+        h1 Loud 111-244, h1 Smart 160-163. The ignored `story_*` tests in `tests/missions.rs`
+        repeat these. Captures looked at in `out/s4/`: the spur's end from above and the
+        broken ramp, Mack's loot and truck, m2's crash, s3's window.
+- [x] **Landmarks** (2026-10-24, the landmarks helper, merged at `2451340`).
+      - **The engine kit:** landmarks are built from parts (`pav_world/src/parts.rs`; documented
+        in `docs/REFERENCE.md` under "Urban kit").
+      - **21 landmarks:**
+        - civic and services: the bank tower, City Hall, SPPD Central, St. Brigid's with the
+          Skylark on its helipad, the parking garage, the impound lot;
+        - shops and food: Bang Bang Bros., Paloma Customs, Gas-N-Grab, the Grind House, the
+          Freeway Diner, Luxe Motors with breakable glass;
+        - industry and harbor: the Ironclad depot, the City Works yard, the harbor warehouse,
+          the MV Pacific Star;
+        - the pier: its neon arcade, food stalls and the turning Big Wheel;
+        - the homes: Dez's, Mack's and Roxy's.
+      - **Dressing:** 49 shop names on Sunset Row's sign bands (about a third in neon), and lots
+        filled with their vehicles.
+      - **Evidence:** `pav_world/tests/paloma.rs` (the landmarks keep their places), `gtf_game`
+        tests (the landmarks at play; a car climbs the garage ramp; the armoured truck drives
+        into the warehouse; a car keeps its speed through Luxe's glass). The helper's captures:
+        `luxe_showroom`, `pier_night`, `wheel_diff`, `bank_tower`, and 11 on-foot interiors with
+        the HUD. Perf: every view at or under 3.60 ms.
+- [x] **Interiors** (2026-10-24, same merge): the gun store (counter, nine gun racks), the
+      Paloma Customs bay with its lift, Gas-N-Grab, the Grind House, the Freeway Diner, the
+      three homes with their beds (saves happen at the bed), the warehouse, Luxe's showroom and
+      the arcade. Shops open at their counter. Rooms are `Walk::Indoor` tiles: people can be put
+      and walk there, crowds don't spawn there.
 - [ ] **Bodies and looks.** The two helicopters have no authored body (`pav_view` draws a
       procedural one). People vary only by colour, height and build; add hair, headwear,
       accessories and outfits.
@@ -206,12 +238,12 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 ## Definition of Done evidence (PLAN.md §2)
 | Item | Status | Evidence (test, command + result, capture looked at, artifact) |
 |---|---|---|
-| D1 Builds and checks | ☐ | |
-| D2 The district | ☐ | |
+| D1 Builds and checks | ◐ | 2026-10-24: wasm clippy clean (`1dfb757`); host clippy -D warnings and the touched crates' tests green after each merge; builds and the final full run are M10 |
+| D2 The district | ◐ | 2026-10-24: 21 parts-built landmarks with interiors, Luxe's breakable glass, the turning Big Wheel, the City Works yard, the harbor warehouse, the pier and freighter, shop signs (merge `2451340`; `pav_world/tests/paloma.rs`, gtf_game landmark tests, the helper's captures); the spur's re-routed end (`out/s4/spur_above2.png`); landmark captures at their best hour are still to do |
 | D3 Player | ◐ | M3: feel ranges for all 13 road archetypes, driving/carjack/bail-out/helicopter tests, on-foot camera with wall handling; M6: three protagonists with their own cash, weapons and places, the switch wheel and sky-cam, abilities (`tests/protagonists.rs`); final looks and animation polish wait for M7/M9 |
 | D4 Living city | ◐ | M4: traffic and pedestrian soaks within limits, buses, parked cars, struck people, witnesses; roam soak open issue (one stuck car in 2,700 s) |
 | D5 Heat | ◐ | M5: `tests/heat.rs` (reporting, arrest, Wasted, respray, car swap, evasion), police never spawn in view, 3★ night captures |
-| D6 Missions and activities | ◐ | M6: the mission system end to end — DSL, validator (file:line), runtime, checkpoints, fail/retry/skip, medals, results, replay, the bot that finishes both test missions on 3 seeds (`tests/missions.rs`, `docs/gtf/MISSIONS.md`); the story missions, heist and activities are M7 |
+| D6 Missions and activities | ◐ | M6: the mission system end to end (`tests/missions.rs`, `docs/gtf/MISSIONS.md`). 2026-10-24: the eight story missions with the heist both ways; the bot wins each on seeds 1-3 (`play bot=true seeds=3`; ignored `story_*` tests). Activities are next |
 | D7 UI | ◐ | M1 kit + M6 screens: intro card, objectives, subtitles, fail card, results, switch wheel, phone (9 apps), shop menus, save slots, captured with HUD (`out/m6/`); the 10-foot review is M9 |
 | D8 Frontend | ☐ | |
 | D9 Attract mode | ☐ | |
@@ -372,6 +404,59 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
   (`missions/` was another helper's). Stations "Westside" and "Smooth" so the card reads
   WESTSIDE 99 / SMOOTH 88.8. `radio seek <s>|end` is a check command.
 
+- 2026-10-24 — **Session 4 decisions (M7 missions):**
+  - **The Harbor Spur** ends heading west at (105.6, 11, 363) instead of over the water. The
+    corridor under rows 61-63 (cols 36-43) is cleared, so a car leaving the broken end lands on
+    dirt before the harbor road. h1 Loud's getaway is that jump (`jump` step: airborne at some
+    point, then down near the landing).
+  - **New anchors and actions for missions:**
+    - `deck:x,z` anchors (the Route 404 lane nearest there, at deck height), because the
+      heist's block is on the freeway;
+    - `pay` (cash to one of the crew) and `armor` actions;
+    - vehicle spawn health (the share of a new one's);
+    - actors whose ground has not streamed in wait and spawn when it has (s1's guards fell
+      through the world).
+  - **The crew's bodies and the cars they drive are streaming interest points**, so a switch
+    finds them standing.
+  - **The wanted autopilot drives like a getaway driver.**
+    - Unless told to take it easy (desire below 0.9), it ignores officers on foot, shoves
+      stopped cars after 2 s boxed in, routes round lanes it found blocked (new engine
+      `route_lanes_avoiding`) and honks people clear (people on the road then step off it).
+    - Any pilot slows for sharp lane joints.
+    - It passes at no more than 65 km/h. It ran into parked cars on the far side at 88 km/h.
+    - The escape bot runs from the map's edge too (within a quarter of the map, at most 250 m).
+  - **The storm channel's ramps** got a level landing, 7 m slabs, an apron over the edge and
+    lanes curving in from the street (`pav_world`). Pickups fell off the old 5 m ramp and
+    overshot its sharp corner.
+  - **The mission bot plays like a careful player.** It still acts only through its input:
+    - It loses the police before a drive longer than 220 m.
+    - It fights from cover: R1 near a car or wall, then peeks and fires (L2/R2) and ducks. It
+      prefers foes it can hit (clear from the camera and from the muzzle), carries its
+      hardest-hitting gun and uses its fighting ability.
+    - It walks round cars (A* on a half-metre grid within 14 m), checks a straight walk at
+      knee height too, and drives a car that is off the roads to the nearest road it can reach
+      in a straight line (glass excepted).
+    - It switches by the wheel with the stick its own: the autopilot no longer writes the
+      stick while a wheel is open.
+  - **An enemy a mission starts below full health is not "hurt" on spawn.** Awareness compares
+    with the health it started with; s2's night shift were all on alert at once.
+  - **h1 Smart:** Mack drives out in a second City Works truck. The last leg starts at no stars
+    and fails at two (PLAN's "≤ 1★"). With one star the police pull up behind a car stopped at a
+    light, and the plan busts only players on foot.
+- 2026-10-24 — **Landmarks** (the helper's calls, reviewed at the merge):
+  - Luxe Motors' glass is breakable panes: an invisible destructible collider inside a frosted
+    frame (the renderer has no transparency). A pane breaks 0.2 s before a vehicle doing
+    3 m/s or more reaches it, so the car keeps its speed.
+  - The Big Wheel is drawn from the game clock (one turn in 150 s), with no physics.
+  - The freighter sits at cols 47-56 and the warehouse at rows 58-60, clear of the spur's flight
+    path.
+  - Lots fill to 45% within 90 m. Landmark lamps and palms are walk-through. Yards and homes
+    are `crowds = false`.
+  - Spots take a `y` (decks, roofs), and a vehicle at a landmark's own spot stands exactly on
+    it.
+- 2026-10-24 — **The store's test counts materials as a floor** (`>= 40`), as it does props and
+  clips: the landmarks' chain-link was the 41st.
+
 ## Open issues
 - Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround (limit 0);
   roam AI crashes 0-3 per 900 s with buses turning at junctions the most common. M9 polish.
@@ -401,11 +486,11 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 - **Earlier evidence is not on disk.** `out/` is ignored by Git and containers reset, so the
   M0-M6 captures, filmstrips and soak JSON cited above are gone. M10's final verification
   re-runs the D1-D13/D16 commands and looks at fresh captures.
-- **Small inconsistencies found in session 4:** a billboard reads "FREEWAY FM 99.4"
-  (`pav_world/src/dress.rs:27`) but the station is 104.04 (`radio.toml`). The `beach_sunset`
-  view's `about` names the Big Wheel, which is not built yet. The About screen says every model,
-  sound and song is generated, but the walk clips come from motion libraries. Fix them with
-  M7/M8.
+- **About screen wording:** it says every model, sound and song is generated, but the walk
+  clips come from motion libraries. Fix with M8's About and credits. (The billboard now reads
+  FREEWAY FM 104.04 and the Big Wheel exists: both fixed by the landmarks merge.)
+- **Bot test time:** each story mission takes the bot 1-5 minutes of game time, so the
+  `story_*` tests are ignored (run them in release, in parallel).
 
 ## Log
 - 2026-10-17 — Planning: engine studied at `0098196`; measured starter bot (3/3 wins), Drift Circuit
@@ -512,3 +597,24 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
   4.8 syllables/s; peaks ≤ 0.32, no clipping. HUD captures looked at: SPNN's and dispatch's
   subtitles, the DJ card (its line now wraps in the corner instead of running into the
   objective). Cost: 2.5-4.3% of a core per station, 1.0% for talk (native release).
+- 2026-10-24 — **The story missions (M7).**
+  - **Written and passing:** m1-m3, s1-s3, h0 and h1 in both approaches. Each was traced with
+    the bot step by step until it won on seeds 1-3. Commits: `d1c6300` engine (ramps, avoiding
+    routes, `play seeds cmd`), `05f651c` game, `dfb3ecf` content, `67ab73c` docs.
+  - **Merges:** the radio branch (`d9e3f7c`; 585 tests green on the merged crates) and the
+    landmarks branch (`2451340`; conflicts in `views.toml` and `anchor.rs` resolved by keeping
+    both sides).
+  - **Re-tested after the merges:** the landmarks changed the ground under several missions:
+    - the diner lot's low walls;
+    - cars parked at the warehouse;
+    - s2's yard, which now really exists;
+    - s3's showroom.
+  - **Fixes:** the bot learned to walk round cars, see low walls, leave cover and drive out of
+    yards; s2 moved into the yard; s3 now leaves through Luxe's window. Commits `123445d`,
+    `753bff6`, `c2d0a77`, `e8b34e5`.
+  - **Store index** regenerated twice: for `LIB/gtf_weapons` and the WORKSHOP clips, then the
+    landmarks' 30 props and a material.
+  - **Disk:** the 38 GB allowance ran out once while a test build linked. The finished helpers'
+    worktree `target/` dirs and stale test executables were deleted. The landmarks helper's
+    baseline binary was deleted with them (it lived in the shared scratchpad), so its last perf
+    A/B is best-of-2.
