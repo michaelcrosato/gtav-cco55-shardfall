@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 pub mod about;
+pub mod activities;
 pub mod ambience;
 pub mod anchor;
 pub mod audio;
@@ -211,6 +212,9 @@ pub struct Freeway {
     /// Missions played and the one under way, and the bot that plays them.
     #[serde(default)]
     pub missions: missions::Missions,
+    /// Stunt jumps, the Lost Shields, vigilante, random events: what is done and under way.
+    #[serde(default)]
+    pub activities: activities::Activities,
     #[serde(default)]
     pub mbot: missions::bot::MissionBot,
     #[serde(default)]
@@ -350,6 +354,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         chase: camera::ChaseCam::default(),
         crew: protagonists::Crew::new(0),
         missions: missions::Missions::default(),
+        activities: activities::Activities::default(),
         mbot: missions::bot::MissionBot::default(),
         phone: phone::Phone::default(),
         shop: None,
@@ -515,6 +520,8 @@ impl Freeway {
                         None => log::warn!("menu: gun, mods, store, save, load or replay"),
                     }
                 }
+                // An activity or collectible counted as done (`jump:<id>`, `shield:<id>`, ...): tests.
+                (Some("activity_done"), Some(id)) => self.activity_done(id),
                 // The autopilot's destination: `pilot_goal <x> <z> [desire]`, `pilot_goal off`.
                 (Some("pilot_goal"), Some("off")) => self.traffic.pilot_goal(None, 1.0),
                 (Some("pilot_goal"), Some(x)) => {
@@ -1083,6 +1090,7 @@ impl Game for Freeway {
             }
             self.ability_tick(input, real, events);
             self.mission_tick(sim, input, dt, real, events, &mut out);
+            self.activities_tick(sim, input, dt, real, events);
             let held = held || self.shop.is_some();
             let mut take = 0;
             if self.phone.open {
@@ -1686,6 +1694,7 @@ impl Freeway {
         self.crew = protagonists::Crew::new(0);
         self.crew.unlocked = true;
         self.missions = missions::Missions::default();
+        self.activities = activities::Activities::default();
         self.phone = phone::Phone::default();
         self.load_member(0);
         self.dress_player(sim);

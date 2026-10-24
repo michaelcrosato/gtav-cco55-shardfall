@@ -68,6 +68,10 @@ pub struct MissionDef {
     /// Missions that must be passed first.
     #[serde(default)]
     pub unlock: Vec<String>,
+    /// An activity (the race, a hold-up), not the story: replayable, counted with the
+    /// activities for completion.
+    #[serde(default)]
+    pub activity: bool,
     #[serde(default)]
     pub time: Option<TimeDef>,
     #[serde(default)]

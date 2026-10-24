@@ -40,6 +40,9 @@ pub struct SaveData {
     pub resprays: u32,
     /// Completion when saved (the slot list shows it).
     pub completion: f32,
+    /// Activities and collectibles done (`activities::Activities::done`).
+    #[serde(default)]
+    pub activities: BTreeSet<String>,
 }
 
 /// A save's line in the slot list: who, when, how far.
@@ -51,17 +54,31 @@ pub fn summary(json: &str) -> Option<String> {
 }
 
 impl Freeway {
-    /// How much of the game is done (PLAN.md §5.7): story 50%, activities 30%, collectibles 10%,
-    /// medals 10% (parts with nothing in them yet count as not done).
+    /// How much of the game is done (PLAN.md §5.7): story 50% (story missions passed), activities
+    /// 30% (activity missions passed, stunt jumps, vigilante, random events), collectibles 10%
+    /// (the Lost Shields), medals 10% (gold on every mission with medals); a part with nothing
+    /// in it counts as not done.
     pub fn completion(&self) -> f32 {
-        let story: Vec<_> = crate::missions::all().into_iter().filter(|d| d.district.is_empty()).collect();
-        let n = story.len().max(1) as f32;
-        let passed = story.iter().filter(|d| self.missions.passed(&d.key)).count() as f32;
-        let gold = story
+        let missions: Vec<_> = crate::missions::all().into_iter().filter(|d| d.district.is_empty()).collect();
+        let share = |done: usize, of: usize| if of == 0 { 0.0 } else { done as f32 / of as f32 };
+        let story: Vec<_> = missions.iter().filter(|d| !d.activity).collect();
+        let story_part = share(story.iter().filter(|d| self.missions.passed(&d.key)).count(), story.len());
+        let def = crate::activities::def().ok();
+        let units = def.as_ref().map(|d| d.units()).unwrap_or_default();
+        let jobs: Vec<_> = missions.iter().filter(|d| d.activity).collect();
+        let activities_part = share(
+            jobs.iter().filter(|d| self.missions.passed(&d.key)).count()
+                + units.iter().filter(|u| self.activities.done.contains(*u)).count(),
+            jobs.len() + units.len(),
+        );
+        let shields = def.as_ref().map(|d| d.shields()).unwrap_or_default();
+        let shields_part = share(shields.iter().filter(|s| self.activities.done.contains(*s)).count(), shields.len());
+        let medalled: Vec<_> = missions.iter().filter(|d| !d.medals.is_empty()).collect();
+        let gold = medalled
             .iter()
             .filter(|d| self.missions.records.get(&d.key).is_some_and(|r| r.medal == Some(pav_core::present::Medal::Gold)))
-            .count() as f32;
-        0.5 * passed / n + 0.1 * gold / n
+            .count();
+        0.5 * story_part + 0.3 * activities_part + 0.1 * shields_part + 0.1 * share(gold, medalled.len())
     }
 
     /// The game as a save.
@@ -83,6 +100,7 @@ impl Freeway {
             gallery: self.phone.gallery.clone(),
             resprays: self.resprays,
             completion: self.completion(),
+            activities: self.activities.done.clone(),
         }
     }
 
@@ -119,6 +137,7 @@ impl Freeway {
         self.dress_player(sim);
         self.missions.records = d.records;
         self.missions.story = d.story;
+        self.activities = crate::activities::Activities { done: d.activities, ..Default::default() };
         self.sky.hour = d.hour;
         if let Ok(world) = crate::daytime::def() {
             let _ = self.sky.set_weather(&world, &d.weather, false);
