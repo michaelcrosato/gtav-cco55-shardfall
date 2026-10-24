@@ -94,6 +94,18 @@ voices = 6
 layers = [{ wave = "sine", freq = 140, freq_end = 70, glide = 0.05, decay = 0.07, volume = 0.18 }, { wave = "noise", freq = 1, decay = 0.04, volume = 0.08, cutoff = 900 }]
 voices = 4
 
+# Glass: a showroom pane shattering (a bright crash, then shards tinkling down).
+[cue."glass.shatter"]
+layers = [
+    { wave = "noise", freq = 1, decay = 0.35, volume = 0.3, cutoff = 9000, cutoff_end = 2500 },
+    { wave = "noise", freq = 1, decay = 0.08, volume = 0.2, cutoff = 3000, cutoff_end = 800 },
+    { wave = "sine", freq = 3520, decay = 0.12, volume = 0.05, delay = 0.06 },
+    { wave = "sine", freq = 4186, decay = 0.1, volume = 0.045, delay = 0.13 },
+    { wave = "sine", freq = 2794, decay = 0.14, volume = 0.04, delay = 0.21 },
+    { wave = "sine", freq = 5274, decay = 0.08, volume = 0.035, delay = 0.3 },
+]
+voices = 4
+
 # Melee: the swing's whoosh and the punch landing.
 [cue."melee.swing"]
 layers = [{ wave = "noise", freq = 1, attack = 0.03, decay = 0.12, volume = 0.1, cutoff = 1800, cutoff_end = 600 }]

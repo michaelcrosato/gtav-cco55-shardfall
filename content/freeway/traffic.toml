@@ -26,6 +26,8 @@ radius = 110.0            # spots within this of the player hold their parked ca
 despawn = 150.0
 share = 0.35              # share of parking spots with a car in them
 locked = 0.3              # share of parked cars that are locked
+lot_share = 0.45          # share of landmarks' lot places (car parks, yards) with a vehicle
+lot_radius = 90.0         # lot places within this of the player hold their vehicles
 
 [bus]
 key = "metro_bus"
