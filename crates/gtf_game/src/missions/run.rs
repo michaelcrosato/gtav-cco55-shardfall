@@ -66,7 +66,7 @@ pub(crate) fn entity(sim: &Sim, run: &Run, id: &str) -> Option<EntityId> {
 pub(crate) fn down(sim: &Sim, run: &Run, id: &str) -> bool {
     let Some(a) = run.actors.get(id) else { return true };
     if a.entity.is_none() {
-        return a.taken;
+        return a.taken && !a.waiting;
     }
     match entity(sim, run, id).and_then(|e| sim.state.entities.get(e)) {
         None => true,
@@ -78,7 +78,7 @@ pub(crate) fn down(sim: &Sim, run: &Run, id: &str) -> bool {
 /// way it faces.
 pub(crate) fn actor_at(sim: &Sim, run: &Run, id: &str) -> Option<(Vec3, f32)> {
     let a = run.actors.get(id)?;
-    let Some(e) = a.entity else { return (!a.taken).then_some((a.at, 0.0)) };
+    let Some(e) = a.entity else { return (!a.taken).then_some((a.at, a.yaw)) };
     let ent = sim.state.entities.get(e)?;
     if ent.vehicle.is_some() {
         let c = crate::drive::Car::read(sim, e)?;
@@ -115,6 +115,7 @@ impl Freeway {
                 let facing = sim.player().and_then(|p| p.character.as_ref()).map_or(0.0, |c| c.facing);
                 Some((self.player_point(sim), facing))
             }
+            Anchor::Deck(p) => anchor::deck_at(city, p),
             x => {
                 let (p, yaw) = anchor::raw(city, &x)?;
                 Some((anchor::ground(city, p), yaw.unwrap_or(0.0)))
@@ -259,12 +260,28 @@ impl Freeway {
             timer: 0.0,
             gate: 0,
             lap: 0,
+            waiting: false,
+            yaw: 0.0,
         };
         if s.pickup.is_some() {
             let Some((p, _)) = place(false, self) else { return };
             actor.at = p;
             run.actors.insert(s.id.clone(), actor);
             return;
+        }
+        // Far from the player its ground may not be there yet: it waits (and is made when the
+        // ground loads) rather than fall through the world.
+        let player_body =
+            s.protagonist.as_deref().and_then(|w| crate::protagonists::def().ok()?.index(w)) == Some(self.crew.current);
+        if !player_body {
+            let Some((p, yaw)) = place(s.vehicle.is_some(), self) else { return };
+            if !crate::world::ground_loaded(sim, p) {
+                actor.at = p;
+                actor.yaw = yaw;
+                actor.waiting = true;
+                run.actors.insert(s.id.clone(), actor);
+                return;
+            }
         }
         let keep = |sim: &mut Sim, id: EntityId| {
             if let Some(e) = sim.state.entities.get_mut(id) {
@@ -329,6 +346,13 @@ impl Freeway {
         if let Some(hp) = s.health.or(saved.map(|x| x.health)).filter(|_| s.vehicle.is_none() && s.protagonist.is_none()) {
             self.combat.hp.insert(id.0, hp);
         }
+        // A vehicle's health: the share of a new one's (a wreck to be, a worn getaway car).
+        if s.vehicle.is_some()
+            && let Some(h) = s.health
+            && let Some(v) = sim.state.entities.get_mut(id).and_then(|e| e.vehicle.as_deref_mut())
+        {
+            v.state.health = h.clamp(0.01, 1.0);
+        }
         actor.entity = Some(id);
         run.actors.insert(s.id.clone(), actor);
         // The driver at the wheel (a checkpoint puts its own people back in their seats).
@@ -340,6 +364,26 @@ impl Freeway {
             }
             if let Some(d) = entity(sim, run, dr) {
                 sim.enter_vehicle_seat(d, id, 0);
+            }
+        }
+    }
+
+    /// Actors waiting for their ground: made now where it has loaded (with the behaviour and
+    /// blip they were given while they waited).
+    fn wake_waiting(&mut self, sim: &mut Sim, def: &MissionDef, run: &mut Run) {
+        let ready: Vec<String> = run
+            .actors
+            .iter()
+            .filter(|(_, a)| a.waiting && crate::world::ground_loaded(sim, a.at))
+            .map(|(k, _)| k.clone())
+            .collect();
+        for id in ready {
+            let Some(a) = run.actors.remove(&id) else { continue };
+            self.spawn_actor(sim, def, run, a.spawn, None);
+            if let Some(x) = run.actors.get_mut(&id) {
+                x.act = a.act;
+                x.blip = a.blip;
+                x.ordered = false;
             }
         }
     }
@@ -423,6 +467,19 @@ impl Freeway {
             }
             Action::Give { weapon, ammo } => self.give_weapon(weapon, *ammo),
             Action::Cash(n) => self.pay(*n),
+            Action::Armor(a) => self.combat.armor = a.clamp(0.0, crate::combat::MAX_ARMOR),
+            Action::Pay { who, cash } => {
+                let i = crate::protagonists::def().ok().and_then(|d| d.index(who));
+                match i {
+                    Some(i) if i == self.crew.current => self.pay(*cash),
+                    Some(i) => {
+                        if let Some(m) = self.crew.members.get_mut(i) {
+                            m.cash += cash;
+                        }
+                    }
+                    None => {}
+                }
+            }
             Action::Text { from, body } => self.text_message(from, body),
             Action::Note { title, body } => self.note("info", title, body),
             Action::Help(text) => run.help = Some((text.clone(), 0.0)),
@@ -947,6 +1004,7 @@ impl Freeway {
                 run.stats.hits = self.combat.hits - b.1;
                 run.stats.headshots = self.combat.headshots - b.2;
                 run.stats.kills = self.combat.kills - b.3;
+                self.wake_waiting(sim, &def, &mut run);
                 self.drive_actors(sim, &def, &mut run, out, dt, events);
                 let step = def.step[run.step].clone();
                 let reason = if !self.fate.alive() {
@@ -1067,7 +1125,7 @@ impl Freeway {
         use StepKind::*;
         let target = step.target.as_deref().and_then(|t| self.anchor_at(sim, run, t));
         match step.kind {
-            Goto | DriveTo | Interact | Stealth => {
+            Goto | DriveTo | Interact | Stealth | Jump => {
                 if let Some((p, yaw)) = target {
                     self.teleport_player(sim, p, yaw);
                 }
@@ -1374,6 +1432,22 @@ impl Freeway {
                 }
             }
             Race => return self.race_tick(sim, run, step, prog),
+            Jump => {
+                // Airborne at some point in the step, then down on the wheels near the landing.
+                let car = self.drive.vehicle();
+                let st = car.and_then(|c| sim.vehicle_status(c));
+                if st.as_ref().is_some_and(|s| s.airborne) {
+                    prog.meter = 1.0;
+                }
+                let down = st.as_ref().is_some_and(|s| !s.airborne);
+                if prog.meter >= 1.0 && down && target.is_some_and(|(p, _)| near(p, step.radius.unwrap_or(16.0))) {
+                    events.push(sound("mission.step", 0.8, 1.3));
+                    return Flow::Done;
+                }
+                if car.is_some_and(|c| down && prog.meter >= 1.0 && sim.vehicle_status(c).is_some_and(|s| s.wrecked)) {
+                    return Flow::Fail("The car didn't make it.");
+                }
+            }
             Stealth => {
                 let mut seen = false;
                 for w in &step.watchers {

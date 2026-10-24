@@ -27,6 +27,14 @@ pub fn down_of(sim: &pav_core::sim::Sim, run: &Run, id: &str) -> bool {
 pub const FILES: &[(&str, &str)] = &[
     ("dev_test", include_str!("../../../../content/freeway/missions/dev_test.toml")),
     ("dev_test2", include_str!("../../../../content/freeway/missions/dev_test2.toml")),
+    ("m1_repo_man", include_str!("../../../../content/freeway/missions/m1_repo_man.toml")),
+    ("m2_midlife", include_str!("../../../../content/freeway/missions/m2_midlife.toml")),
+    ("m3_overdrive", include_str!("../../../../content/freeway/missions/m3_overdrive.toml")),
+    ("s1_rush_hour", include_str!("../../../../content/freeway/missions/s1_rush_hour.toml")),
+    ("s2_heavy_metal", include_str!("../../../../content/freeway/missions/s2_heavy_metal.toml")),
+    ("s3_test_drive", include_str!("../../../../content/freeway/missions/s3_test_drive.toml")),
+    ("h0_board", include_str!("../../../../content/freeway/missions/h0_board.toml")),
+    ("h1_freeway_job", include_str!("../../../../content/freeway/missions/h1_freeway_job.toml")),
 ];
 
 fn yes() -> bool {
@@ -228,10 +236,11 @@ pub enum StepKind {
     Branch,
     Set,
     Parallel,
+    Jump,
 }
 
 impl StepKind {
-    pub const ALL: [StepKind; 25] = [
+    pub const ALL: [StepKind; 26] = [
         StepKind::Wait,
         StepKind::Cutscene,
         StepKind::Dialogue,
@@ -257,6 +266,7 @@ impl StepKind {
         StepKind::Branch,
         StepKind::Set,
         StepKind::Parallel,
+        StepKind::Jump,
     ];
 
     pub fn name(self) -> &'static str {
@@ -286,6 +296,7 @@ impl StepKind {
             StepKind::Branch => "branch",
             StepKind::Set => "set",
             StepKind::Parallel => "parallel",
+            StepKind::Jump => "jump",
         }
     }
 }
@@ -373,6 +384,13 @@ pub enum Action {
         ammo: u32,
     },
     Cash(i64),
+    /// Body armour on the player (0–100).
+    Armor(f32),
+    /// Cash to one of the crew, played or not (the heist's cut).
+    Pay {
+        who: String,
+        cash: i64,
+    },
     Text {
         from: String,
         body: String,
@@ -742,10 +760,16 @@ pub fn validate(d: &MissionDef, text: &str, city: &pav_world::City) -> Vec<Strin
                         errs.push(format!("{file}:{at}: no weapon '{weapon}'"));
                     }
                 }
+                Action::Pay { who, .. } if !protagonist(who) => {
+                    errs.push(format!("{file}:{at}: pay names no protagonist '{who}'"))
+                }
                 Action::Time(t) if crate::daytime::parse_time(t).is_none() => {
                     errs.push(format!("{file}:{at}: time '{t}' is not HH:MM"))
                 }
                 Action::Teleport(a) => anchor(a, errs, at),
+                Action::Armor(a) if !(0.0..=crate::combat::MAX_ARMOR).contains(a) => {
+                    errs.push(format!("{file}:{at}: armor {a} is not 0-100"))
+                }
                 Action::Unlock(f) if f != "switch" => errs.push(format!("{file}:{at}: unlock '{f}' (switch)")),
                 _ => {}
             }
@@ -897,6 +921,13 @@ fn check_step(
             }
         }
         Parallel if s.steps.len() < 2 => errs.push(format!("{file}:{at}: parallel needs two sub-steps or more")),
+        Jump => {
+            need_target(errs);
+            if s.gates.len() != 2 {
+                errs.push(format!("{file}:{at}: a jump needs gates = [run-up, lip]"));
+            }
+            s.gates.iter().for_each(|g| anchor(g, errs, at));
+        }
         _ => {}
     }
     for w in &s.watchers {
@@ -993,6 +1024,12 @@ pub struct Actor {
     /// A racer's next gate and laps done.
     pub gate: usize,
     pub lap: u32,
+    /// Made while its ground was not loaded yet (far from the player): it appears at `at`,
+    /// facing `yaw`, once the ground is there (until then it counts as up, not down).
+    #[serde(default)]
+    pub waiting: bool,
+    #[serde(default)]
+    pub yaw: f32,
 }
 
 /// A step's own progress.

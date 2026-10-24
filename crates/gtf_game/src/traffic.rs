@@ -171,6 +171,21 @@ pub struct Agent {
     pub arrived: bool,
     #[serde(default)]
     pub planned: bool,
+    /// Lanes a goal-directed driver found blocked (a police car across the road): its route
+    /// to the goal goes round them. Seconds sat behind the same stopped car.
+    #[serde(default)]
+    pub avoid: Vec<u32>,
+    #[serde(default)]
+    pub jam: f32,
+    /// The lane its route to the goal ends on (none: no way found yet), and seconds before
+    /// it looks for one again.
+    #[serde(default)]
+    pub end: Option<u32>,
+    #[serde(default)]
+    pub plan_wait: f32,
+    /// What it is braking for this tick (the `traffic` tool shows it).
+    #[serde(skip)]
+    pub why: &'static str,
 }
 
 /// The cars driving around the player, the parked ones and their counters (part of the game's
@@ -290,6 +305,12 @@ pub struct Moment<'a> {
     /// The police's vehicles (the autopilot on the run does not brake for them: that is how a
     /// PIT stops a car).
     pub police: Vec<EntityId>,
+    /// Police officers on foot (feet): the autopilot on the run leans on the horn and drives on
+    /// rather than waiting for them to step aside.
+    pub officers: Vec<Vec3>,
+    /// The player is wanted: the autopilot drives like a getaway driver (through the lights,
+    /// round slower cars, never sitting still).
+    pub wanted: bool,
 }
 
 /// Whether the camera sees a point (in front, within a wide cone, not far off; close by always).
@@ -334,13 +355,14 @@ fn ahead(g: &LaneGraph, lane: u32, along: f32, route: &[u32], dist: f32) -> (Vec
 /// Whether every way on from `lane` runs off the map (the freeway's far end) or stops within
 /// `depth` lanes: the player's autopilot keeps out of such roads.
 fn dead_end(g: &LaneGraph, lane: u32, depth: u32) -> bool {
+    // (A road that goes on only by turning round, at the map's edge or a cul-de-sac, ends.)
     let open: Vec<u32> = g.lanes[lane as usize]
         .next
         .iter()
         .copied()
         .filter(|&n| {
             let l = &g.lanes[n as usize];
-            !l.closed && drivable(l.kind)
+            !l.closed && drivable(l.kind) && l.turn != Turn::UTurn
         })
         .collect();
     if open.is_empty() {
@@ -553,6 +575,11 @@ impl Traffic {
             mission: false,
             arrived: false,
             planned: false,
+            avoid: Vec::new(),
+            jam: 0.0,
+            why: "",
+            end: None,
+            plan_wait: 0.0,
         };
         self.extend(&mut a, g, &mut sim.state.rng);
         self.cars.push(a);
@@ -580,6 +607,10 @@ impl Traffic {
             a.arrived = false;
             a.planned = false;
             a.route.clear();
+            a.avoid.clear();
+            a.jam = 0.0;
+            a.end = None;
+            a.plan_wait = 0.0;
             return;
         }
         self.parked.retain(|_, id| *id != car);
@@ -620,6 +651,11 @@ impl Traffic {
             mission: true,
             arrived: false,
             planned: false,
+            avoid: Vec::new(),
+            jam: 0.0,
+            why: "",
+            end: None,
+            plan_wait: 0.0,
         };
         if c.speed().abs() < 0.1 {
             sim.set_vehicle_kinematic(car, false);
@@ -659,6 +695,10 @@ impl Traffic {
             a.arrived = false;
             a.planned = false;
             a.route.clear();
+            a.avoid.clear();
+            a.jam = 0.0;
+            a.end = None;
+            a.plan_wait = 0.0;
         }
     }
 
@@ -1076,6 +1116,11 @@ impl Traffic {
                 mission: false,
                 arrived: false,
                 planned: false,
+                avoid: Vec::new(),
+                jam: 0.0,
+                why: "",
+                end: None,
+                plan_wait: 0.0,
             };
             self.extend(&mut agent, g, &mut sim.state.rng);
             if pos.distance(player) > d.density.full || !crate::world::ground_loaded(sim, pos) {
@@ -1150,6 +1195,11 @@ impl Traffic {
                 mission: false,
                 arrived: false,
                 planned: false,
+                avoid: Vec::new(),
+                jam: 0.0,
+                why: "",
+                end: None,
+                plan_wait: 0.0,
             };
             if dist > d.density.full || !crate::world::ground_loaded(sim, pos) {
                 sim.set_vehicle_kinematic(car, true);
@@ -1178,16 +1228,46 @@ impl Traffic {
         // laid again whenever the route runs out short of the goal's lane (a lane change to
         // pass or pull over clears it).
         if let Some(goal) = a.goal {
-            let keep = |l: &pav_world::lanes::Lane| !l.closed && drivable(l.kind) && l.kind != LaneKind::Connector;
-            let end = || g.nearest_level(goal, 4.0, keep).or_else(|| g.nearest(goal, keep)).map(|x| x.0);
-            if !a.planned || (a.route.is_empty() && end() != Some(a.lane)) {
+            if !a.planned || (a.route.is_empty() && a.end != Some(a.lane) && a.plan_wait <= 0.0) {
                 a.planned = true;
+                a.end = None;
                 let start = *a.route.last().unwrap_or(&a.lane);
-                if let Some(end) = end() {
-                    let path = g.route_lanes(start, end);
-                    if path.first() == Some(&start) {
-                        a.route.extend_from_slice(&path[1..]);
+                // The lanes nearest the goal, open roads at its level first, then any lane there
+                // (the Ditch's bed is closed to ambient traffic but somewhere to go), then the
+                // nearest at any level: in turn, until one can be reached (the nearest may run the
+                // other way, as the far side of a road or the Ditch's other bed lane).
+                let open = |l: &pav_world::lanes::Lane| !l.closed && drivable(l.kind) && l.kind != LaneKind::Connector;
+                let any = |l: &pav_world::lanes::Lane| l.kind != LaneKind::Connector;
+                let mut tried: Vec<u32> = Vec::new();
+                'search: for pass in 0..4 {
+                    for _ in 0..3 {
+                        let fresh = |l: &pav_world::lanes::Lane| !tried.iter().any(|&t| std::ptr::eq(l, &g.lanes[t as usize]));
+                        let found = match pass {
+                            0 => g.nearest_level(goal, 4.0, |l| open(l) && fresh(l)),
+                            1 => g.nearest_level(goal, 4.0, |l| any(l) && fresh(l)),
+                            2 => g.nearest(goal, |l| open(l) && fresh(l)),
+                            _ => g.nearest(goal, |l| any(l) && fresh(l)),
+                        };
+                        let Some((end, _, _)) = found else { break };
+                        if end == start {
+                            a.end = Some(end);
+                            break 'search;
+                        }
+                        // Round the lanes found blocked, when there is another way.
+                        let mut path = g.route_lanes_avoiding(start, end, &a.avoid);
+                        if path.is_empty() {
+                            path = g.route_lanes(start, end);
+                        }
+                        if path.len() > 1 && path.first() == Some(&start) {
+                            a.route.extend_from_slice(&path[1..]);
+                            a.end = Some(end);
+                            break 'search;
+                        }
+                        tried.push(end);
                     }
+                }
+                if a.end.is_none() {
+                    a.plan_wait = 2.0;
                 }
             }
             return;
@@ -1436,15 +1516,17 @@ impl Traffic {
             }
             let lane = &g.lanes[a.lane as usize];
             // Moods (the autopilot on the run drives like a fleeing driver, as does a mission's
-            // runner).
+            // runner; wanted, it does too unless told to take it easy: desire under 0.9).
             if a.pilot {
-                a.mood = if self.escape.is_some() || a.away.is_some() { Mood::Flee } else { Mood::Cruise };
+                let run = self.escape.is_some() || a.away.is_some() || (m.wanted && a.desire >= 0.9);
+                a.mood = if run { Mood::Flee } else { Mood::Cruise };
                 a.mood_t = 1.0;
             } else if a.away.is_some() {
                 a.mood = Mood::Flee;
                 a.mood_t = 1.0;
             }
             a.mood_t -= dt;
+            a.plan_wait -= dt;
             a.honk -= dt;
             a.change_t -= dt;
             if let Some(at) = gunfire
@@ -1486,19 +1568,26 @@ impl Traffic {
             // (The turns ahead alone: a driver in a hurry still takes them at a safe speed.)
             let mut curve = if lane.turn == Turn::Straight || lane.turn == Turn::None { f32::MAX } else { limit };
             {
+                // Far enough ahead to brake in comfort from the speed it goes.
+                let horizon = (a.speed * a.speed / 4.0).clamp(40.0, 240.0);
                 let mut dist = lane.length - a.along;
-                for &n in a.route.iter().take(3) {
-                    if dist > 40.0 {
+                let mut prev = a.lane;
+                for &n in a.route.iter().take(10) {
+                    if dist > horizon {
                         break;
                     }
-                    // Slow down in time for a turn ahead (comfortable braking over the distance).
-                    let v = turn_speed(&g.lanes[n as usize]);
+                    // Slow down in time for a turn ahead (comfortable braking over the distance),
+                    // and for a sharp corner where two lanes meet (a ramp off a street's end).
+                    let next = &g.lanes[n as usize];
+                    let corner = joint_speed(&g.lanes[prev as usize], next);
+                    let v = turn_speed(next).min(corner);
                     let brake = (v * v + 2.0 * 2.0 * dist).sqrt();
                     limit = limit.min(brake);
-                    if g.lanes[n as usize].turn != Turn::Straight && g.lanes[n as usize].turn != Turn::None {
+                    if (next.turn != Turn::Straight && next.turn != Turn::None) || corner < next.speed {
                         curve = curve.min(brake);
                     }
-                    dist += g.lanes[n as usize].length;
+                    dist += next.length;
+                    prev = n;
                 }
             }
             // Fleeing drivers push on; the autopilot on the run drives like a getaway driver.
@@ -1516,13 +1605,18 @@ impl Traffic {
             // Obstacles: the nearest car ahead, a light, a junction box, people on the road.
             let mut obstacle: Option<(f32, f32)> = None;
             let mut held = false;
-            // (`car`: the nearest obstacle is another vehicle — a fleeing driver goes round it.)
+            // (`car`: the nearest obstacle is another vehicle, on that lane — a fleeing driver goes
+            // round it.)
             let mut car_ahead = false;
-            let mut consider = |gap: f32, speed: f32, excuse: bool, car: bool| {
+            let mut car_lane: Option<u32> = None;
+            let mut why = "";
+            let mut consider = |gap: f32, speed: f32, excuse: bool, car: Option<u32>, what: &'static str| {
                 if obstacle.is_none_or(|o| gap < o.0) {
                     obstacle = Some((gap, speed));
                     held = excuse;
-                    car_ahead = car;
+                    car_ahead = car.is_some();
+                    car_lane = car;
+                    why = what;
                 }
             };
             let mut offset = -a.along;
@@ -1536,11 +1630,16 @@ impl Traffic {
                         if id == a.car {
                             continue;
                         }
+                        // The autopilot on the run, boxed in a while, shoves a stopped car aside
+                        // (a roadblock, a car pulled over in its way) rather than wait behind it.
+                        if a.pilot && a.mood == Mood::Flee && a.jam > 2.0 && speed.abs() < 1.0 {
+                            continue;
+                        }
                         let gap = offset + along - my_half - half;
                         // Level with it (a merge): the lower id goes first.
                         let in_front = offset + along > 0.1 || ((offset + along).abs() <= 0.1 && id < a.car);
                         if in_front && gap < look {
-                            consider(gap.max(0.0), speed, held_before.contains(&id), true);
+                            consider(gap.max(0.0), speed, held_before.contains(&id), Some(lane_id), "car");
                         }
                     }
                 }
@@ -1550,9 +1649,9 @@ impl Traffic {
                 let before = to_line > -0.5 || (to_line > -3.0 && a.speed < 3.0);
                 if ln.kind != LaneKind::Connector && before && to_line < look && a.mood != Mood::Flee {
                     match g.light(lane_id, m.time) {
-                        Some(Light::Red) => consider(to_line.max(0.0), 0.0, true, false),
+                        Some(Light::Red) => consider(to_line.max(0.0), 0.0, true, None, "red"),
                         Some(Light::Amber) if to_line > a.speed * a.speed / (2.0 * d.drive.decel) * 0.8 => {
-                            consider(to_line.max(0.0), 0.0, true, false)
+                            consider(to_line.max(0.0), 0.0, true, None, "amber")
                         }
                         _ => {}
                     }
@@ -1587,7 +1686,7 @@ impl Traffic {
                                 .get(&j)
                                 .is_some_and(|v| v.iter().any(|(s, id)| *s != side && *s != opposite && *id != a.car));
                         if (!signalled && (busy || after)) || oncoming || straggler {
-                            consider(to_line.max(0.0), 0.0, true, false);
+                            consider(to_line.max(0.0), 0.0, true, None, "junction");
                         }
                     }
                 }
@@ -1596,7 +1695,7 @@ impl Traffic {
                     // The route runs out where the lane goes nowhere: stop at its end (and wait to
                     // move over) rather than drive on into what is closed.
                     if k >= a.route.len() && offset <= look && !goes_on(g, lane_id) {
-                        consider((offset - my_half - 1.0).max(0.0), 0.0, false, false);
+                        consider((offset - my_half - 1.0).max(0.0), 0.0, false, None, "lane end");
                     }
                     break;
                 }
@@ -1610,7 +1709,7 @@ impl Traffic {
             {
                 let (gal, _) = lane.project(goal);
                 let gap = gal - a.along - my_half * 0.5;
-                consider(gap.max(0.0), 0.0, true, false);
+                consider(gap.max(0.0), 0.0, true, None, "goal");
                 if a.speed.abs() < 0.8 && (gap < 4.0 || c.feet().distance(goal) < 9.0) {
                     a.arrived = true;
                 }
@@ -1626,12 +1725,21 @@ impl Traffic {
                         let s = k as f32 * 2.0;
                         let (pt, _) = ahead(g, a.lane, a.along, &a.route, s);
                         for p in &near {
+                            // The autopilot on the run does not stop for the officers in its way.
+                            if a.pilot && a.mood == Mood::Flee && m.officers.iter().any(|o| o.distance(*p) < 0.05) {
+                                continue;
+                            }
                             if Vec2::new(p.x - pt.x, p.z - pt.z).length() < reach && (p.y - pt.y).abs() < 2.5 {
                                 if a.mood == Mood::Flee && s > c.half.z + 6.0 {
                                     // A fleeing driver leans on the horn instead of stopping.
                                     self.honks.push(pt);
                                 } else {
-                                    consider((s - c.half.z - 2.0).max(0.0), 0.0, true, false);
+                                    // (Close in: it stops, and still leans on the horn — they
+                                    // step out of the way.)
+                                    if a.mood == Mood::Flee {
+                                        self.honks.push(pt);
+                                    }
+                                    consider((s - c.half.z - 2.0).max(0.0), 0.0, true, None, "person");
                                 }
                                 break 'path;
                             }
@@ -1669,7 +1777,7 @@ impl Traffic {
                         let there = p + flat(o.vel) * t;
                         let gap = there.dot(flat(fwd)) - c.half.z - if crossing { o.half.x } else { o.half.z };
                         // (Not a car to pass: it is still in the way.)
-                        consider(gap.max(0.0), o.vel.dot(fwd).max(0.0), false, false);
+                        consider(gap.max(0.0), o.vel.dot(fwd).max(0.0), false, None, "crossing");
                     }
                 }
             }
@@ -1681,7 +1789,7 @@ impl Traffic {
                 let z = to.dot(c.forward());
                 if bs.dwell > 0.0 {
                     bs.dwell -= dt;
-                    consider(0.0, 0.0, true, false);
+                    consider(0.0, 0.0, true, None, "bus stop");
                     if bs.dwell <= 0.0 {
                         bs.stop = (bs.stop + 1) % bl.stops.len();
                     }
@@ -1690,7 +1798,7 @@ impl Traffic {
                     if z < 8.0 && a.speed.abs() < 0.8 {
                         bs.dwell = d.bus.dwell;
                     }
-                    consider(z.max(0.0), 0.0, true, false);
+                    consider(z.max(0.0), 0.0, true, None, "bus stop");
                 } else if z < -3.0 && to.length() < 12.0 {
                     // Went past it (pushed, rerouted): on to the next.
                     bs.stop = (bs.stop + 1) % bl.stops.len();
@@ -1700,20 +1808,23 @@ impl Traffic {
                 v0 = 0.0;
                 held = true;
             }
-            // Pass a slow car on a multi-lane road.
+            // Pass a slow car on a multi-lane road (on the run, round a car stopped for anything,
+            // and with less road left).
+            let hurry = a.mood == Mood::Flee && car_ahead;
+            let room = if hurry { 12.0 } else { 30.0 };
             if a.tier == Tier::Full
-                && a.mood == Mood::Cruise
+                && (a.mood == Mood::Cruise || hurry)
                 && a.bus.is_none()
                 && a.change_t <= 0.0
-                && lane.length - a.along > 30.0
+                && lane.length - a.along > room
                 && obstacle.is_some_and(|(gap, sp)| gap < 25.0 && sp < 0.7 * v0)
-                && !held
+                && (!held || hurry)
             {
                 // (Not into a lane that ends short of where this one goes on.)
                 for side in [lane.left, lane.right].into_iter().flatten().filter(|&s| goes_on(g, s) || !goes_on(g, a.lane)) {
                     let s = &g.lanes[side as usize];
                     let at = s.project(c.feet()).0;
-                    if gap_beside(occ.get(&side), a.car, at, a.speed) && s.length - at > 30.0 {
+                    if gap_beside(occ.get(&side), a.car, at, a.speed) && s.length - at > room {
                         a.lane = side;
                         a.along = at;
                         a.route.clear();
@@ -1755,7 +1866,30 @@ impl Traffic {
             if a.passing > 0.0 && car_ahead {
                 obstacle = None;
                 held = false;
+                // (Not flat out on the wrong side of the road, by the cars parked along it.)
+                v0 = v0.min(18.0);
             }
+            // On the run to a goal and sat behind a stopped car (a police car across the road):
+            // another way there, round that lane.
+            if a.goal.is_some() && a.mood == Mood::Flee && (car_ahead || a.jam > 2.0) && a.speed.abs() < 2.0 {
+                a.jam += dt;
+            } else {
+                a.jam = 0.0;
+            }
+            if a.jam > 6.0 {
+                a.jam = 0.0;
+                if let Some(l) = car_lane
+                    && !a.avoid.contains(&l)
+                {
+                    a.avoid.push(l);
+                    if a.avoid.len() > 6 {
+                        a.avoid.remove(0);
+                    }
+                    a.route.clear();
+                    a.planned = false;
+                }
+            }
+            a.why = if obstacle.is_some() { why } else { "" };
             let accel = idm(a.speed.max(0.0), v0, obstacle, &d.drive);
             // Stuck: stopped with nothing that excuses it (on the run, crawling counts: pushing
             // against a car it is wedged against).
@@ -1844,6 +1978,20 @@ impl Traffic {
 
 /// How fast a lane can be driven: its limit, and turns slower (left and right 7 m/s, a U-turn
 /// 3.5 m/s).
+/// How fast the corner where lane `a` runs into lane `b` can be taken: the angle between them
+/// turned over the gap between their ends (or a few metres), at a comfortable sideways pull.
+fn joint_speed(a: &pav_world::lanes::Lane, b: &pav_world::lanes::Lane) -> f32 {
+    let (Some(&a1), Some(&b0)) = (a.points.last(), b.points.first()) else { return f32::MAX };
+    let (Some(&a0), Some(&b1)) = (a.points.get(a.points.len().wrapping_sub(2)), b.points.get(1)) else { return f32::MAX };
+    let flat = |v: Vec3| Vec2::new(v.x, v.z).normalize_or_zero();
+    let angle = flat(a1 - a0).dot(flat(b1 - b0)).clamp(-1.0, 1.0).acos();
+    if angle < 25f32.to_radians() {
+        return f32::MAX;
+    }
+    let radius = Vec2::new(b0.x - a1.x, b0.z - a1.z).length().max(3.0) / angle;
+    (3.5 * radius).sqrt().clamp(3.0, b.speed)
+}
+
 fn turn_speed(l: &pav_world::lanes::Lane) -> f32 {
     match l.turn {
         Turn::Left | Turn::Right => l.speed.min(7.0),

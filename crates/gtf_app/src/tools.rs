@@ -100,7 +100,8 @@ fn t_traffic(s: &mut Session, a: &Args) -> Result<Output> {
         .map(|(d, c)| {
             json!({ "car": c.car.0, "key": c.key, "dist": r1(*d), "lane": c.lane, "speed": r1(c.speed),
                     "tier": format!("{:?}", c.tier).to_lowercase(), "mood": format!("{:?}", c.mood).to_lowercase(),
-                    "held": c.held, "bus": c.bus.is_some(), "autopilot": c.pilot })
+                    "held": c.held, "why": c.why, "route": c.route.len(), "goal": c.goal.map(|g| [r1(g.x), r1(g.y), r1(g.z)]), "end": c.end,
+                    "bus": c.bus.is_some(), "autopilot": c.pilot })
         })
         .collect();
     Ok(Output::Json(json!({ "summary": g.traffic.summary(), "nearest": list })))

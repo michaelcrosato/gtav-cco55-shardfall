@@ -258,7 +258,17 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
     let city = match &view {
         Some(v) => world::build_scene(sim, world::city()?, Vec2::new(v.target.x, v.target.z), &[v.eye, v.target])?,
         None if dev => world::build_scene(sim, world::dev_city()?, world::flat(world::DEV_SPAWN), &[])?,
-        None => world::build_scene(sim, world::city()?, world::flat(world::SPAWN), &[])?,
+        None => {
+            // A Paloma Bay mission loads the ground around its start (the player is put there).
+            let paloma = world::city()?;
+            let start = mission
+                .as_ref()
+                .and_then(|m| m.start.as_deref().or(m.blip.as_ref().map(|b| b.at.as_str())))
+                .and_then(|a| anchor::Anchor::parse(a).ok())
+                .and_then(|a| anchor::point(&paloma, &a))
+                .map_or(world::flat(world::SPAWN), world::flat);
+            world::build_scene(sim, paloma, start, &[])?
+        }
     };
     let mode_is_tour = mode == "tour";
     let mut front = Front::default();
@@ -434,7 +444,11 @@ impl Freeway {
                             }
                         }
                         "choose" => self.missions.bot_choice = (!arg.is_empty()).then(|| arg.to_string()),
-                        _ => log::warn!("mission: start, replay, quit, fail or choose"),
+                        // A choice kept from an earlier mission (the heist's approach), for tests.
+                        "story" if !arg.is_empty() => {
+                            self.missions.story.insert(arg.to_string());
+                        }
+                        _ => log::warn!("mission: start, replay, quit, fail, choose or story"),
                     }
                 }
                 // `switch <protagonist>`: the switch, wheel or not.
@@ -903,6 +917,21 @@ impl Game for Freeway {
         }
         // Streaming follows the camera when it is away from the player (the menus' drone).
         sim.state.world.interest.clear();
+        // The crew a mission has placed (and the cars they sit in) keep their ground loaded: a
+        // switch lands on them.
+        if let Some(run) = &self.missions.run
+            && let Ok(def) = missions::get(&run.key)
+        {
+            let crew_id = |id: &str| def.spawn.iter().any(|x| x.id == id && x.protagonist.is_some());
+            for a in run.actors.values() {
+                let Some(s) = def.spawn.get(a.spawn) else { continue };
+                if s.protagonist.is_none() && !s.driver.as_deref().is_some_and(crew_id) {
+                    continue;
+                }
+                let p = a.entity.and_then(|e| sim.state.entities.get(e)).map_or(a.at, |e| e.pos);
+                sim.state.world.interest.push(p);
+            }
+        }
         if self.drone_view() {
             let c = camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0);
             sim.state.world.interest.push(c.target);
@@ -1098,6 +1127,13 @@ impl Game for Freeway {
             "ui_time": round(self.ui_time),
             "player": player,
             "weapon": WEAPONS[self.weapon].0,
+            "combat": json!({
+                "aiming": self.combat.aiming,
+                "shots": self.combat.shots,
+                "hits": self.combat.hits,
+                "kills": self.combat.kills,
+                "rounds": [self.combat.mag.get(self.weapon).copied().unwrap_or(0), self.combat.reserve.get(self.weapon).copied().unwrap_or(0)],
+            }),
             "wheel": self.wheel_open(),
             "attract_due": self.front.attract_due,
             "idle": round(self.front.idle),
@@ -1110,6 +1146,7 @@ impl Game for Freeway {
             "fate": match self.fate { fate::Fate::Alive => "alive", fate::Fate::Wasted { .. } => "wasted", fate::Fate::Busted { .. } => "busted" },
             "health": round(self.combat.health),
             "money": self.money,
+            "mission": self.mission_status(),
             "drive": match self.drive.phase {
                 drive::Phase::Foot => "foot",
                 drive::Phase::Enter { .. } => "entering",
@@ -1135,7 +1172,10 @@ impl Game for Freeway {
         if let (Some(vi), Some(_)) = (self.traffic.pilot_input, self.drive.vehicle()) {
             f.pad.r2 = vi.throttle;
             f.pad.l2 = vi.brake;
-            f.pad.stick_l.x = vi.steer;
+            // An open wheel has the stick.
+            if self.crew.wheel.is_none() && self.wheel.is_none() {
+                f.pad.stick_l.x = vi.steer;
+            }
             if vi.handbrake {
                 f.pad.held |= pav_core::input::pad::R1;
             }

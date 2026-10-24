@@ -776,6 +776,55 @@ impl Peds {
         }
     }
 
+    /// A car bearing down at `at` (it honks): whoever stands on the road there gets off it, to
+    /// the nearest sidewalk away from the car's line, and never freezes in its way.
+    pub fn dodge(&mut self, sim: &mut Sim, walk: &pav_world::walk::WalkMap, at: Vec3, radius: f32) {
+        let threat = Vec2::new(at.x, at.z);
+        for p in &mut self.list {
+            if matches!(p.doing, Doing::Flee | Doing::Fight | Doing::Down) {
+                continue;
+            }
+            let Some(feet) = sim.feet(p.id) else { continue };
+            let pos = Vec2::new(feet.x, feet.z);
+            if pos.distance(threat) > radius || matches!(walk.at(pos), Walk::Sidewalk | Walk::Path) {
+                continue;
+            }
+            // The nearest sidewalk or path tile, ring by ring (2 m tiles), out to about 14 m.
+            let here = walk.tile_of(pos);
+            let mut best: Option<(f32, Vec2)> = None;
+            for r in 1..=7i32 {
+                for dz in -r..=r {
+                    for dx in -r..=r {
+                        if dx.abs() != r && dz.abs() != r {
+                            continue;
+                        }
+                        let t = here + glam::IVec2::new(dx, dz);
+                        if matches!(walk.get(t), Walk::Sidewalk | Walk::Path) {
+                            let c = walk.centre(t);
+                            let d = c.distance(pos);
+                            if best.is_none_or(|(b, _)| d < b) {
+                                best = Some((d, c));
+                            }
+                        }
+                    }
+                }
+                if best.is_some() {
+                    break;
+                }
+            }
+            let Some((_, to)) = best else { continue };
+            if p.doing == Doing::Cower {
+                Self::set_idle(sim, p, None);
+            }
+            p.path = vec![pos, to];
+            p.next = 1;
+            p.doing = Doing::Flee;
+            p.run = true;
+            p.check = pos;
+            p.check_t = 0.0;
+        }
+    }
+
     /// Someone outside the crowd joins it, running from `from` (a driver pulled from a car).
     pub fn adopt(&mut self, sim: &mut Sim, walk: &pav_world::walk::WalkMap, id: EntityId, from: Vec3) {
         if self.list.iter().any(|p| p.id == id) || sim.state.entities.get(id).is_none() {

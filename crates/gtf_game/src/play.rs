@@ -400,22 +400,49 @@ impl Freeway {
             people: walkers,
             gunfire: res.gunfire,
             police: self.police.units.iter().map(|u| u.vehicle).collect(),
+            officers: self
+                .police
+                .officers
+                .iter()
+                .filter(|o| o.duty != police::Duty::Seated)
+                .filter_map(|o| sim.feet(o.id))
+                .collect(),
+            wanted: self.heat.stars > 0,
         };
         // The evasion bot runs from the nearest police unit, or out of the search zone.
-        self.traffic.escape = (self.bot.escape && self.heat.stars > 0).then(|| match self.heat.zone() {
-            Some((centre, _)) => centre,
-            None => self
-                .police
-                .units
-                .iter()
-                .filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos))
-                .min_by(|a, b| a.distance(player).total_cmp(&b.distance(player)))
-                .unwrap_or(self.heat.last_known),
+        // Near the map's edge it runs from the edge as well (along it, then back in), not into
+        // the end of the world with the police behind.
+        let (lo, hi) = (city.grid.origin, city.grid.origin + Vec2::new(city.grid.w as f32, city.grid.h as f32) * city.grid.cell);
+        self.traffic.escape = (self.bot.escape && self.heat.stars > 0).then(|| {
+            let mut from = match self.heat.zone() {
+                Some((centre, _)) => centre,
+                None => self
+                    .police
+                    .units
+                    .iter()
+                    .filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos))
+                    .min_by(|a, b| a.distance(player).total_cmp(&b.distance(player)))
+                    .unwrap_or(self.heat.last_known),
+            };
+            // (A quarter of the map at most: a small district has a middle too.)
+            let edge = ((hi - lo) * 0.25).min(Vec2::splat(250.0));
+            if player.x < lo.x + edge.x {
+                from.x = player.x - edge.x;
+            } else if player.x > hi.x - edge.x {
+                from.x = player.x + edge.x;
+            }
+            if player.z < lo.y + edge.y {
+                from.z = player.z - edge.y;
+            } else if player.z > hi.y - edge.y {
+                from.z = player.z + edge.y;
+            }
+            from
         });
         let mut inputs = BTreeMap::new();
         self.traffic.tick(sim, &tm, &mut inputs, &mut self.drive.locked);
-        // People in front of a fleeing car jump clear.
+        // People in front of a fleeing car jump clear (off the road first, then away).
         for at in std::mem::take(&mut self.traffic.honks) {
+            self.peds.dodge(sim, &city.walk, at, 4.0);
             self.peds.scare(sim, &city.walk, at, 9.0);
         }
         // The law: brandishing at the police, then each crime's witnesses, the police, the heat.

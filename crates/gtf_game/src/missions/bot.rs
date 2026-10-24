@@ -12,12 +12,27 @@ use pav_core::sim::Sim;
 use serde::{Deserialize, Serialize};
 
 use super::run::{actor_at, down, entity};
-use super::{Phase, Run, StepKind};
+use super::{Phase, Run, StepKind, When};
 use crate::Freeway;
+
+/// Nothing (a wall, a car, someone else) in front of the chest of `who` (feet at `at`), where
+/// the aim settles: seen from the camera (`eye`, where shots are aimed from) and from the gun of
+/// a player standing at `me`.
+fn clear_shot(sim: &Sim, eye: Vec3, me: Vec3, at: Vec3, who: EntityId) -> bool {
+    let chest = at + Vec3::Y * 1.25;
+    [eye, me + Vec3::Y * 1.35].into_iter().all(|from| {
+        let d = chest - from;
+        let len = d.length();
+        len < 0.5 || sim.raycast(from, d / len, len - 0.3, Some(who)).is_none()
+    })
+}
 
 fn flat(v: Vec3) -> Vec2 {
     Vec2::new(v.x, v.z)
 }
+
+/// Wanted, a destination farther than this (m) is driven to once the police are lost.
+const FAR_WANTED: f32 = 220.0;
 
 fn wrap(a: f32) -> f32 {
     (a + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
@@ -49,6 +64,12 @@ pub struct MissionBot {
     pub best_t: f32,
     pub detour: f32,
     pub side: f32,
+    /// A fight from cover: seconds into the peek-and-duck cycle, seconds before cover is tried
+    /// again, seconds in this cover and the hits landed when it was taken.
+    pub peek: f32,
+    pub cover_t: f32,
+    pub cover_for: f32,
+    pub cover_hits: u32,
 }
 
 impl MissionBot {
@@ -113,11 +134,45 @@ impl Freeway {
             b.path.clear();
             b.goal = None;
             b.hold = 0.0;
+            // A step done on foot (or with the hands): the last step's autopilot is off (it
+            // would keep the wheel, and the stick).
+            let afoot = matches!(
+                step.kind,
+                StepKind::EnterVehicle
+                    | StepKind::Kill
+                    | StepKind::Survive
+                    | StepKind::Defend
+                    | StepKind::Collect
+                    | StepKind::Photograph
+                    | StepKind::Interact
+                    | StepKind::Switch
+                    | StepKind::Stealth
+                    | StepKind::Holdup
+                    | StepKind::Choose
+            );
+            if afoot && self.traffic.cars.iter().any(|a| a.pilot) && !self.bot.escape {
+                b.cmd("autopilot off".into());
+            }
         }
         b.t += dt;
         // Leftovers from the last step: the phone away, the escape autopilot off.
         if self.phone.open && step.kind != StepKind::Photograph {
             b.tap(pad::EAST);
+            return;
+        }
+        // Wanted with a long drive ahead: lose the police first (a player who drives across
+        // town under the sirens meets a roadblock), then go.
+        let target_far = step
+            .target
+            .as_deref()
+            .and_then(|a| self.anchor_at(sim, run, a))
+            .is_some_and(|(p, _)| flat(p).distance(flat(self.player_point(sim))) > FAR_WANTED);
+        let shake_first =
+            self.heat.stars > 0 && matches!(step.kind, StepKind::DriveTo | StepKind::Deliver | StepKind::Goto) && target_far;
+        if shake_first {
+            if !self.bot.escape {
+                b.cmd("autopilot escape".into());
+            }
             return;
         }
         if self.bot.escape && !matches!(step.kind, StepKind::LoseHeat) {
@@ -141,7 +196,17 @@ impl Freeway {
                     b.frame.pad.pressed &= !pad::NORTH;
                     b.frame.pad.held &= !pad::NORTH;
                 } else if let Some((p, _)) = target {
-                    if self.drive.vehicle().is_some() {
+                    let near = flat(p).distance(flat(self.player_point(sim))) < 30.0;
+                    let stopped = b.t > 3.0
+                        && self
+                            .drive
+                            .vehicle()
+                            .and_then(|c| crate::drive::Car::read(sim, c))
+                            .is_some_and(|c| c.vel.length() < 0.5);
+                    if self.drive.vehicle().is_some() && near && (self.traffic.pilot_arrived() || stopped) {
+                        // The car has stopped as near as the road goes: on foot the rest of the way.
+                        b.tap(pad::NORTH);
+                    } else if self.drive.vehicle().is_some() {
                         self.bot_drive(b, p, 0.9);
                     } else {
                         self.bot_walk(b, sim, p, true, dt);
@@ -181,31 +246,62 @@ impl Freeway {
                             self.drive.vehicle().and_then(|c| crate::drive::Car::read(sim, c)).map_or(0.0, |c| c.vel.length());
                         if step.kind == Deliver && close && speed < 1.0 {
                             b.tap(pad::NORTH);
+                        } else if close && step.kind != Race {
+                            // There: stop here (the autopilot's own stop may lie round the block).
+                            self.bot_drive(b, me, 0.6);
                         } else {
-                            self.bot_drive(b, dest, if step.kind == Race { 1.25 } else { 0.95 });
+                            // A step that fails on more heat: an easy drive, nothing to see here.
+                            let quiet = step.fail.iter().any(|f| matches!(f.when, When::HeatOver(_)));
+                            let desire = match step.kind {
+                                Race => 1.25,
+                                _ if quiet => 0.85,
+                                _ => 0.95,
+                            };
+                            self.bot_drive(b, dest, desire);
                         }
                     }
                 }
             }
             Follow => {
                 let Some(id) = target_id else { return };
-                let Some((p, _)) = actor_at(sim, run, id) else { return };
+                let Some((p, yaw)) = actor_at(sim, run, id) else { return };
                 if self.drive.vehicle().is_none() {
                     if let Some((c, _)) = self.nearest_car(sim) {
                         self.bot_enter(b, sim, c, dt);
                     }
                     return;
                 }
-                let d = flat(p).distance(flat(self.player_point(sim)));
+                let me = self.player_point(sim);
+                let d = flat(p).distance(flat(me));
                 let min = step.min.unwrap_or(0.0);
-                let desire = if d < min + 12.0 {
-                    0.35
-                } else if d > step.distance.unwrap_or(70.0) * 0.6 {
-                    1.15
+                let (vel, fwd) = entity(sim, run, id)
+                    .and_then(|e| crate::drive::Car::read(sim, e))
+                    .map(|c| (c.vel, c.forward()))
+                    .unwrap_or((Vec3::ZERO, Vec3::new(yaw.sin(), 0.0, yaw.cos())));
+                if min > 0.0 && d < min + 7.0 && vel.length() < 3.0 {
+                    // It has stopped (a light, a junction): stop here, well back.
+                    self.bot_drive(b, me, 0.3);
+                    return;
+                }
+                // Close: a crawl; a few lengths back: easy; falling behind: hurrying (through the
+                // light the target just made).
+                let desire = if d < min + 6.0 {
+                    0.4
+                } else if d < min + 16.0 {
+                    0.8
+                } else if d < min + 36.0 {
+                    1.0
                 } else {
-                    0.85
+                    1.15
                 };
-                self.bot_drive_moving(b, p, desire, dt);
+                // The way it goes: a point a lane or two along its own route (the same roads),
+                // else ahead of it — never the target itself (the autopilot stops at its goal).
+                let car = entity(sim, run, id);
+                let on_route = self.traffic.cars.iter().find(|a| Some(a.car) == car).and_then(|a| {
+                    let lane = a.route.get(1).or(a.route.first()).copied().unwrap_or(a.lane);
+                    self.city.as_ref()?.lanes.lanes.get(lane as usize)?.points.last().copied()
+                });
+                self.bot_drive_moving(b, on_route.unwrap_or(p + fwd * 30.0), desire, dt);
             }
             Chase => {
                 let Some(id) = target_id else { return };
@@ -271,7 +367,24 @@ impl Freeway {
                         .filter(|(id, _)| sim.state.entities.get(*id).is_some_and(|x| !x.name.starts_with("dead:")))
                         .collect()
                 };
-                match foes.into_iter().min_by(|a, c| a.1.distance(me).total_cmp(&c.1.distance(me))) {
+                // The nearest one in the clear (a car between is cover, for them as for us),
+                // else the nearest: closer in, round what is in the way.
+                let near = |a: &&(EntityId, Vec3), c: &&(EntityId, Vec3)| a.1.distance(me).total_cmp(&c.1.distance(me));
+                let eye = self.camera(sim).eye;
+                let pick = foes
+                    .iter()
+                    .filter(|(e, p)| clear_shot(sim, eye, me, *p, *e))
+                    .min_by(near)
+                    .or_else(|| foes.iter().min_by(near))
+                    .copied();
+                // The ability that fights on foot (Deadeye, Overdrive), once the meter allows.
+                let fights = crate::protagonists::def().ok().and_then(|d| d.ability_of(self.crew.current).map(|a| a.on_foot));
+                let meter = self.crew.me().map_or(0.0, |m| m.meter);
+                if fights == Some(true) && !self.crew.ability && meter > 0.3 && pick.is_some() && b.tick.is_multiple_of(30) {
+                    b.frame.pad.held |= pad::L3 | pad::R3;
+                    b.frame.pad.pressed |= pad::L3;
+                }
+                match pick {
                     Some((e, p)) => self.bot_shoot(b, sim, e, p, dt),
                     None => {
                         // Nobody yet (a defend's next wave): wait by what is defended.
@@ -312,7 +425,8 @@ impl Freeway {
             }
             Interact => {
                 if let Some((p, _)) = target {
-                    if flat(p).distance(flat(Self::feet(sim))) < step.radius.unwrap_or(2.2) * 0.6 {
+                    // Well inside the radius (a truck's body keeps its middle out of reach).
+                    if flat(p).distance(flat(Self::feet(sim))) < step.radius.unwrap_or(2.2) * 0.85 {
                         b.hold_button(pad::RIGHT);
                     } else {
                         self.bot_walk(b, sim, p, true, dt);
@@ -345,6 +459,64 @@ impl Freeway {
                         b.frame.pad.l2 = 1.0;
                         b.hold_button(pad::L2);
                     }
+                }
+            }
+            Jump => {
+                let car = step.vehicle.as_deref().and_then(|v| entity(sim, run, v));
+                match (self.drive.vehicle(), car) {
+                    (Some(mine), Some(want)) if mine != want => return b.tap(pad::NORTH),
+                    (None, Some(want)) => return self.bot_enter(b, sim, want, dt),
+                    (None, None) => {
+                        if let Some((c, _)) = self.nearest_car(sim) {
+                            self.bot_enter(b, sim, c, dt);
+                        }
+                        return;
+                    }
+                    _ => {}
+                }
+                let gate = |k: usize| step.gates.get(k).and_then(|g| self.anchor_at(sim, run, g)).map(|x| x.0);
+                let (Some(run_up), Some(lip), Some((land, _))) = (gate(0), gate(1), target) else { return };
+                let Some(c) = self.drive.vehicle().and_then(|v| crate::drive::Car::read(sim, v)) else { return };
+                let me = c.feet();
+                let prog = if sub > 0 { &run.subs[sub - 1].prog } else { &run.prog };
+                let launched = prog.meter >= 1.0;
+                // `hold` is the phase: 0 to the run-up on the autopilot, 1 the run itself.
+                if b.hold < 0.5 && !launched {
+                    if flat(me).distance(flat(run_up)) < 12.0 {
+                        b.hold = 1.0;
+                    } else {
+                        self.bot_drive(b, run_up, 0.9);
+                        return;
+                    }
+                }
+                if self.traffic.cars.iter().any(|a| a.pilot) {
+                    b.cmd("autopilot off".into());
+                }
+                // Straight at the lip, then at the landing; flat out until airborne, then let the
+                // car fly; down again, roll on to the landing.
+                let past_lip = launched || (flat(lip) - flat(me)).dot(flat(lip) - flat(run_up)) < 0.0;
+                let aim = if past_lip { land } else { lip };
+                let want = (flat(aim) - flat(me)).normalize_or_zero();
+                let fwd = flat(c.forward()).normalize_or_zero();
+                let cross = fwd.x * want.y - fwd.y * want.x;
+                let airborne = self.drive.vehicle().and_then(|v| sim.vehicle_status(v)).is_some_and(|s| s.airborne);
+                if !airborne {
+                    b.frame.pad.stick_l.x = (cross * 2.5).clamp(-1.0, 1.0);
+                }
+                b.frame.pad.r2 = if launched && !airborne {
+                    0.4
+                } else if airborne {
+                    0.0
+                } else {
+                    1.0
+                };
+                if b.frame.pad.r2 > 0.0 {
+                    b.frame.pad.held |= pad::R2;
+                }
+                // A run that went nowhere (stuck, missed): round again.
+                if b.t > 25.0 && !launched {
+                    b.hold = 0.0;
+                    b.t = 0.0;
                 }
             }
             Choose => {
@@ -549,12 +721,47 @@ impl Freeway {
         let eye = me + Vec3::Y * 1.6;
         let chest = at + Vec3::Y * 1.2;
         let d = flat(at).distance(flat(me));
-        let seen = crate::heat::sight(sim, eye, chest);
-        if d > 28.0 || !seen {
+        b.cover_t -= dt;
+        if self.cover.at.is_some() {
+            // In cover: up and firing a while, down a while (cover takes most of what comes
+            // back); out again when peeking lands nothing (a target round the corner).
+            b.cover_for += dt;
+            b.peek = (b.peek + dt) % 2.4;
+            let err = self.bot_look(b, eye, chest);
+            if self.combat.hits > b.cover_hits {
+                b.cover_hits = self.combat.hits;
+                b.cover_for = 0.0;
+            }
+            if b.cover_for > 6.0 || d > 40.0 {
+                b.tap(pad::R1);
+                b.cover_t = 6.0;
+            } else if b.peek < 1.5 {
+                b.hold_button(pad::L2);
+                b.frame.pad.l2 = 1.0;
+                if self.combat.aiming && err < 0.15 && b.tick.is_multiple_of(8) {
+                    b.frame.pad.pressed |= pad::R2;
+                    b.frame.pad.held |= pad::R2;
+                    b.frame.pad.r2 = 1.0;
+                }
+            }
+            return;
+        }
+        if d > 28.0 || !clear_shot(sim, self.camera(sim).eye, me, at, who) {
             self.bot_walk(b, sim, at, d > 10.0, dt);
             return;
         }
         let err = self.bot_look(b, eye, chest);
+        // A fight at close range: into cover if any is in reach (a car, a wall; R1 does nothing
+        // without), facing them.
+        if d < 30.0 && b.cover_t <= 0.0 && err < 0.3 {
+            b.cover_t = 2.0;
+            b.cover_for = 0.0;
+            b.cover_hits = self.combat.hits;
+            b.peek = 0.0;
+            b.frame.pad.pressed |= pad::R1;
+            b.frame.pad.held |= pad::R1;
+            return;
+        }
         if err < 0.2 || self.combat.aiming {
             b.frame.pad.l2 = 1.0;
             b.hold_button(pad::L2);
@@ -564,7 +771,6 @@ impl Freeway {
                 b.frame.pad.r2 = 1.0;
             }
         }
-        let _ = who;
     }
 
     /// The phone's camera on `at`: up, to the camera tile, aimed, the shutter.
@@ -574,7 +780,8 @@ impl Freeway {
             b.tap(pad::NORTH);
             return;
         }
-        if flat(at).distance(flat(me)) > 35.0 || !crate::heat::sight(sim, me + Vec3::Y * 1.6, at + Vec3::Y * 1.0) {
+        // (The phone reaches 60 m: from 50 m off a watcher seldom sees who takes the picture.)
+        if flat(at).distance(flat(me)) > 50.0 || !crate::heat::sight(sim, me + Vec3::Y * 1.6, at + Vec3::Y * 1.0) {
             if self.phone.open {
                 b.tap(pad::EAST);
             } else {
