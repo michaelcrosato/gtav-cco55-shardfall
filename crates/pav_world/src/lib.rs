@@ -490,6 +490,7 @@ pub(crate) fn ground_at(def: &DistrictDef, grid: &Grid, terrain: &Terrain, p: Ve
     let h = terrain.height_at(p);
     match grid.at(grid.cell_of(p)) {
         Some(Cell::Road(RoadClass::Path)) => ground::LOT_Y + h,
+        Some(Cell::Road(RoadClass::Channel)) => channel::surface_at(grid, p).unwrap_or(ground::ROAD_Y + h),
         Some(Cell::Road(_)) => ground::ROAD_Y + h,
         Some(Cell::Zone(z)) => {
             let rules = &def.zones[&grid.zones[z as usize]];

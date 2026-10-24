@@ -23,6 +23,23 @@ pub const BED_Y: f32 = -6.0;
 const TRICKLE_Y: f32 = -6.3;
 /// Wall run (horizontal) on each side, as a share of the channel's width.
 const WALL: f32 = 0.25;
+/// A ramp's top runs on level this far (m) before it goes down, and the street that brings it
+/// in carries on over the channel's edge as a level apron: room to turn onto the ramp from the
+/// street (and off it).
+pub const LANDING: f32 = 9.0;
+/// A ramp's half-width (m), and the apron's width out from the channel's edge (to the ramp's
+/// far side).
+const HALF: f32 = 3.5;
+const APRON: f32 = 3.0 + HALF;
+
+/// A ramp's height along it (t = 0 at the top, 1 at the foot): level for the landing, then an
+/// eased drop to the bed.
+pub fn ramp_y(top: f32, len: f32, t: f32) -> f32 {
+    let f = (LANDING / len.max(LANDING + 1.0)).min(0.5);
+    let k = ((t - f) / (1.0 - f)).clamp(0.0, 1.0);
+    let e = k * k * (3.0 - 2.0 * k);
+    top + (BED_Y - top) * e
+}
 
 /// A channel's geometry: the columns it spans, its rows (north to south), the bed's centre line.
 #[derive(Clone, Debug)]
@@ -33,6 +50,8 @@ pub struct ChannelGeom {
     pub z1: f32,
     /// Ramps: (top end, bottom end) on the road surface.
     pub ramps: Vec<(Vec3, Vec3)>,
+    /// Each ramp's centre line down its surface, top to foot (lanes follow it).
+    pub ramp_lines: Vec<Vec<Vec3>>,
 }
 
 impl ChannelGeom {
@@ -75,6 +94,26 @@ pub fn surface(w: f32, west: f32, east: f32, u: f32) -> f32 {
         }
     }
     BED_Y
+}
+
+/// The surface's height at `p` when it lies in a channel cell (the walls' slopes, the bed):
+/// what stands there stands that low.
+pub(crate) fn surface_at(grid: &Grid, p: Vec2) -> Option<f32> {
+    let c = grid.cell_of(p);
+    let is = |x: i32| grid.road(IVec2::new(x, c.y)) == Some(RoadClass::Channel);
+    if !is(c.x) {
+        return None;
+    }
+    let (mut x0, mut x1) = (c.x, c.x);
+    while is(x0 - 1) {
+        x0 -= 1;
+    }
+    while is(x1 + 1) {
+        x1 += 1;
+    }
+    let lo = grid.corner(IVec2::new(x0, c.y)).x;
+    let w = (x1 - x0 + 1) as f32 * grid.cell;
+    Some(surface(w, ROAD_Y, ROAD_Y, p.x - lo))
 }
 
 fn decor(shape: Shape, pos: Vec3, color: &str) -> Decor {
@@ -211,11 +250,18 @@ pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut
             }
             // Ramps down the walls.
             let mut ramps = Vec::new();
+            let mut ramp_lines = Vec::new();
             for r in def.channel_ramp.iter().filter(|r| r.col >= cols.0 && r.col <= cols.1) {
                 let (za, zb) = (grid.origin.y + r.rows[0] * grid.cell, grid.origin.y + r.rows[1] * grid.cell);
                 let west = r.side != "east";
-                // Centre across the channel: from the coping to the bed's edge, 5 m wide.
-                let u_at = |t: f32| if west { 3.0 + t * w * WALL } else { w - 3.0 - t * w * WALL };
+                let len = (zb - za).abs();
+                // Centre across the channel: from the coping to the bed's edge, 7 m wide (level
+                // across the landing, then out toward the bed as it drops).
+                let u_at = |t: f32| {
+                    let f = (LANDING / len.max(LANDING + 1.0)).min(0.5);
+                    let k = ((t - f) / (1.0 - f)).clamp(0.0, 1.0);
+                    if west { 3.0 + k * w * WALL } else { w - 3.0 - k * w * WALL }
+                };
                 let side_top =
                     if west { ground(Vec2::new(lo.x - 1.0, za)) } else { ground(Vec2::new(hi.x + 1.0, za)) }.max(ROAD_Y);
                 let steps = 16;
@@ -224,16 +270,15 @@ pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut
                 let mut pts = Vec::new();
                 for i in 0..=steps {
                     let t = i as f32 / steps as f32;
-                    let e = t * t * (3.0 - 2.0 * t);
                     let u = u_at(t);
-                    let y = side_top + 0.02 + (BED_Y + 0.02 - side_top - 0.02) * e;
+                    let y = ramp_y(side_top + 0.02, len, t);
                     pts.push((Vec3::new(lo.x + u, y, za + (zb - za) * t), u));
                 }
                 for i in 0..steps {
                     let (p, _) = pts[i];
                     let (q, _) = pts[i + 1];
                     let buf = bufs.entry(chunk_key(Vec2::new((p.x + q.x) * 0.5, (p.z + q.z) * 0.5))).or_default();
-                    let half = Vec3::X * 2.5;
+                    let half = Vec3::X * HALF;
                     let top = [p - half, q - half, q + half, p + half];
                     let n = (top[1] - top[0]).cross(top[3] - top[0]).normalize_or(Vec3::Y);
                     let n = if n.y < 0.0 { -n } else { n };
@@ -246,15 +291,46 @@ pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut
                         buf.quad(side, [nn; 4], [edge_c; 4], nn);
                     }
                 }
-                // A cap closing the ramp's top end.
-                let (p, _) = pts[0];
-                let n = Vec3::new(0.0, 0.0, (za - zb).signum());
-                let half = Vec3::X * 2.5;
-                let cap = [p - half, p + half, Vec3::new(p.x + 2.5, BED_Y, p.z), Vec3::new(p.x - 2.5, BED_Y, p.z)];
-                bufs.entry(chunk_key(Vec2::new(p.x, p.z))).or_default().quad(cap, [n; 4], [edge_c; 4], n);
+                // The apron: the street's cell row carried on, level, over the channel's edge to
+                // the ramp's top, so a car turns between the two. Its open sides drop to the bed.
+                let down = (zb - za).signum();
+                let row = (r.rows[0] - if down > 0.0 { 0.0 } else { 1.0 }).floor();
+                let street = if down > 0.0 { grid.origin.y + row * grid.cell } else { grid.origin.y + (row + 1.0) * grid.cell };
+                let (ax0, ax1) = if west { (lo.x, lo.x + APRON) } else { (hi.x - APRON, hi.x) };
+                let y = side_top + 0.02;
+                let (az0, az1) = (street.min(za), street.max(za));
+                if az1 - az0 > 0.1 {
+                    let buf = bufs.entry(chunk_key(Vec2::new((ax0 + ax1) * 0.5, (az0 + az1) * 0.5))).or_default();
+                    let n = Vec3::Y;
+                    buf.quad(
+                        [Vec3::new(ax0, y, az0), Vec3::new(ax0, y, az1), Vec3::new(ax1, y, az1), Vec3::new(ax1, y, az0)],
+                        [n; 4],
+                        [ramp_c; 4],
+                        n,
+                    );
+                    // The side toward the bed.
+                    let sx = if west { ax1 } else { ax0 };
+                    let nn = Vec3::X * if west { 1.0 } else { -1.0 };
+                    buf.quad(
+                        [Vec3::new(sx, y, az0), Vec3::new(sx, y, az1), Vec3::new(sx, BED_Y, az1), Vec3::new(sx, BED_Y, az0)],
+                        [nn; 4],
+                        [edge_c; 4],
+                        nn,
+                    );
+                }
+                // The end that faces away from the ramp: closed down to the bed.
+                let n = Vec3::new(0.0, 0.0, -down);
+                let cap = [
+                    Vec3::new(ax0, y, street),
+                    Vec3::new(ax1, y, street),
+                    Vec3::new(ax1, BED_Y, street),
+                    Vec3::new(ax0, BED_Y, street),
+                ];
+                bufs.entry(chunk_key(Vec2::new((ax0 + ax1) * 0.5, street))).or_default().quad(cap, [n; 4], [edge_c; 4], n);
                 ramps.push((pts[0].0, pts[steps].0));
+                ramp_lines.push(pts.iter().map(|(p, _)| *p).collect());
             }
-            geoms.push(ChannelGeom { x0: lo.x, x1: hi.x, z0: lo.y, z1: hi.y, ramps });
+            geoms.push(ChannelGeom { x0: lo.x, x1: hi.x, z0: lo.y, z1: hi.y, ramps, ramp_lines });
         }
     }
     patches(bufs, out);
