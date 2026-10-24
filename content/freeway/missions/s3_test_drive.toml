@@ -28,7 +28,7 @@ time_under = 210.0
 [[spawn]]
 id = "kaze"
 vehicle = "okami_kaze"
-at = "spot:s3_car"
+at = "spot:luxe_showroom"
 paint = 0
 blip = "target"
 name = "Okami Kaze"
@@ -36,14 +36,14 @@ name = "Okami Kaze"
 [[spawn]]
 id = "salesman"
 ped = "businessperson"
-at = "spot:s3_start"
-yaw = 0.0
+at = "at:76,-139"
+yaw = 180.0
 name = "Salesman"
 
 [[step]]
 kind = "dialogue"
 lines = [
-  { who = "mack", text = "The getaway car is the Okami Kaze in the Luxe Motors window. Take it for a test drive.", seconds = 3.6 },
+  { who = "mack", text = "The getaway car is the Okami Kaze in the Luxe Motors showroom. Take it for a test drive.", seconds = 3.6 },
   { who = "dez", text = "How long a test drive?", seconds = 1.6 },
   { who = "mack", text = "Forever, ideally.", seconds = 1.6 },
 ]
@@ -67,7 +67,14 @@ kind = "enter_vehicle"
 target = "actor:kaze"
 checkpoint = true
 objective = "Get in the ~y~Okami Kaze~s~."
-on_done = [{ behaviour = { actor = "salesman", act = "flee" } }, { heat = 2 }]
+on_done = [{ behaviour = { actor = "salesman", act = "cower" } }, { unblip = "kaze" }, { heat = 2 }]
+
+[[step]]
+kind = "drive_to"
+target = "spot:luxe_front"
+radius = 12.0
+objective = "Out through the ~y~window~s~."
+help = "~btn:r2~ hard: the showroom glass gives way to a car with some speed."
 
 [[step]]
 kind = "lose_heat"
