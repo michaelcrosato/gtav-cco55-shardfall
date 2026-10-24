@@ -103,6 +103,27 @@ fn round_cars(sim: &Sim, city: &pav_world::City, from: Vec2, to: Vec2) -> Option
     Some(way)
 }
 
+/// Nothing fixed between `from` and `to` but breakable glass (a car goes through a showroom's
+/// window: it breaks as the car reaches it).
+fn clear_but_glass(sim: &Sim, city: &pav_world::City, from: Vec3, to: Vec3) -> bool {
+    let mut at = from;
+    for _ in 0..4 {
+        let d = to - at;
+        let len = d.length();
+        if len < 0.3 {
+            return true;
+        }
+        let dir = d / len;
+        let Some(hit) = sim.raycast_static(at, dir, len) else { return true };
+        let grow = Vec3::splat(0.3);
+        if !city.panes.iter().any(|p| hit.point.cmpge(p.min - grow).all() && hit.point.cmple(p.max + grow).all()) {
+            return false;
+        }
+        at = hit.point + dir * 0.4;
+    }
+    false
+}
+
 fn flat(v: Vec3) -> Vec2 {
     Vec2::new(v.x, v.z)
 }
@@ -146,6 +167,9 @@ pub struct MissionBot {
     pub cover_t: f32,
     pub cover_for: f32,
     pub cover_hits: u32,
+    /// A car off the roads: the road point it heads for by hand, and seconds to the next pick.
+    pub exit: Option<Vec3>,
+    pub exit_t: f32,
 }
 
 impl MissionBot {
@@ -257,9 +281,39 @@ impl Freeway {
         if self.foot.crouched && step.kind != StepKind::Stealth && self.drive.vehicle().is_none() && b.tick.is_multiple_of(30) {
             b.tap(pad::L3);
         }
+        // Out of the last fight's cover (in it, the stick only slides along the wall).
+        if self.cover.at.is_some() && !matches!(step.kind, StepKind::Kill | StepKind::Survive | StepKind::Defend) {
+            b.tap(pad::R1);
+            return;
+        }
         let target = step.target.as_deref().and_then(|a| self.anchor_at(sim, run, a));
         let target_id = step.target.as_deref().and_then(|a| a.strip_prefix("actor:"));
         use StepKind::*;
+        // A car off the roads (a yard, a showroom, a lot: the autopilot knows only the roads):
+        // by hand to the nearest road in a straight line first.
+        let drives = matches!(step.kind, DriveTo | Deliver | Race | Follow | Chase | Escape | LoseHeat | Goto);
+        if drives
+            && let Some(car) = self.drive.vehicle().and_then(|v| crate::drive::Car::read(sim, v))
+            && let Some(to) = self.road_in_sight(sim, b, &car, dt)
+        {
+            if self.traffic.cars.iter().any(|a| a.pilot) {
+                b.cmd("autopilot off".into());
+            }
+            let want = (flat(to) - flat(car.feet())).normalize_or_zero();
+            let fwd = flat(car.forward()).normalize_or_zero();
+            let cross = fwd.x * want.y - fwd.y * want.x;
+            if fwd.dot(want) > -0.3 {
+                b.frame.pad.stick_l.x = (cross * 2.5).clamp(-1.0, 1.0);
+                b.frame.pad.r2 = 0.45;
+                b.frame.pad.held |= pad::R2;
+            } else {
+                // Behind: back round toward it.
+                b.frame.pad.stick_l.x = -(cross.signum());
+                b.frame.pad.l2 = 0.6;
+                b.frame.pad.held |= pad::L2;
+            }
+            return;
+        }
         match step.kind {
             Wait | Dialogue | Cutscene | Set | Branch | Parallel => {}
             Goto => {
@@ -642,6 +696,37 @@ impl Freeway {
 
     /// Walks (sprinting or not) to `to`: straight there when nothing fixed stands between,
     /// else over the walk map.
+    /// For a car more than 8 m from any road: the nearest road point within 80 m with nothing
+    /// fixed in the way (a yard's gate, a lot's way out), re-picked each second; None on a road.
+    fn road_in_sight(&self, sim: &Sim, b: &mut MissionBot, car: &crate::drive::Car, dt: f32) -> Option<Vec3> {
+        let city = self.city.as_ref()?;
+        let p = car.feet();
+        let open = |l: &pav_world::lanes::Lane| !l.closed && l.kind != pav_world::lanes::LaneKind::Channel;
+        // (Any lane is a road here: the storm channel's, closed to traffic, too.)
+        let (_, _, off) = city.lanes.nearest(p, |_| true)?;
+        if off < 8.0 {
+            b.exit = None;
+            return None;
+        }
+        b.exit_t -= dt;
+        if b.exit.is_none() || b.exit_t <= 0.0 {
+            b.exit_t = 1.0;
+            let eye = p + Vec3::Y * 1.0;
+            let mut points: Vec<(f32, Vec3)> = city
+                .lanes
+                .lanes
+                .iter()
+                .filter(|l| open(l) && l.points.iter().any(|q| q.distance(p) < 120.0))
+                .flat_map(|l| (0..=(l.length / 4.0) as usize).map(move |k| l.at(k as f32 * 4.0).0))
+                .map(|q| (flat(q).distance(flat(p)), q))
+                .filter(|(d, _)| *d < 80.0)
+                .collect();
+            points.sort_by(|a, c| a.0.total_cmp(&c.0));
+            b.exit = points.into_iter().map(|(_, q)| q).find(|q| clear_but_glass(sim, city, eye, *q + Vec3::Y * 1.0)).or(b.exit);
+        }
+        b.exit
+    }
+
     fn bot_walk(&self, b: &mut MissionBot, sim: &Sim, to: Vec3, sprint: bool, dt: f32) {
         let Some(city) = self.city.as_ref() else { return };
         let feet = Self::feet(sim);

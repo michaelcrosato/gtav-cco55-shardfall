@@ -465,7 +465,13 @@ impl Freeway {
             Action::Story(f) => {
                 self.missions.story.insert(f.clone());
             }
-            Action::Give { weapon, ammo } => self.give_weapon(weapon, *ammo),
+            Action::Give { weapon, ammo } => {
+                self.give_weapon(weapon, *ammo);
+                // In hand: what the mission hands over is what to use.
+                if let Some(i) = crate::combat::def().ok().and_then(|d| d.weapon.iter().position(|w| &w.id == weapon)) {
+                    self.weapon = i;
+                }
+            }
             Action::Cash(n) => self.pay(*n),
             Action::Armor(a) => self.combat.armor = a.clamp(0.0, crate::combat::MAX_ARMOR),
             Action::Pay { who, cash } => {
@@ -560,8 +566,6 @@ impl Freeway {
         }
         self.combat.mag[i] = self.combat.mag[i].max(w.magazine);
         self.combat.reserve[i] += if ammo > 0 { ammo } else { w.reserve };
-        // In hand: what the mission hands over is what to use.
-        self.weapon = i;
     }
 
     /// A checkpoint of the mission as it stands.
