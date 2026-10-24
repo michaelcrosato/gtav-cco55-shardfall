@@ -105,6 +105,38 @@ fn round_cars(sim: &Sim, city: &pav_world::City, from: Vec2, to: Vec2) -> Option
 
 /// Nothing fixed between `from` and `to` but breakable glass (a car goes through a showroom's
 /// window: it breaks as the car reaches it).
+/// Where a walk sets off on the walk map: the tile underfoot, else the nearest walkable tile in
+/// sight of the feet (stood on a wall's tile, the nearest tile centre may be the room behind it).
+fn walk_start(sim: &Sim, city: &pav_world::City, feet: Vec3) -> Option<Vec2> {
+    let here = flat(feet);
+    let t = city.walk.tile_of(here);
+    if city.walk.walkable(t) {
+        return city.walk.nearest_walkable(here, 0);
+    }
+    let eye = feet + Vec3::Y * 0.5;
+    for r in 1..=6 {
+        let mut best: Option<(f32, Vec2)> = None;
+        for dz in -r..=r {
+            for dx in -r..=r {
+                let tt = t + glam::IVec2::new(dx, dz);
+                if (dx.abs() != r && dz.abs() != r) || !city.walk.walkable(tt) {
+                    continue;
+                }
+                let c = city.walk.centre(tt);
+                let d = c.distance(here);
+                let to = Vec3::new(c.x, eye.y, c.y) - eye;
+                if best.is_none_or(|(bd, _)| d < bd) && sim.raycast_static(eye, to.normalize_or(Vec3::X), to.length()).is_none() {
+                    best = Some((d, c));
+                }
+            }
+        }
+        if let Some((_, c)) = best {
+            return Some(c);
+        }
+    }
+    city.walk.nearest_walkable(here, 6)
+}
+
 fn clear_but_glass(sim: &Sim, city: &pav_world::City, from: Vec3, to: Vec3) -> bool {
     let mut at = from;
     for _ in 0..4 {
@@ -350,13 +382,15 @@ impl Freeway {
             }
             DriveTo | Race | Deliver => {
                 let car = step.vehicle.as_deref().and_then(|v| entity(sim, run, v));
+                let prog = if sub > 0 { &run.subs[sub - 1].prog } else { &run.prog };
+                let gate =
+                    |k: usize| step.gates.get(k % step.gates.len().max(1)).and_then(|g| self.anchor_at(sim, run, g)).map(|x| x.0);
                 let dest = match step.kind {
-                    Race => {
-                        let prog = if sub > 0 { &run.subs[sub - 1].prog } else { &run.prog };
-                        step.gates.get(prog.gate).and_then(|g| self.anchor_at(sim, run, g)).map(|x| x.0)
-                    }
+                    Race => gate(prog.gate),
                     _ => target.map(|x| x.0),
                 };
+                // (A race: through the gate toward the next.)
+                let then = if step.kind == Race { gate(prog.gate + 1) } else { None };
                 let Some(dest) = dest else { return };
                 match (self.drive.vehicle(), car) {
                     (Some(mine), Some(want)) if mine != want => b.tap(pad::NORTH),
@@ -387,7 +421,7 @@ impl Freeway {
                                 _ if quiet => 0.85,
                                 _ => 0.95,
                             };
-                            self.bot_drive(b, dest, desire);
+                            self.bot_drive_to(b, dest, desire, then);
                         }
                     }
                 }
@@ -581,7 +615,8 @@ impl Freeway {
                 let Some((p, _)) = actor_at(sim, run, id) else { return };
                 let me = Self::feet(sim);
                 self.bot_arm(b);
-                if flat(p).distance(flat(me)) > 3.5 {
+                // (Up to the counter: the clerk stands behind it, a little under 4 m away.)
+                if flat(p).distance(flat(me)) > 4.5 {
                     self.bot_walk(b, sim, p, false, dt);
                 } else {
                     let aimed = self.bot_look(b, me + glam::Vec3::Y * 1.6, p + Vec3::Y * 1.2);
@@ -650,8 +685,15 @@ impl Freeway {
                 }
             }
             Choose => {
-                let want =
-                    self.missions.bot_choice.as_ref().and_then(|c| step.options.iter().position(|o| &o.id == c)).unwrap_or(0);
+                // The option asked for (`mission choose`), else the first the player can pay for.
+                let can = |o: &crate::missions::ChoiceDef| o.cost <= self.money;
+                let want = self
+                    .missions
+                    .bot_choice
+                    .as_ref()
+                    .and_then(|c| step.options.iter().position(|o| &o.id == c && can(o)))
+                    .or_else(|| step.options.iter().position(can))
+                    .unwrap_or(0);
                 let prog = &run.prog;
                 if b.t > 0.6 {
                     if prog.focus < want {
@@ -762,7 +804,7 @@ impl Freeway {
                     let ray = Vec3::new(goal.x, to.y + h, goal.y) - eye;
                     sim.raycast_static(eye, ray.normalize_or(Vec3::X), ray.length()).is_none()
                 });
-            b.path = match (city.walk.nearest_walkable(here, 6), city.walk.nearest_walkable(goal, 8)) {
+            b.path = match (walk_start(sim, city, feet), city.walk.nearest_walkable(goal, 8)) {
                 (Some(s), Some(t)) if street && !clear && dist > 4.0 => {
                     let mut p = city.walk.path(s, t, 6000);
                     p.push(goal);
@@ -839,6 +881,12 @@ impl Freeway {
 
     /// The autopilot to `dest` (switched on first).
     fn bot_drive(&self, b: &mut MissionBot, dest: Vec3, desire: f32) {
+        self.bot_drive_to(b, dest, desire, None);
+    }
+
+    /// The autopilot to `dest`, through it without stopping toward `then` when given (a race's
+    /// gate and the next).
+    fn bot_drive_to(&self, b: &mut MissionBot, dest: Vec3, desire: f32, then: Option<Vec3>) {
         if self.drive.vehicle().is_none() {
             return;
         }
@@ -848,7 +896,8 @@ impl Freeway {
             b.pilot = None;
         }
         if !piloted || b.pilot.is_none_or(|g| g.distance(dest) > 4.0) {
-            b.cmd(format!("pilot_goal {:.1} {:.1} {:.2}", dest.x, dest.z, desire));
+            let then = then.map(|t| format!(" then {:.1} {:.1} {:.1}", t.x, t.y, t.z)).unwrap_or_default();
+            b.cmd(format!("pilot_goal {:.1} {:.1} {:.2} {:.1}{then}", dest.x, dest.z, desire, dest.y));
             b.pilot = Some(dest);
         }
     }

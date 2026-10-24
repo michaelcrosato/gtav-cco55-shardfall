@@ -681,11 +681,17 @@ impl Freeway {
                 events.push(SimEvent::Sound { cue: "police.scanner_out".into(), pos: None, gain: 0.8, pitch: 1.0 });
             }
         }
-        // Busted: an officer at arm's length of a player on foot who is barely moving, at 1–2★.
-        let slow = vel.length() < 1.5;
-        if rep.cuffing && self.heat.stars <= 2 && self.drive.vehicle().is_none() && slow && self.fate.alive() {
+        // Busted: an officer at arm's length of a player on foot who is barely moving, at 1–2★ —
+        // or of one sat in a car boxed in to a standstill (pulled out of it, a little slower).
+        let car_speed = self.drive.vehicle().and_then(|c| drive::Car::read(sim, c)).map(|c| c.vel.length());
+        let held = match car_speed {
+            Some(v) => v < 0.5,
+            None => vel.length() < 1.5,
+        };
+        let cuff_time = if car_speed.is_some() { fate::CUFF_TIME * 2.0 } else { fate::CUFF_TIME };
+        if rep.cuffing && self.heat.stars <= 2 && held && self.fate.alive() {
             self.cuffed += dt;
-            if self.cuffed >= fate::CUFF_TIME {
+            if self.cuffed >= cuff_time {
                 self.go(sim, Fate::Busted { t: 0.0 }, events);
             }
         } else {

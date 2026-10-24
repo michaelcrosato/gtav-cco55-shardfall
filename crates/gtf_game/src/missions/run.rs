@@ -25,6 +25,8 @@ use crate::anchor::{self, Anchor};
 const INTRO: f32 = 3.5;
 const FAIL_BANNER: f32 = 2.5;
 const PASS_BANNER: f32 = 3.0;
+/// The map's colour for activities.
+const ACTIVITY_PINK: &str = "#ff3e8a";
 /// Seconds between babble syllables.
 const BABBLE: f32 = 0.11;
 
@@ -473,6 +475,10 @@ impl Freeway {
                 }
             }
             Action::Cash(n) => self.pay(*n),
+            Action::Loot([lo, hi]) => {
+                let n = lo + sim.state.rng.below((hi - lo + 1).clamp(1, u32::MAX as i64) as u32) as i64;
+                self.pay(n);
+            }
             Action::Armor(a) => self.combat.armor = a.clamp(0.0, crate::combat::MAX_ARMOR),
             Action::Pay { who, cash } => {
                 let i = crate::protagonists::def().ok().and_then(|d| d.index(who));
@@ -1187,10 +1193,12 @@ impl Freeway {
                 }
             }
             Choose => {
-                let pick = self.missions.bot_choice.clone().filter(|c| step.options.iter().any(|o| &o.id == c));
-                let id = pick.or(step.options.first().map(|o| o.id.clone())).unwrap_or_default();
-                run.flags.insert(id.clone());
-                self.missions.story.insert(id);
+                let money = self.money;
+                let pick =
+                    self.missions.bot_choice.clone().filter(|c| step.options.iter().any(|o| &o.id == c && o.cost <= money));
+                let first = step.options.iter().find(|o| o.cost <= money).map(|o| o.id.clone());
+                let id = pick.or(first).unwrap_or_default();
+                self.choose(def, run, step, &id);
             }
             Branch => return self.branch(def, run, step),
             Parallel => {
@@ -1204,6 +1212,20 @@ impl Freeway {
     }
 
     /// Where a branch goes: `to` when its flag is set, else `otherwise` (else on).
+    /// An option picked on the board: its cost paid and its flag set (kept after the mission
+    /// in the story, but an activity's: a bet is for that run).
+    fn choose(&mut self, def: &MissionDef, run: &mut Run, step: &StepDef, id: &str) {
+        if let Some(o) = step.options.iter().find(|o| o.id == id)
+            && o.cost > 0
+        {
+            self.pay(-o.cost);
+        }
+        run.flags.insert(id.to_string());
+        if !def.activity {
+            self.missions.story.insert(id.to_string());
+        }
+    }
+
     fn branch(&self, def: &MissionDef, run: &Run, step: &StepDef) -> Option<usize> {
         let set = step.flag.as_ref().is_some_and(|f| run.flags.contains(f) || self.missions.story.contains(f));
         let label = if set { step.to.as_ref() } else { step.otherwise.as_ref() }?;
@@ -1521,7 +1543,14 @@ impl Freeway {
             Choose => {
                 let n = step.options.len().max(1);
                 let (dx, _) = run.nav.step(input, real);
-                prog.focus = crate::pad::move_focus(prog.focus, n, dx, |_| true);
+                let money = self.money;
+                let affordable = |i: usize| step.options.get(i).is_some_and(|o| o.cost <= money);
+                prog.focus = crate::pad::move_focus(prog.focus, n, dx, affordable);
+                if !affordable(prog.focus)
+                    && let Some(i) = (0..n).find(|&i| affordable(i))
+                {
+                    prog.focus = i;
+                }
                 for c in &input.cmds {
                     if let Some(id) = c.strip_prefix("ui.focus ").or(c.strip_prefix("ui.accept "))
                         && let Some(i) = step.options.iter().position(|o| o.id == id)
@@ -1532,10 +1561,9 @@ impl Freeway {
                 // (The world stands still on the board: its clock is real time.)
                 prog.shot_t += real;
                 let accept = input.pad.pressed & pad::SOUTH != 0 || input.cmds.iter().any(|c| c.starts_with("ui.accept "));
-                if accept && prog.shot_t > 0.4 {
+                if accept && prog.shot_t > 0.4 && affordable(prog.focus.min(n - 1)) {
                     let id = step.options[prog.focus.min(n - 1)].id.clone();
-                    run.flags.insert(id.clone());
-                    self.missions.story.insert(id);
+                    self.choose(def, run, step, &id);
                     events.push(sound("ui.accept", 1.0, 1.0));
                     return Flow::Done;
                 }
@@ -1633,10 +1661,38 @@ impl Freeway {
                 // A racer drives like a getaway driver (through lights, past cars), a little
                 // slower than the limits allow.
                 self.traffic.command(sim, &city, car, driver, Some(*g), Some(*g), 0.9);
+                let then = gates.get((a.gate + 1) % gates.len()).copied().flatten();
+                self.traffic.drive_through(Some(car), then);
                 a.ordered = true;
             }
+            // Moderate rubber-banding: well ahead of the player a racer eases off, well behind it
+            // pushes.
+            let lead = race_score(&gates, a.lap, a.gate, p) - race_score(&gates, prog.lap, prog.gate, me);
+            let desire = if lead > RUBBER {
+                0.66
+            } else if lead < -RUBBER {
+                1.0
+            } else {
+                0.82
+            };
+            self.traffic.urge(car, desire);
         }
         Flow::On
+    }
+
+    /// The player's place in the race under way (1 = leading) and the field's size.
+    pub(crate) fn race_place(&self, sim: &Sim, run: &Run, step: &StepDef, prog: &Progress) -> (usize, usize) {
+        let gates: Vec<Option<Vec3>> = step.gates.iter().map(|g| self.anchor_at(sim, run, g).map(|x| x.0)).collect();
+        let mine = race_score(&gates, prog.lap, prog.gate, self.player_point(sim));
+        let ahead = step
+            .racers
+            .iter()
+            .filter(|id| {
+                let Some((p, _)) = actor_at(sim, run, id) else { return false };
+                run.actors.get(*id).is_some_and(|a| race_score(&gates, a.lap, a.gate, p) > mine)
+            })
+            .count();
+        (ahead + 1, step.racers.len() + 1)
     }
 
     /// The actors' behaviours: inputs for the people, orders for the vehicles' drivers.
@@ -1877,7 +1933,7 @@ impl Freeway {
         if self.missions.run.is_none() {
             for (key, p) in self.open_missions() {
                 let Ok(d) = super::get(&key) else { continue };
-                let color = self.protagonist_color(&d.protagonist);
+                let color = if d.activity { Color::hex(ACTIVITY_PINK) } else { self.protagonist_color(&d.protagonist) };
                 if p.distance(Self::feet(sim)) < 150.0 {
                     draw.prims.push(ring(p, 1.6, color));
                 }
@@ -1886,7 +1942,7 @@ impl Freeway {
                 {
                     m.blips.push(Blip {
                         pos: flat(p),
-                        icon: BlipIcon::Letter(d.blip.as_ref().map_or('?', |b| b.letter)),
+                        icon: d.blip.as_ref().map_or(BlipIcon::Letter('?'), |b| b.map_icon()),
                         color,
                         label: Some(d.title.clone()),
                         clamp: true,
@@ -2083,7 +2139,14 @@ impl Freeway {
                     h.meters.push(Meter { label: "BAG".into(), value: prog.meter.min(1.0), color: Color::hex("#6fe28a") })
                 }
                 StepKind::Race => h.meters.push(Meter {
-                    label: format!("LAP {}/{}", (prog.lap + 1).min(step.laps.unwrap_or(1)), step.laps.unwrap_or(1)),
+                    label: {
+                        let (place, of) = self.race_place(sim, run, step, prog);
+                        format!(
+                            "LAP {}/{}  ·  POS {place}/{of}",
+                            (prog.lap + 1).min(step.laps.unwrap_or(1)),
+                            step.laps.unwrap_or(1)
+                        )
+                    },
                     value: prog.gate as f32 / step.gates.len().max(1) as f32,
                     color: Color::hex("#ffc145"),
                 }),
@@ -2206,12 +2269,12 @@ impl Freeway {
                         .map(|o| Card {
                             id: o.id.clone(),
                             title: o.title.to_uppercase(),
-                            subtitle: None,
+                            subtitle: (o.cost > 0).then(|| format!("${}", o.cost)),
                             lines: o.lines.clone(),
                             bars: Vec::new(),
                             accent: Color::hex("#ffc145"),
                             icon: Some("jobs".into()),
-                            enabled: true,
+                            enabled: o.cost <= self.money,
                         })
                         .collect(),
                     focus: prog.focus,
@@ -2377,4 +2440,23 @@ fn ring(p: Vec3, r: f32, color: Color) -> PrimDraw {
         shadow: false,
         glow: Default::default(),
     }
+}
+
+/// How many gates a racer is ahead of (or behind) the player before it eases off (or pushes).
+const RUBBER: f32 = 0.75;
+
+/// How far round the course someone is: gates passed (laps counted) and the way to the next
+/// one as a share of the leg to it.
+fn race_score(gates: &[Option<Vec3>], lap: u32, gate: usize, at: Vec3) -> f32 {
+    let n = gates.len().max(1);
+    let next = gates.get(gate).copied().flatten();
+    let prev = gates.get((gate + n - 1) % n).copied().flatten();
+    let part = match (prev, next) {
+        (Some(a), Some(b)) => {
+            let leg = flat(a).distance(flat(b)).max(1.0);
+            (1.0 - flat(at).distance(flat(b)) / leg).clamp(0.0, 1.0)
+        }
+        _ => 0.0,
+    };
+    (lap as usize * n + gate) as f32 + part
 }

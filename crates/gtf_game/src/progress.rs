@@ -17,6 +17,19 @@ use crate::missions::Record;
 use crate::phone::{Message, Photo};
 use crate::protagonists::Member;
 
+/// Completion's parts (each 0..1) and the counts the stats page shows (done, of).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Parts {
+    pub story: f32,
+    pub activities: f32,
+    pub shields: f32,
+    pub gold: f32,
+    pub story_count: (usize, usize),
+    pub shield_count: (usize, usize),
+    pub jump_count: (usize, usize),
+    pub gold_count: (usize, usize),
+}
+
 /// The save's format version.
 pub const VERSION: u32 = 1;
 
@@ -59,26 +72,85 @@ impl Freeway {
     /// (the Lost Shields), medals 10% (gold on every mission with medals); a part with nothing
     /// in it counts as not done.
     pub fn completion(&self) -> f32 {
+        let p = self.completion_parts();
+        0.5 * p.story + 0.3 * p.activities + 0.1 * p.shields + 0.1 * p.gold
+    }
+
+    /// Completion's four parts, each 0..1, and what they count.
+    pub fn completion_parts(&self) -> Parts {
         let missions: Vec<_> = crate::missions::all().into_iter().filter(|d| d.district.is_empty()).collect();
         let share = |done: usize, of: usize| if of == 0 { 0.0 } else { done as f32 / of as f32 };
         let story: Vec<_> = missions.iter().filter(|d| !d.activity).collect();
-        let story_part = share(story.iter().filter(|d| self.missions.passed(&d.key)).count(), story.len());
+        let story_done = story.iter().filter(|d| self.missions.passed(&d.key)).count();
         let def = crate::activities::def().ok();
         let units = def.as_ref().map(|d| d.units()).unwrap_or_default();
         let jobs: Vec<_> = missions.iter().filter(|d| d.activity).collect();
-        let activities_part = share(
-            jobs.iter().filter(|d| self.missions.passed(&d.key)).count()
-                + units.iter().filter(|u| self.activities.done.contains(*u)).count(),
-            jobs.len() + units.len(),
-        );
+        let jobs_done = jobs.iter().filter(|d| self.missions.passed(&d.key)).count();
+        let units_done = units.iter().filter(|u| self.activities.done.contains(*u)).count();
         let shields = def.as_ref().map(|d| d.shields()).unwrap_or_default();
-        let shields_part = share(shields.iter().filter(|s| self.activities.done.contains(*s)).count(), shields.len());
+        let shields_done = shields.iter().filter(|s| self.activities.done.contains(*s)).count();
         let medalled: Vec<_> = missions.iter().filter(|d| !d.medals.is_empty()).collect();
         let gold = medalled
             .iter()
             .filter(|d| self.missions.records.get(&d.key).is_some_and(|r| r.medal == Some(pav_core::present::Medal::Gold)))
             .count();
-        0.5 * story_part + 0.3 * activities_part + 0.1 * shields_part + 0.1 * share(gold, medalled.len())
+        let jumps = def.as_ref().map_or(0, |d| d.jump.len());
+        Parts {
+            story: share(story_done, story.len()),
+            activities: share(jobs_done + units_done, jobs.len() + units.len()),
+            shields: share(shields_done, shields.len()),
+            gold: share(gold, medalled.len()),
+            story_count: (story_done, story.len()),
+            shield_count: (shields_done, shields.len()),
+            jump_count: (self.activities.done.iter().filter(|d| d.starts_with("jump:")).count(), jumps),
+            gold_count: (gold, medalled.len()),
+        }
+    }
+
+    /// The stats page's own cards after the protagonists': completion and the activities.
+    pub(crate) fn progress_cards(&self) -> Vec<pav_core::present::Card> {
+        use pav_core::Color;
+        use pav_core::present::Card;
+        let p = self.completion_parts();
+        let n = |(a, b): (usize, usize)| format!("{a}/{b}");
+        let passed = |k: &str| self.missions.passed(k);
+        let events = crate::activities::def().ok().map_or((0, 0), |d| {
+            (d.event.iter().filter(|e| self.activities.done.contains(&format!("event:{}", e.id))).count(), d.event.len())
+        });
+        vec![
+            Card {
+                id: "completion".into(),
+                title: format!("{}%", (self.completion() * 100.0).floor() as i32),
+                subtitle: Some("Completion".into()),
+                lines: vec![format!("Story missions {}", n(p.story_count)), format!("Gold medals {}", n(p.gold_count))],
+                bars: vec![
+                    ("Story".into(), p.story),
+                    ("Activities".into(), p.activities),
+                    ("Lost Shields".into(), p.shields),
+                    ("Gold medals".into(), p.gold),
+                ],
+                accent: Color::hex("#ffc145"),
+                icon: Some("trophy".into()),
+                enabled: true,
+            },
+            Card {
+                id: "activities".into(),
+                title: "ACTIVITIES".into(),
+                subtitle: Some("Side jobs and finds".into()),
+                lines: vec![
+                    format!("Lost Shields {}", n(p.shield_count)),
+                    format!("Stunt jumps {}", n(p.jump_count)),
+                    format!("Pretzel Run {}", if passed("act_pretzel_run") { "won" } else { "-" }),
+                    format!("Hold-ups {}/2", ["act_holdup_gas", "act_holdup_grind"].iter().filter(|k| passed(k)).count()),
+                    format!("Vigilante {}", if self.activities.done.contains("vigilante") { "done" } else { "-" }),
+                    format!("Random events {}", n(events)),
+                ],
+                bars: Vec::new(),
+                accent: Color::hex("#ff3e8a"),
+                icon: Some("jobs".into()),
+                enabled: true,
+            },
+        ]
     }
 
     /// The game as a save.

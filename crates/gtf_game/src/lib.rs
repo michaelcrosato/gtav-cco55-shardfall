@@ -524,14 +524,26 @@ impl Freeway {
                 (Some("activity_done"), Some(id)) => self.activity_done(id),
                 // A run at a stunt jump for the bot, from its run-up in an Okami Kaze.
                 (Some("stunt"), Some(id)) => self.stunt_cmd(id),
-                // The autopilot's destination: `pilot_goal <x> <z> [desire]`, `pilot_goal off`.
+                // The autopilot's destination: `pilot_goal <x> <z> [desire] [y] [then <x> <y> <z>]`, `pilot_goal off`.
                 (Some("pilot_goal"), Some("off")) => self.traffic.pilot_goal(None, 1.0),
                 (Some("pilot_goal"), Some(x)) => {
                     let z = w.next().and_then(|z| z.parse::<f32>().ok());
                     let desire = w.next().and_then(|d| d.parse::<f32>().ok()).unwrap_or(1.0);
+                    // (The height picks the level: a deck or a ramp over a street. The ground's
+                    // when none. `then <x> <y> <z>`: on through it without stopping toward that
+                    // point, a race's gate and the next.)
+                    let y = w.next().and_then(|y| y.parse::<f32>().ok());
+                    let then = match (w.next(), w.next(), w.next(), w.next()) {
+                        (Some("then"), Some(x), Some(y), Some(z)) => match (x.parse(), y.parse(), z.parse()) {
+                            (Ok(x), Ok(y), Ok(z)) => Some(Vec3::new(x, y, z)),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
                     if let (Ok(x), Some(z), Some(city)) = (x.parse::<f32>(), z, self.city.clone()) {
-                        let p = Vec2::new(x, z);
-                        self.traffic.pilot_goal(Some(Vec3::new(x, city.ground_y(p), z)), desire);
+                        let y = y.unwrap_or_else(|| city.ground_y(Vec2::new(x, z)));
+                        self.traffic.pilot_goal(Some(Vec3::new(x, y, z)), desire);
+                        self.traffic.drive_through(None, then);
                     }
                 }
                 (Some("time"), Some(t)) => match daytime::parse_time(t) {
@@ -1337,7 +1349,12 @@ impl Game for Freeway {
                 player,
                 &blips,
                 &self.gps.minimap(feet),
-                self.crew.stat_cards(self.front.stats, self.money),
+                {
+                    let mut row = self.crew.stat_cards(self.front.stats, self.money);
+                    row.cards.extend(self.progress_cards());
+                    row.focus = self.front.stats.min(row.cards.len().saturating_sub(1));
+                    row
+                },
                 brief,
                 self.missions.run.is_some(),
             );

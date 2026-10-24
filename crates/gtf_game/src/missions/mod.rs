@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Result, anyhow};
 use glam::Vec3;
 use pav_core::entity::EntityId;
-use pav_core::present::Medal;
+use pav_core::present::{BlipIcon, Medal};
 use serde::{Deserialize, Serialize};
 
 use crate::anchor::Anchor;
@@ -35,6 +35,9 @@ pub const FILES: &[(&str, &str)] = &[
     ("s3_test_drive", include_str!("../../../../content/freeway/missions/s3_test_drive.toml")),
     ("h0_board", include_str!("../../../../content/freeway/missions/h0_board.toml")),
     ("h1_freeway_job", include_str!("../../../../content/freeway/missions/h1_freeway_job.toml")),
+    ("act_pretzel_run", include_str!("../../../../content/freeway/missions/act_pretzel_run.toml")),
+    ("act_holdup_gas", include_str!("../../../../content/freeway/missions/act_holdup_gas.toml")),
+    ("act_holdup_grind", include_str!("../../../../content/freeway/missions/act_holdup_grind.toml")),
 ];
 
 fn yes() -> bool {
@@ -47,7 +50,8 @@ fn yes() -> bool {
 pub struct MissionDef {
     pub key: String,
     pub title: String,
-    /// Who plays it (`dez`, `mack`, `roxy`).
+    /// Who plays it (`dez`, `mack`, `roxy`; an activity may leave it empty: whoever is played).
+    #[serde(default)]
     pub protagonist: String,
     /// The district it is played in: "" for Paloma Bay, `dev` for the Proving Grounds.
     #[serde(default)]
@@ -90,11 +94,26 @@ pub struct MissionDef {
     pub fail: Vec<FailDef>,
 }
 
+/// Where a mission is picked up and how the map marks it: a contact's letter, or an activity's
+/// icon (`race`, `activity`).
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BlipDef {
-    pub letter: char,
+    #[serde(default)]
+    pub letter: Option<char>,
+    #[serde(default)]
+    pub icon: Option<String>,
     pub at: String,
+}
+
+impl BlipDef {
+    pub fn map_icon(&self) -> BlipIcon {
+        match self.icon.as_deref() {
+            Some("race") => BlipIcon::Race,
+            Some("activity") => BlipIcon::Activity,
+            _ => BlipIcon::Letter(self.letter.unwrap_or('?')),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -354,6 +373,9 @@ pub struct ChoiceDef {
     pub title: String,
     #[serde(default)]
     pub lines: Vec<String>,
+    /// Cash it takes when picked (a bet); its card is greyed out while the player has less.
+    #[serde(default)]
+    pub cost: i64,
 }
 
 /// What a step or the mission can do when a step starts or ends.
@@ -388,6 +410,8 @@ pub enum Action {
         ammo: u32,
     },
     Cash(i64),
+    /// Cash, a random amount in this range (a till's takings).
+    Loot([i64; 2]),
     /// Body armour on the player (0–100).
     Armor(f32),
     /// Cash to one of the crew, played or not (the heist's cut).
@@ -663,7 +687,7 @@ pub fn validate(d: &MissionDef, text: &str, city: &pav_world::City) -> Vec<Strin
             errs.push(format!("{file}:{at}: no actor '{id}'"));
         }
     };
-    if !protagonist(&d.protagonist) {
+    if !(d.activity && d.protagonist.is_empty()) && !protagonist(&d.protagonist) {
         errs.push(format!("{file}:1: no protagonist '{}'", d.protagonist));
     }
     if d.step.is_empty() {
@@ -671,6 +695,9 @@ pub fn validate(d: &MissionDef, text: &str, city: &pav_world::City) -> Vec<Strin
     }
     if let Some(b) = &d.blip {
         anchor(&b.at, &mut errs, 1);
+        if b.letter.is_none() == b.icon.is_none() || b.icon.as_deref().is_some_and(|i| i != "race" && i != "activity") {
+            errs.push(format!("{file}:1: the blip needs a letter or an icon (race, activity)"));
+        }
     }
     if let Some(s) = &d.start {
         anchor(s, &mut errs, 1);
@@ -775,6 +802,7 @@ pub fn validate(d: &MissionDef, text: &str, city: &pav_world::City) -> Vec<Strin
                     errs.push(format!("{file}:{at}: armor {a} is not 0-100"))
                 }
                 Action::Unlock(f) if f != "switch" => errs.push(format!("{file}:{at}: unlock '{f}' (switch)")),
+                Action::Loot([lo, hi]) if lo < &0 || hi < lo => errs.push(format!("{file}:{at}: loot [{lo}, {hi}] is no range")),
                 _ => {}
             }
         }

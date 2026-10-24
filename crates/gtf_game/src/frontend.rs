@@ -373,7 +373,8 @@ impl Front {
                             self.go(Page::Play, now);
                         }
                     }
-                    2 => self.stats = move_focus(self.stats, 3, dx, |_| true),
+                    // (The protagonists, then completion and the activities.)
+                    2 => self.stats = move_focus(self.stats, 5, dx, |_| true),
                     3 => {
                         self.pause = move_focus(self.pause, SETTINGS_PAGES.len(), dx + dy, |_| true);
                         if accept {

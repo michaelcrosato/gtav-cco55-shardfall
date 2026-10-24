@@ -192,11 +192,26 @@ impl Freeway {
     pub(crate) fn shops_tick(&mut self, sim: &mut Sim, input: &InputFrame, real: f32, events: &mut Vec<SimEvent>) {
         let pressed = |b: u32| input.pad.pressed & b != 0;
         let Some(mut shop) = self.shop.take() else {
-            if self.missions.run.is_some() || !self.fate.alive() || self.phone.open || self.drive.busy() {
+            // In a mission only Paloma Customs serves (a respray loses the police: a getaway's
+            // trick), and not in its cutscenes.
+            let mission = self.missions.run.as_ref();
+            let respray_only = mission.is_some();
+            let busy_mission = mission.is_some_and(|r| {
+                r.phase != crate::missions::Phase::Play
+                    || crate::missions::get(&r.key)
+                        .ok()
+                        .and_then(|d| {
+                            d.step.get(r.step).map(|s| {
+                                matches!(s.kind, crate::missions::StepKind::Cutscene | crate::missions::StepKind::Choose)
+                            })
+                        })
+                        .unwrap_or(true)
+            });
+            if busy_mission || !self.fate.alive() || self.phone.open || self.drive.busy() {
                 self.counter = None;
                 return;
             }
-            self.counter = self.counter_here(sim);
+            self.counter = self.counter_here(sim).filter(|c| !respray_only || *c == Counter::Mods);
             if let Some(c) = self.counter
                 && pressed(pad::RIGHT)
             {
