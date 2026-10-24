@@ -127,11 +127,19 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
       House, vigilante, the Purse Snatcher and Getaway Needed random events, and 15 Lost
       Shields. Parts to build on: the `race` and `holdup` step kinds, `BannerKind::Stunt`,
       `BlipIcon::Jump` and the `[[jump]]` wedges.
-- [ ] **Radio.** Every genre varies one synthwave kit (`pav_audio/src/music.rs`), and SPNN's
-      `talk` genre falls through to music. Needed:
-      - a patch for each of at least 4 music stations;
-      - SPNN news/talk: headlines, ads and heat-aware traffic reports;
-      - DJ cards, and scanner chatter text (today only a sound cue at 2★+).
+- [x] **Radio** (2026-10-24). Five genres with their own kits and feel
+      (`pav_audio/src/music/`: synthwave, boom-bap, surf, cumbia, smooth jazz), song sections
+      and a per-station ident; SPNN 1040 AM runs a program from `radio.toml` [talk.spnn]
+      (sounder, 30 headlines as subtitles, 9 ads over jingles, call-ins, weather, traffic
+      reports that name where the player's chase or search is); DJ cards between songs (the
+      radio card); scanner chatter at 2★+ (squelch, a `voice.radio` babble loop, a subtitle
+      with a code, a unit and the place); formant babble voices (`pav_audio/src/voice.rs`).
+      Evidence: `cargo test -p pav_audio` (tempo of 10 songs exact from the onsets'
+      autocorrelation; swing boom-bap 2.00, smooth 1.67, synthwave 1.00; choruses within
+      0.5 dB; talk's beat strength 0.13 against a song's 0.36), `cargo test -p gtf_game --test
+      radio` (6), captures `out/radio/*.wav` with `radio seek` (in-band tempo 107/92/161/95/73
+      BPM as the songs; centroids 1272/819/2065/639/1045 Hz; SPNN 83% speech band, 4.8
+      syllables/s; no clipping).
 - [ ] **Completion and stats.** `progress.rs` `completion()` counts story passes and gold medals
       only, and reads 0% because no story missions exist yet. Track and save activities and
       collectibles, and add the completion and collectibles cards to the STATS tab. Add a test
@@ -170,8 +178,8 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
       - near-miss swerves and angry drivers getting out;
       - scenario points beyond benches, and the siren yelp;
       - a sky-cam that reaches 300 m in ≤ 3 s with its grid overlay (today 170 m in 3.6 s).
-- [ ] **Audio.** Duck the mix for dialogue (only menus duck). Add reverb zones (the game never
-      sets `AudioScene.reverb`). Mix pass.
+- [ ] **Audio.** Add reverb zones (the game never sets `AudioScene.reverb`). Mix pass.
+      (Ducking landed with the radio: 8 dB under subtitled dialogue, 12 dB in menus.)
 - [ ] **Visuals.** Add camera shake (every `shake` is 0.0) that honours `reduce_shake`, rain
       splashes on the ground and neon. Art pass at every time of day and weather.
 - [ ] **Performance.**
@@ -207,7 +215,7 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 | D7 UI | ◐ | M1 kit + M6 screens: intro card, objectives, subtitles, fail card, results, switch wheel, phone (9 apps), shop menus, save slots, captured with HUD (`out/m6/`); the 10-foot review is M9 |
 | D8 Frontend | ☐ | |
 | D9 Attract mode | ☐ | |
-| D10 Audio | ☐ | |
+| D10 Audio | ☐ | Radio part done 2026-10-24: 5 music stations + SPNN talk, DJ cards, scanner chatter, the radio −6 dB under the effects and ducked 8 dB (dialogue) / 12 dB (menus); `cargo test -p pav_audio`, `-p gtf_game --test radio`; captures `out/radio/`. SFX, loops and the mix pass remain (M9). |
 | D11 Visuals (incl. FPS readout) | ☐ | |
 | D12 Performance | ◐ | `gtf perf view=all` (release) within every budget with the population, 2026-10-18 |
 | D13 Verification | ☐ | |
@@ -351,6 +359,18 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
   - Results rows read "Done" / "Missed": the UI fonts have no ✓ or ✗.
   - Engine (upstreamable, `bf15e85`): districts name `[[spot]]`s (a place and a facing) for
     missions and life spots; `VehicleInput.grip` adds tyre grip (0..2) for abilities.
+- 2026-10-24 — **Radio.** The stations keep their own clock (`Radio.clock`) on the sim's real
+  time: game time stops in the pause menu and slows in slow motion, which made the host's song
+  jump back every 0.75 s. `AudioScene.ducking` is now decibels (it was 0..1 mapped to
+  1 − 0.7·d): the radio bus sits at −6 dB (music volume × 0.501), ducked 8 dB whenever the
+  mission runtime shows a subtitle and 12 dB in menus. Talk is laid out by the game
+  (`radio.toml` [talk.<id>] rundown, [dj.<id>] lines) as `pav_core::radio::Segment`s on
+  `Music.segments`; the host renders them; reports are worked out as they go on air and kept.
+  Picks come from a station's seed and slot, never `sim.state.rng` (a test runs the same game
+  with the radio on and off and compares the rng). Radio and scanner voices are the engine's
+  formant babble (`pav_audio::voice`); mission dialogue keeps its `voice.babble` cue
+  (`missions/` was another helper's). Stations "Westside" and "Smooth" so the card reads
+  WESTSIDE 99 / SMOOTH 88.8. `radio seek <s>|end` is a check command.
 
 ## Open issues
 - Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround (limit 0);
@@ -481,3 +501,14 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
   minimap and the prompts. The shardfall MCP server timed out at startup, so `.mcp.json` now
   runs `gtf mcp` (Decisions). Two read-only audits of the code against PLAN §2, §5 and §9 gave
   **Remaining work**. `HANDOFF.md` now has a shorter `/goal` prompt.
+- 2026-10-24 — **Radio (M7, D10 part).** Per-genre music, idents, SPNN's program with
+  heat-aware traffic, DJ cards, scanner chatter and the mix (commits `63c64c0`…`b9593dd`).
+  Listened with `gtf audio_capture` in a car at 60 s into each station (`radio seek 60`), SPNN
+  from its sounder, a DJ break and two stars of scanner: in-band tempo equals each song's
+  (107, 92, 161, 95, 73 BPM; raw autocorrelation 184 and 80.5 for boom-bap and surf before
+  folding), swing boom-bap 1.82 on sixteenths and smooth 1.91 on eighths against 1.00 for the
+  straight genres, the radio's own spectral centroid 639-2065 Hz by station (surf was 5.6 kHz
+  until its snare got a band-passed crack), SPNN's beat strength 0.06 (music 0.46-0.88) at
+  4.8 syllables/s; peaks ≤ 0.32, no clipping. HUD captures looked at: SPNN's and dispatch's
+  subtitles, the DJ card (its line now wraps in the corner instead of running into the
+  objective). Cost: 2.5-4.3% of a core per station, 1.0% for talk (native release).
