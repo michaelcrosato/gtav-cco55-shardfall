@@ -560,6 +560,8 @@ impl Freeway {
         }
         self.combat.mag[i] = self.combat.mag[i].max(w.magazine);
         self.combat.reserve[i] += if ammo > 0 { ammo } else { w.reserve };
+        // In hand: what the mission hands over is what to use.
+        self.weapon = i;
     }
 
     /// A checkpoint of the mission as it stands.

@@ -27,6 +27,82 @@ fn clear_shot(sim: &Sim, eye: Vec3, me: Vec3, at: Vec3, who: EntityId) -> bool {
     })
 }
 
+/// A way round the vehicles between `from` and `to` (at most 14 m off): A* over half-metre
+/// cells, with vehicles (grown by a body's width) and buildings blocked and roads open. The
+/// points along it, a metre apart, ending at `to` or as near it as there is a way; None when
+/// there is none.
+fn round_cars(sim: &Sim, city: &pav_world::City, from: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+    const CELL: f32 = 0.5;
+    const HALF: i32 = 28;
+    const N: i32 = HALF * 2 + 1;
+    let cars: Vec<crate::drive::Car> = sim
+        .state
+        .entities
+        .iter()
+        .filter(|e| e.vehicle.is_some() && flat(e.pos).distance(from) < 32.0)
+        .filter_map(|e| crate::drive::Car::read(sim, e.id))
+        .collect();
+    let at = |c: glam::IVec2| from + Vec2::new(c.x as f32, c.y as f32) * CELL;
+    let open = |p: Vec2| {
+        let car = cars.iter().any(|c| {
+            let d = p - flat(c.center);
+            d.dot(flat(c.forward())).abs() < c.half.z + 0.45 && d.dot(flat(c.left())).abs() < c.half.x + 0.45
+        });
+        let wall = city.walk.at(p) == pav_world::walk::Walk::Blocked && city.grid.road(city.grid.cell_of(p)).is_none();
+        !car && !wall
+    };
+    let index = |c: glam::IVec2| ((c.y + HALF) * N + c.x + HALF) as usize;
+    let rel = (to - from) / CELL;
+    let goal = glam::IVec2::new((rel.x.round() as i32).clamp(-HALF, HALF), (rel.y.round() as i32).clamp(-HALF, HALF));
+    let h = |c: glam::IVec2| (c - goal).as_vec2().length();
+    let mut cost = vec![f32::MAX; (N * N) as usize];
+    let mut prev = vec![usize::MAX; (N * N) as usize];
+    let mut heap = BinaryHeap::new();
+    let start = glam::IVec2::ZERO;
+    cost[index(start)] = 0.0;
+    heap.push((Reverse((h(start) * 100.0) as u32), start.x, start.y));
+    let mut best = (h(start), start);
+    while let Some((_, x, y)) = heap.pop() {
+        let c = glam::IVec2::new(x, y);
+        if c == goal {
+            best = (0.0, c);
+            break;
+        }
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
+            let n = c + glam::IVec2::new(dx, dy);
+            if n.x.abs() > HALF || n.y.abs() > HALF || !open(at(n)) {
+                continue;
+            }
+            let step = if dx != 0 && dy != 0 { std::f32::consts::SQRT_2 } else { 1.0 };
+            let g = cost[index(c)] + step;
+            if g < cost[index(n)] {
+                cost[index(n)] = g;
+                prev[index(n)] = index(c);
+                if h(n) < best.0 {
+                    best = (h(n), n);
+                }
+                heap.push((Reverse(((g + h(n)) * 100.0) as u32), n.x, n.y));
+            }
+        }
+    }
+    let end = best.1;
+    if end == start {
+        return None;
+    }
+    let mut cells = vec![end];
+    let mut i = index(end);
+    while prev[i] != usize::MAX && prev[i] != index(start) {
+        i = prev[i];
+        cells.push(glam::IVec2::new(i as i32 % N - HALF, i as i32 / N - HALF));
+    }
+    cells.reverse();
+    let mut way: Vec<Vec2> = cells.iter().skip(1).step_by(2).map(|c| at(*c)).collect();
+    way.push(at(end));
+    Some(way)
+}
+
 fn flat(v: Vec3) -> Vec2 {
     Vec2::new(v.x, v.z)
 }
@@ -594,9 +670,13 @@ impl Freeway {
             b.replan = 1.0;
             b.goal = Some(goal);
             let street = (feet.y - city.ground_y(here)).abs() < 2.0;
-            let eye = feet + Vec3::Y * 1.0;
-            let ray = Vec3::new(goal.x, to.y + 1.0, goal.y) - eye;
-            let clear = dist < 45.0 && sim.raycast_static(eye, ray.normalize_or(Vec3::X), ray.length()).is_none();
+            // In the clear at the waist and the knee (a low wall stops the legs, not the eye).
+            let clear = dist < 45.0
+                && [1.0, 0.4].into_iter().all(|h| {
+                    let eye = feet + Vec3::Y * h;
+                    let ray = Vec3::new(goal.x, to.y + h, goal.y) - eye;
+                    sim.raycast_static(eye, ray.normalize_or(Vec3::X), ray.length()).is_none()
+                });
             b.path = match (city.walk.nearest_walkable(here, 6), city.walk.nearest_walkable(goal, 8)) {
                 (Some(s), Some(t)) if street && !clear && dist > 4.0 => {
                     let mut p = city.walk.path(s, t, 6000);
@@ -605,6 +685,21 @@ impl Freeway {
                 }
                 _ => vec![goal],
             };
+            // A vehicle across the first leg (cars at the kerb, a car between it and a door):
+            // the way round it, then on.
+            if let Some(first) = b.path.first().copied() {
+                let leg = first - here;
+                let len = leg.length().min(14.0);
+                let dir = leg.normalize_or_zero();
+                let hit =
+                    (len > 1.0).then(|| sim.raycast(feet + Vec3::Y * 0.6, Vec3::new(dir.x, 0.0, dir.y), len, None)).flatten();
+                let car =
+                    hit.and_then(|h| h.entity).is_some_and(|e| sim.state.entities.get(e).is_some_and(|x| x.vehicle.is_some()));
+                if car && let Some(mut way) = round_cars(sim, city, here, here + dir * len) {
+                    way.append(&mut b.path);
+                    b.path = way;
+                }
+            }
         }
         while b.path.len() > 1 && b.path[0].distance(here) < 1.2 {
             b.path.remove(0);
@@ -702,8 +797,11 @@ impl Freeway {
                 && self.crew.owns(i)
                 && self.combat.mag.get(i).copied().unwrap_or(0) + self.combat.reserve.get(i).copied().unwrap_or(0) > 0
         };
-        if !ok(self.weapon)
-            && let Some(i) = (0..wd.weapon.len()).find(|&i| ok(i))
+        // The hardest-hitting one (damage a minute, every pellet) with rounds left.
+        let dps = |i: usize| wd.weapon[i].damage * wd.weapon[i].pellets.max(1) as f32 * wd.weapon[i].rpm;
+        if let Some(i) = (0..wd.weapon.len()).filter(|&i| ok(i)).max_by(|&x, &y| dps(x).total_cmp(&dps(y)))
+            && i != self.weapon
+            && b.tick.is_multiple_of(30)
         {
             b.cmd(format!("weapon {}", wd.weapon[i].id));
         }
@@ -718,7 +816,6 @@ impl Freeway {
         }
         self.bot_arm(b);
         let me = Self::feet(sim);
-        let eye = me + Vec3::Y * 1.6;
         let chest = at + Vec3::Y * 1.2;
         let d = flat(at).distance(flat(me));
         b.cover_t -= dt;
@@ -727,7 +824,7 @@ impl Freeway {
             // back); out again when peeking lands nothing (a target round the corner).
             b.cover_for += dt;
             b.peek = (b.peek + dt) % 2.4;
-            let err = self.bot_look(b, eye, chest);
+            let err = self.bot_look(b, self.camera(sim).eye, chest);
             if self.combat.hits > b.cover_hits {
                 b.cover_hits = self.combat.hits;
                 b.cover_for = 0.0;
@@ -750,7 +847,8 @@ impl Freeway {
             self.bot_walk(b, sim, at, d > 10.0, dt);
             return;
         }
-        let err = self.bot_look(b, eye, chest);
+        // (Turned from where the camera is: close in, the shoulder view sees round the body.)
+        let err = self.bot_look(b, self.camera(sim).eye, chest);
         // A fight at close range: into cover if any is in reach (a car, a wall; R1 does nothing
         // without), facing them.
         if d < 30.0 && b.cover_t <= 0.0 && err < 0.3 {
