@@ -94,6 +94,107 @@ resumed or compacted session reads first.
 - [ ] **M10 Release** — builds (native, Windows `.exe`, `dist/GrandTheftFreeway-BX.html`), docs,
       final verification, delivery.
 
+## Remaining work (gap inventory, 2026-10-24)
+Two read-only audits of the code against PLAN §2, §5, §7.8 and §9 found these gaps; their main
+claims were spot-checked. Tick items as they land and move the evidence to the milestone entries
+and the DoD table. PLAN stays the source of truth: this list says what is missing, not the design.
+
+**First:** fix the D1 wasm-clippy lints (Open issues) in one `engine:` commit.
+
+**M7 content** (in PLAN §2's order of value: the heist path first)
+- [ ] **Missions.** Only `dev_test` and `dev_test2` exist. Write `m1_repo_man`, `m2_midlife`,
+      `m3_overdrive`, `s1_rush_hour`, `s2_heavy_metal`, `s3_test_drive`, `h0_board` and
+      `h1_freeway_job` (Loud and Smart) with dialogue and shots. Add each to `FILES`, validate
+      it and give it a bot test on 3 seeds (both heist approaches). The `choose` step already
+      shows a `mission/board` Cards screen and freezes the world; `h0` adds the crew's cut.
+- [ ] **Landmarks.** These are placeholder masses with a sign (`pav_world/src/lots.rs`
+      `landmark`): the bank, police, hospital, gun store, Paloma Customs, Freeway Diner, Luxe
+      Motors and the Ironclad depot. City hall and the gas station are paving only. Missing
+      altogether:
+      - the Big Wheel (turning), the pier arcade and its food stalls, and the freighter;
+      - the Grind House, the City Works yard, the harbor warehouse, a parking garage and an
+        impound lot;
+      - the Skylark on the hospital roof, the shop names on Sunset Row's sign bands, and neon
+        signs.
+- [ ] **Interiors.** None exist: shops are menus at door spots and safehouses are spots. Build the
+      gun store, mod shop bay, Gas-N-Grab, Grind House, Freeway Diner, the safehouses and the
+      warehouse.
+- [ ] **Bodies and looks.** The two helicopters have no authored body (`pav_view` draws a
+      procedural one). People vary only by colour, height and build; add hair, headwear,
+      accessories and outfits.
+- [ ] **Activities.** None exist yet, and there is no `activities.toml`. Needed: the Pretzel Run
+      race, 5 stunt jumps (with slow-mo and the bonus), hold-ups at the Gas-N-Grab and the Grind
+      House, vigilante, the Purse Snatcher and Getaway Needed random events, and 15 Lost
+      Shields. Parts to build on: the `race` and `holdup` step kinds, `BannerKind::Stunt`,
+      `BlipIcon::Jump` and the `[[jump]]` wedges.
+- [ ] **Radio.** Every genre varies one synthwave kit (`pav_audio/src/music.rs`), and SPNN's
+      `talk` genre falls through to music. Needed:
+      - a patch for each of at least 4 music stations;
+      - SPNN news/talk: headlines, ads and heat-aware traffic reports;
+      - DJ cards, and scanner chatter text (today only a sound cue at 2★+).
+- [ ] **Completion and stats.** `progress.rs` `completion()` counts story passes and gold medals
+      only, and reads 0% because no story missions exist yet. Track and save activities and
+      collectibles, and add the completion and collectibles cards to the STATS tab. Add a test
+      that drives completion to 100%.
+- [ ] **Checks.** Capture every landmark at its best time of day. Add the PLAN §7.8 suites that
+      do not exist yet: `content.rs` (every file and reference validates), `district.rs`,
+      `player.rs`, `save.rs`, `replay.rs` and `ui.rs`. Each may fold into an existing file if
+      it says so.
+
+**M8 frontend and attract**
+- [ ] **Screens.** The title is a drone orbit over downtown; PLAN wants the hills at golden hour.
+      Also needed: a new-game intro, and loading cards that use the engine's halftone and
+      painterly filters (the game does not use them yet). Pause → Game lacks Save and Restart
+      checkpoint, Map lacks its filter and snap, and Brief lacks the log and texts.
+- [ ] **Settings.** Add aim-assist strength, separate X/Y sensitivity, sprint hold/toggle, the
+      default station, the quality preset, render scale, dynamic resolution, v-sync, brightness,
+      subtitle size and colourblind blips. Nothing reads these existing toggles yet: `subtitles`,
+      `reduce_shake`, `high_contrast`, `vibration` and the `dialogue` volume.
+- [ ] **About and credits.** Show the full §1 Source Information block (engine versions, the
+      environment, the model wording) and credit the fonts and the motion libraries. Fix the line
+      that says everything is generated.
+- [ ] **The attract director.** Today a 10 s idle only logs "attract would start". Build:
+      - `content/freeway/attract.toml` with the 7 vignettes of §5.8, each with its bots, shot
+        lists and captions;
+      - the logo and prompt overlay, exit at once on any input, stall handling, and a population
+        reset per vignette;
+      - `gtf soak mode=attract` (rejected today), the 30-minute soak and `tests/attract.rs`.
+- [ ] **Touch.** Start in attract and never leave it. Handle the `gear` button with its overlay
+      (`pav_ui` draws it; the game ignores it) and hide the HUD. Pass the `web-check.mjs`
+      desktop and mobile flows.
+
+**M9 polish**
+- [ ] **Gameplay.** Bullets don't burst tyres (only spike strips do), and traffic never turns its
+      headlights on at night. Missing:
+      - vault, the bat and a heavy melee attack;
+      - near-miss swerves and angry drivers getting out;
+      - scenario points beyond benches, and the siren yelp;
+      - a sky-cam that reaches 300 m in ≤ 3 s with its grid overlay (today 170 m in 3.6 s).
+- [ ] **Audio.** Duck the mix for dialogue (only menus duck). Add reverb zones (the game never
+      sets `AudioScene.reverb`). Mix pass.
+- [ ] **Visuals.** Add camera shake (every `shake` is 0.0) that honours `reduce_shake`, rain
+      splashes on the ground and neon. Art pass at every time of day and weather.
+- [ ] **Performance.**
+      - The browser `?perf=1` console line with sim ms per tick is missing.
+      - The game has no quality presets (Low to Ultra, with population scaling); the engine's
+        Low/Medium/High exist only in its own egui menu. Dynamic resolution runs only on touch.
+      - `gtf perf` doesn't check particles, shadowed lights or active entities.
+      - Downtown must sit well under budget.
+- [ ] **Bug bash.** Clear the Open issues. Run the bots on 5 seeds. Test the edge cases: water,
+      falling, interiors, switching mid-chase, and saving during heat (refused).
+
+**M10 release**
+- [ ] **Builds.** `scripts/build-windows.sh` doesn't zip the `.exe`. `pack_single_html.py`
+      can't write the Source Information header comment or `<meta name="description">`.
+      `dist/` doesn't exist yet.
+- [ ] **Docs.** Write `docs/gtf/ENGINE_ANALYSIS.md` (with the D16 systems table),
+      `docs/gtf/HANDOFF.md` and the final `README.md` (how to play, controls, credits). Add a game
+      entry to `docs/FEEDBACK.md` → Games, and engine docs for every extension.
+- [ ] **D16.** Add a view and capture for every Proving Grounds station, plus combat/weapons and
+      radio signs.
+- [ ] **Delivery.** Final verification of D1-D13 and D16 with fresh captures, then the PR
+      description. Send the HTML and the zipped `.exe`, then the final report (§12.4).
+
 ## Definition of Done evidence (PLAN.md §2)
 | Item | Status | Evidence (test, command + result, capture looked at, artifact) |
 |---|---|---|

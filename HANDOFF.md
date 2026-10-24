@@ -47,19 +47,28 @@ truth; this page says where things stand and what to do next.
   gun|mods|store|save|load|replay`.
 
 ## Next, in value order (PLAN §2)
-1. **M7 content (D6 heist path first, then D2, D10):** missions `m1`–`m3`, `s1`–`s3`, the `h0`
-   board and `h1` Loud and Smart (§5.7) written in the DSL — add each to `FILES` in
-   `missions/mod.rs`, validate (`cargo test -p gtf_game --test missions every_mission_validates`),
-   then a bot test on 3 seeds like `the_bot_finishes_both_test_missions_on_three_seeds` in
-   `tests/missions.rs` (both heist approaches; the `choose` step takes `mission choose <id>`);
-   the heist board probably wants a `Cards` screen and a new step kind, or a `choose` with crew
-   picks. Then activities (race, stunt jumps, hold-ups,
-   vigilante, random events, Lost Shields), the radio stations, completion and the stats screen,
-   the final district dressing and interiors (the shops' counters are door spots today).
-2. **M8 frontend and attract:** title, menus, loading cards, About with the Source Information,
-   the attract director (7 vignettes, 10 s idle, any input returns), touch = attract only.
-3. **M9 polish, M10 release:** the deliverables D14–D15 (README, `docs/gtf/ENGINE_ANALYSIS.md`,
-   `docs/gtf/HANDOFF.md`, the single-file HTML, the Windows `.exe` zipped, the final report).
+`PROGRESS.md` → **Remaining work** is the full checklist (a gap inventory of the code against
+PLAN, 2026-10-24). In short:
+0. **D1:** fix the four wasm-clippy lints (one `engine:` commit, below).
+1. **M7 content, heist path first:** missions `m1`–`m3`, `s1`–`s3`, the `h0` board and `h1`
+   Loud and Smart (§5.7) in the DSL. Add each to `FILES` in `missions/mod.rs` and validate it
+   (`cargo test -p gtf_game --test missions every_mission_validates`). Then give it a bot test on
+   3 seeds like `the_bot_finishes_both_test_missions_on_three_seeds` in `tests/missions.rs` (both
+   heist approaches; the `choose` step takes `mission choose <id>`). The `choose` step already
+   shows a `mission/board` Cards screen; `h0` adds the cut. Then the activities (none exist yet),
+   the radio (per-genre patches, SPNN talk), completion and the stats screen, then the
+   landmarks that are still placeholders or missing (the Big Wheel among them) and the interiors
+   (none yet).
+2. **M8 frontend and attract:** the hills title, intro and loading cards, the missing settings
+   and the toggles nothing reads, About with the full Source Information, and the attract
+   director (7 vignettes, 10 s idle, any input returns, a 30-minute soak). Today a 10 s idle
+   only logs "attract would start". Touch = attract only, with the gear overlay.
+3. **M9 polish:** the gameplay, audio, visual and performance gaps in Remaining work
+   (`?perf=1`, quality presets, camera shake, reverb, dialogue ducking, tyres, headlights) and
+   the open issues.
+4. **M10 release:** the deliverables D14–D15. Write `README.md`, `docs/gtf/ENGINE_ANALYSIS.md`
+   and `docs/gtf/HANDOFF.md`. Build the single-file HTML with its header comment and the zipped
+   Windows `.exe`. Write the final report.
 
 ## Known issues
 - Dense traffic can lock a junction box (missions thin traffic to 0.35 around drive legs).
@@ -118,21 +127,16 @@ truth; this page says where things stand and what to do next.
 ## The `/goal` prompt to finish (M7–M10)
 `PLAN.md` Appendix A is the original prompt for the whole run (M0→M10). To resume from here:
 ```
-/goal Finish Grand Theft Freeway-BX: complete PLAN.md milestones M7→M10 on this branch (M0–M6 are
-done). Read CLAUDE.md, HANDOFF.md and PROGRESS.md (Now, Open issues), PLAN.md §0–§4 and §10 once,
-then only the sections each milestone names. First fix the D1 wasm-clippy lints (one engine:
-commit). Then M7 in PLAN §2's order of value: the heist path first (m1–m3, s1–s3, the h0 board, h1
-Loud and Smart in the mission DSL, each with bot tests on 3 seeds), then activities, radio
-stations, completion and stats, the final district, interiors and vehicle bodies. Then M8
-(frontend, the attract director and its 30-minute soak, touch = attract only), M9 (polish, perf
-with margin judged by A/B on this machine, the open issues) and M10 (builds, docs, final
-verification, delivery). Keep each milestone green: fmt, clippy -D warnings and the tests of
-touched crates before each push; the workspace tests, wasm clippy and the acceptance commands at
-milestone ends. Look at every capture. Push often, keep the draft PR current, record evidence and
-decisions in PROGRESS.md, escalate only what PLAN §10.6 lists. Done = every D1–D16 item in PLAN §2
-checked in PROGRESS.md with evidence; dist/GrandTheftFreeway-BX.html and the zipped Windows .exe
-built and sent to me; README.md with the Source Information block; docs/gtf/ENGINE_ANALYSIS.md and
-docs/gtf/HANDOFF.md written; and a final report per PLAN §12.4.
+/goal Finish Grand Theft Freeway-BX: PLAN.md milestones M7→M10 on this branch (M0–M6 are done).
+Read HANDOFF.md, then PROGRESS.md (Now, Remaining work, Open issues); PLAN.md is the source of
+truth. First fix the D1 wasm-clippy lints (one engine: commit). Then clear PROGRESS.md →
+Remaining work in order: M7 content (heist path first; every mission and activity bot-tested on
+3 seeds), M8 frontend and attract, M9 polish with perf margin, M10 release. Follow CLAUDE.md:
+checks green before each push, look at every capture, push often, keep draft PR #2 current,
+record evidence and decisions in PROGRESS.md. Done = every D1–D16 row in PROGRESS.md checked
+with evidence from this run; dist/GrandTheftFreeway-BX.html and the zipped Windows .exe sent to
+me; README.md, docs/gtf/ENGINE_ANALYSIS.md and docs/gtf/HANDOFF.md written; final report per
+PLAN §12.4.
 ```
 
 ## Source Information (also in `README.md`)
