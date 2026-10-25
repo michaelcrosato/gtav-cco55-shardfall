@@ -1,9 +1,10 @@
-# Weapons (PLAN.md §5.6.4), in the weapon wheel's order (`icon` matches the wheel's slots).
+# Weapons (PLAN.md §5.6.4), in the weapon wheel's order (`icon` matches the wheel's slots); the bat
+# comes after the eight and takes the fists' slot once owned.
 # Guns are hitscan: `damage` per pellet, `rpm` rounds a minute, `spread` degrees at rest, `bloom`
 # degrees each shot adds (it recovers), `recoil` radians of camera kick, `reload` seconds, `head`
 # the head-shot multiplier, `knockback` m/s given to people hit. Melee weapons play `combo` clips,
-# one a swing, and hit within `range` metres. `asset` is the prop in the hand (LIB/gtf_weapons);
-# `driveby` weapons fire from a vehicle's window.
+# one a swing, and hit within `range` metres; ○ held swings `heavy`, harder and further. `asset`
+# is the prop in the hand (LIB/gtf_weapons); `driveby` weapons fire from a vehicle's window.
 
 [[weapon]]
 id = "fists"
@@ -14,6 +15,7 @@ damage = 15.0
 range = 1.5
 cue = "melee.swing"
 combo = ["QUATERNIUS/Punch_Jab", "QUATERNIUS/Punch_Cross", "CMU/Stepping_Punch"]
+heavy = "QUATERNIUS/Melee_Hook"
 knockback = 2.5
 
 [[weapon]]
@@ -133,3 +135,16 @@ id = "holster"
 name = "Phone"
 icon = "phone"
 kind = "none"
+
+[[weapon]]
+id = "bat"
+asset = "LIB/gtf_weapons/bat"
+name = "Baseball Bat"
+icon = "fists"
+kind = "melee"
+damage = 35.0
+range = 2.0
+cue = "melee.swing"
+combo = ["QUATERNIUS/Sword_Attack"]
+heavy = "QUATERNIUS/Melee_Hook"
+knockback = 4.5

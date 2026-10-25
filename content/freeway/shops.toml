@@ -1,13 +1,17 @@
 # Shops (PLAN.md §5.6.10), read by `gtf_game::shops`. Each shop is at its counter inside a
 # landmark (`at`, an anchor: walk up to it; Paloma Customs: drive into the bay) or, without one,
 # at the landmark's door; press D-pad right there. Prices in dollars; a gun's `ammo` rounds come
-# in a box for `ammo_price` once the gun is owned.
+# in a box for `ammo_price` once the gun is owned (a bat has none).
 
 [gun]
 landmark = "gun_store"
 at = "spot:gun_counter"
 name = "Bang Bang Bros."
 armor = 500
+
+[[gun.item]]
+weapon = "bat"
+price = 100
 
 [[gun.item]]
 weapon = "p9"

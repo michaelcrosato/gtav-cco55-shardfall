@@ -3,7 +3,7 @@
 "tags":["palm","tree","date","street","park","vegetation"],
 "category":"vegetation",
 "materials":{
-"frond":{"color":"#3f7d3a"},
+"frond":{"color":"#356a31"},
 "frond2":{"color":"#567f36"},
 "knob":{"color":"#7b6a3e","roughness":1},
 "trunk":{"color":"#8a6a48","roughness":0.95,"map":"axis","layers":[{"type":"shingles","size":[22,16],"gap":1.5,"vary":0.15,"cavity":0.4,"shape":"point"}]}},

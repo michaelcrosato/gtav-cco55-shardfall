@@ -141,7 +141,15 @@ text = "MISSIONS | gtf play cmd=mission start dev_test"
 
 [[sign]]
 at = [13.0, 13.4]
-text = "UI GALLERY & AUDIO | freeway/gallery, gtf audio_capture"
+text = "UI GALLERY | load scene=freeway/gallery, capture hud=true"
+
+[[sign]]
+at = [12.0, 14.6]
+text = "AUDIO & RADIO | gtf audio_capture (radio seek, radio station)"
+
+[[sign]]
+at = [12.5, 2.2]
+text = "COMBAT & WEAPONS | gtf input hold=l2 press=r2 (weapon pistol)"
 
 # Named spots for the test missions and the protagonists (map cell coordinates; `yaw` degrees
 # from north).

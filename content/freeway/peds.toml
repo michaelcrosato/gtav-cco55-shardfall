@@ -210,3 +210,58 @@ wear.hair = { buzz = 3, short = 2, bald = 1 }
 wear.beard = { goatee = 0.12, stubble = 0.1, mustache = 0.06 }
 wear.accessories = { ballcap = 0.35, sunglasses = 0.35, badge = 1.0 }
 wear.hats = ["#14213d"]
+
+# Scenario points (PLAN.md §5.6.7): the dressing props people stop at for a while, now and then
+# instead of walking on. `prop` is the end of the prop's library name; they stand or sit `ahead`
+# metres in front of it (its +z), at `seats` places `spread` metres apart across it, facing it
+# (`face`) or its way (a bench's seat); `clips` is what they do there (one picked), `stay` how
+# long (s).
+[[scenario]]
+prop = "bench"
+ahead = 0.25
+seats = 3
+spread = 0.6
+clips = ["MESH2MOTION/Sitting_Idle", "MESH2MOTION/Sitting_Talking"]
+stay = [10.0, 25.0]
+
+[[scenario]]
+prop = "food_stall"
+ahead = 1.3
+seats = 2
+spread = 0.9
+face = true
+clips = ["MESH2MOTION/Consume", "MESH2MOTION/Idle_Talking", "MESH2MOTION/Idle_A"]
+stay = [6.0, 14.0]
+
+[[scenario]]
+prop = "beach_umbrella"
+ahead = 1.2
+seats = 2
+spread = 1.0
+clips = ["MESH2MOTION/Meditate", "MESH2MOTION/Sleeping"]
+stay = [20.0, 45.0]
+
+[[scenario]]
+prop = "volleyball_net"
+ahead = 10.0
+seats = 3
+spread = 2.5
+face = true
+clips = ["MESH2MOTION/Cheering_Two_Hands", "MESH2MOTION/Cheer_One_arm", "MESH2MOTION/Idle_A"]
+stay = [12.0, 30.0]
+
+[[scenario]]
+prop = "picnic_table"
+ahead = 0.55
+seats = 2
+spread = 0.8
+face = true
+clips = ["MESH2MOTION/Sitting_Talking", "MESH2MOTION/Sitting_Idle"]
+stay = [15.0, 40.0]
+
+[[scenario]]
+prop = "cafe_table_set"
+ahead = 0.6
+face = true
+clips = ["MESH2MOTION/Sitting_Talking", "MESH2MOTION/Sitting_Idle"]
+stay = [15.0, 40.0]
