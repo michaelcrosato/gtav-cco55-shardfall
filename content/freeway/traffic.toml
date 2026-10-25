@@ -19,6 +19,7 @@ decel = 3.2
 personality = [0.85, 1.1] # each driver's share of the limit
 honk_after = 3.0          # blocked this long: the horn
 reverse_after = 8.0       # blocked this long: back up and go around
+rescue_after = 12.0       # blocked and out of view this long: on rails through it
 give_up = 30.0            # blocked and out of view this long: gone
 
 [parked]
