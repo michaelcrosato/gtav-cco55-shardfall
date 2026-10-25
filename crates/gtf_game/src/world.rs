@@ -194,7 +194,8 @@ pub fn ambient(sim: &mut Sim, id: EntityId) {
 
 /// People of the population on foot where the ground is not loaded (they walked off the edge of
 /// the streamed area, or were left there) go, as the engine removes those standing on ground
-/// that unloads: otherwise they would fall through.
+/// that unloads: otherwise they would fall through. So do any who fell through all the same
+/// (below the lowest ground there is).
 pub fn sweep_unloaded(sim: &mut Sim) {
     let gone: Vec<EntityId> = sim
         .state
@@ -202,13 +203,17 @@ pub fn sweep_unloaded(sim: &mut Sim) {
         .iter()
         .filter(|e| e.unload == pav_core::entity::Unload::Despawn && Some(e.id) != sim.state.player)
         .filter(|e| e.character.as_ref().is_some_and(|c| c.riding.is_none()))
-        .filter(|e| !ground_loaded(sim, e.pos))
+        .filter(|e| e.pos.y < FELL_THROUGH || !ground_loaded(sim, e.pos))
         .map(|e| e.id)
         .collect();
     for id in gone {
         sim.despawn(id);
     }
 }
+
+/// Below this height (m) a person has fallen through the world (the Ditch's bed and the harbor's
+/// floor are a few metres down).
+const FELL_THROUGH: f32 = -30.0;
 
 /// Whether the ground around `p` is loaded (every streaming chunk within a car's length of it is
 /// active; none lies beyond the map's edge): only there do bodies with physics stand on it

@@ -1,6 +1,7 @@
 //! M7 (PLAN §7.8, D3): the player on foot. The stick walks (tilted a little) and runs, ✕ held
-//! sprints until the stamina bar is spent and it refills after a rest, □ jumps, L3 crouches (and a
-//! jump stands up), and deep water is swum in. Speeds are the controller's own (`Character::vel`),
+//! sprints until the stamina bar is spent and it refills after a rest, □ jumps, running into a
+//! low wall vaults it, a long fall hurts (a short one does not), L3 crouches (and a jump stands
+//! up), and deep water is swum in. Speeds are the controller's own (`Character::vel`),
 //! whatever is in the way.
 
 use glam::{IVec2, Vec2, Vec3};
@@ -125,6 +126,49 @@ fn square_jumps_and_lands() {
     eprintln!("jumped {:.2} m", top - ground);
     assert!(top - ground > 0.2, "□ leaves the ground: {:.2} m", top - ground);
     assert!(landed, "and comes down again");
+}
+
+#[test]
+fn running_into_a_low_wall_vaults_it() {
+    let mut s = on_open_ground();
+    let feet = s.feet(s.state.player.unwrap()).unwrap();
+    // A wall 0.9 m high, 0.4 m thick and 3 m wide, 4 m east.
+    let half = Vec3::new(0.2, 0.45, 1.5);
+    s.spawn(
+        pav_core::entity::Spawn::new("low_wall", feet + Vec3::new(4.0, 0.45, 0.0))
+            .visual(pav_core::shape::Visual::new(pav_core::shape::Shape::Box { half }, pav_core::Color::hex("#888888")))
+            .body(pav_core::entity::BodyKind::Fixed),
+    );
+    s.run(5, &InputFrame::default());
+    // Run east at it (no button): over it and on.
+    let mut top = feet.y;
+    for _ in 0..150 {
+        s.step(&stick(1.0, 0, 0));
+        top = top.max(s.feet(s.state.player.unwrap()).unwrap().y);
+    }
+    let x = s.feet(s.state.player.unwrap()).unwrap().x;
+    eprintln!("crossed to {:.1} m east (the wall at 4), up {:.2} m", x - feet.x, top - feet.y);
+    assert!(x - feet.x > 4.6, "past the wall: {:.1} m", x - feet.x);
+    assert!(top - feet.y > 0.8, "up over it: {:.2} m", top - feet.y);
+}
+
+#[test]
+fn a_long_fall_hurts_and_a_short_one_does_not() {
+    let mut s = on_open_ground();
+    let feet = s.feet(s.state.player.unwrap()).unwrap();
+    let health = |s: &Sim| game(s).combat.health + game(s).combat.armor;
+    let drop = |s: &mut Sim, h: f32| {
+        let id = s.state.player.unwrap();
+        s.set_position(id, feet + Vec3::Y * (h + 1.0));
+        let before = game(s).combat.health + game(s).combat.armor;
+        s.run(150, &InputFrame::default());
+        before - (game(s).combat.health + game(s).combat.armor)
+    };
+    let short = drop(&mut s, 2.0);
+    let long = drop(&mut s, 12.0);
+    eprintln!("2 m: -{short:.0}, 12 m: -{long:.0} (left {:.0})", health(&s));
+    assert!(short < 0.5, "a 2 m drop costs nothing: {short}");
+    assert!(long > 30.0, "a 12 m drop hurts: {long}");
 }
 
 #[test]

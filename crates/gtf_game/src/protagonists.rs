@@ -229,12 +229,12 @@ pub fn def() -> Result<Arc<CrewDef>> {
 
 /// Holding D-pad down this long opens the switch wheel (s, real time).
 const WHEEL_DELAY: f32 = 0.2;
-/// The sky-cam: rising (s), crossing at least this long (s; longer while the ground there
-/// loads), dropping (s), and its height (m).
-const RISE: f32 = 1.1;
-const TRAVEL: f32 = 1.3;
-const DROP: f32 = 1.2;
-const HIGH: f32 = 170.0;
+/// The sky-cam (PLAN §5.6.2: three stages, 300 m up, ≤ 3 s): rising (s), crossing at least
+/// this long (s; longer while the ground there loads), dropping (s), and its height (m).
+const RISE: f32 = 0.9;
+const TRAVEL: f32 = 1.1;
+const DROP: f32 = 1.0;
+const HIGH: f32 = 300.0;
 /// A protagonist this near (m) is switched to with a quick blend instead of the sky-cam (s).
 const NEAR: f32 = 120.0;
 const BLEND: f32 = 0.8;
@@ -472,6 +472,54 @@ impl Switch {
     /// Seconds the whole switch takes.
     pub fn length(&self) -> f32 {
         if self.long { RISE + TRAVEL + DROP } else { BLEND }
+    }
+
+    /// How far up the sky-cam is (0 on the ground, 1 over the map): the grid and the grey
+    /// picture follow it.
+    pub fn high(&self) -> f32 {
+        if !self.long {
+            return 0.0;
+        }
+        let t = self.t;
+        if t < RISE {
+            ease(t / RISE)
+        } else if t < RISE + TRAVEL {
+            1.0
+        } else {
+            1.0 - ease((t - RISE - TRAVEL) / DROP)
+        }
+    }
+
+    /// The map grid the sky-cam crosses over (PLAN §5.6.2): lines 50 m apart over the ground
+    /// between the two, floating above the rooftops.
+    pub fn grid(&self, ground: f32) -> Vec<pav_core::present::RibbonDraw> {
+        let lo = self.from.min(self.dest) - Vec3::splat(320.0);
+        let hi = self.from.max(self.dest) + Vec3::splat(320.0);
+        let snap = |v: f32| (v / 50.0).floor() * 50.0;
+        let y = ground + 60.0;
+        let color = Color::hex("#9fd3ff");
+        let mut out = Vec::new();
+        let mut x = snap(lo.x);
+        while x <= hi.x {
+            out.push(pav_core::present::RibbonDraw {
+                points: vec![Vec3::new(x, y, lo.z), Vec3::new(x, y, hi.z)],
+                width: 1.4,
+                color,
+                emissive: 1.2,
+            });
+            x += 50.0;
+        }
+        let mut z = snap(lo.z);
+        while z <= hi.z {
+            out.push(pav_core::present::RibbonDraw {
+                points: vec![Vec3::new(lo.x, y, z), Vec3::new(hi.x, y, z)],
+                width: 1.4,
+                color,
+                emissive: 1.2,
+            });
+            z += 50.0;
+        }
+        out
     }
 
     /// The camera during the switch; `landing` is where the new player's camera settles.
@@ -830,7 +878,7 @@ impl Freeway {
 
     /// The meter fills by how the protagonist plays this tick: at the wheel near misses, drifts
     /// and air; on foot head shots, kills and takedowns; and damage dealt, taken and explosions.
-    pub(crate) fn fill_meter(&mut self, sim: &Sim, res: &crate::combat::Outcome, events: &[SimEvent], real: f32) {
+    pub(crate) fn fill_meter(&mut self, sim: &mut Sim, res: &crate::combat::Outcome, events: &[SimEvent], real: f32) {
         let taken = std::mem::take(&mut self.combat.taken);
         self.crew.fill("taken", taken);
         self.crew.fill("dealt", res.dealt);
@@ -876,6 +924,11 @@ impl Freeway {
         for id in close {
             self.crew.near.push((id, 3.0));
             self.crew.fill("near_miss", 1.0);
+            // The other driver reacts: a hard stop or a swerve away (in calm free roam).
+            if self.traffic_minds() {
+                let roll = sim.state.rng.f32();
+                self.traffic.startle(sim, id, c.center, roll);
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 //! M4 traffic: cars fill the roads around the player and drive them for two minutes without
 //! running red lights, crashing into each other, getting stuck or appearing in view; they pull
-//! over for a siren behind them; the buses stop at their stops.
+//! over for a siren behind them; the buses stop at their stops; a driver the player runs into
+//! gets out, one the player shaves past stops short or swerves.
 
 use std::collections::BTreeMap;
 
@@ -114,6 +115,85 @@ fn cars_pull_over_for_a_siren_behind_them() {
         }
     }
     assert!(pulled, "the car ahead pulled over for the siren");
+}
+
+#[test]
+fn a_driver_the_player_runs_into_gets_out() {
+    let mut sim = roam(5);
+    for _ in 0..300 {
+        sim.step(&InputFrame::default());
+    }
+    cmd(&mut sim, "drive okami_kaze");
+    let mine = game(&sim).drive.vehicle().expect("the player drives");
+    let (car, driver) = {
+        let gm = game(&sim);
+        let a = gm
+            .traffic
+            .cars
+            .iter()
+            .filter(|a| a.tier == Tier::Full && a.bus.is_none() && !a.mission && a.driver.is_some())
+            .min_by_key(|a| a.car)
+            .expect("a car near the player");
+        (a.car, a.driver.unwrap())
+    };
+    // A hard knock from the player's car (as the physics reports it).
+    let pos = sim.state.entities.get(car).unwrap().pos;
+    let crash = pav_core::frame::SimEvent::Crash { vehicle: mine, other: Some(car), impulse: 4000.0, pos };
+    // (The game is taken out of the sim while it runs, as the sim does each tick.)
+    let mut g = sim.state.play.take().unwrap();
+    g.get_mut::<Freeway>().unwrap().traffic.crashes(&mut sim, &[crash], &[], Some(mine));
+    sim.state.play = Some(g);
+    let a = game(&sim).traffic.cars.iter().find(|a| a.car == car).unwrap();
+    assert!(a.crossed, "the knock is the player's");
+    // Shaken for a moment, then out of the car to have words (or to film it, or to leave).
+    sim.state.play.as_mut().unwrap().get_mut::<Freeway>().unwrap().traffic.cars.iter_mut().find(|a| a.car == car).unwrap().mood =
+        Mood::Shaken;
+    let mut out = false;
+    for _ in 0..300 {
+        sim.step(&InputFrame::default());
+        let gm = game(&sim);
+        if gm.peds.list.iter().any(|p| p.id == driver) && !gm.traffic.cars.iter().any(|a| a.car == car) {
+            out = true;
+            break;
+        }
+    }
+    assert!(out, "the driver got out and the crowd has them");
+    let seated = sim.state.entities.get(driver).and_then(|e| e.character.as_ref()).is_some_and(|c| c.riding.is_some());
+    assert!(!seated, "out of the seat");
+}
+
+#[test]
+fn a_near_miss_makes_a_driver_stop_short_or_swerve() {
+    let mut sim = roam(5);
+    for _ in 0..300 {
+        sim.step(&InputFrame::default());
+    }
+    let cars: Vec<EntityId> = game(&sim)
+        .traffic
+        .cars
+        .iter()
+        .filter(|a| a.tier == Tier::Full && a.bus.is_none() && !a.mission && a.mood == Mood::Cruise)
+        .map(|a| a.car)
+        .take(2)
+        .collect();
+    assert_eq!(cars.len(), 2, "two cars near the player");
+    let mut g = sim.state.play.take().unwrap();
+    let fw = g.get_mut::<Freeway>().unwrap();
+    for (car, roll) in [(cars[0], 0.2), (cars[1], 0.8)] {
+        let left = sim.state.entities.get(car).unwrap().pos + glam::Vec3::X * 2.0;
+        fw.traffic.startle(&sim, car, left, roll);
+    }
+    let a = |id: EntityId| fw.traffic.cars.iter().find(|a| a.car == id).unwrap();
+    assert_eq!(a(cars[0]).mood, Mood::Shaken, "a hard stop");
+    assert!(a(cars[1]).swerve != 0.0, "a swerve away");
+    sim.state.play = Some(g);
+    // The swerve passes and the car drives on.
+    for _ in 0..120 {
+        sim.step(&InputFrame::default());
+    }
+    if let Some(a) = game(&sim).traffic.cars.iter().find(|a| a.car == cars[1]) {
+        assert_eq!(a.swerve, 0.0, "over in a moment");
+    }
 }
 
 #[test]

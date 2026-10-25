@@ -110,13 +110,18 @@ fn jump_look() {
     eprintln!("{id} seed {seed}: {ok} {how}");
 }
 
+/// How many seeds the bot suites play: 3, or `GTF_SEEDS` (the bug bash plays 5).
+fn seeds() -> u64 {
+    std::env::var("GTF_SEEDS").ok().and_then(|s| s.parse().ok()).unwrap_or(3)
+}
+
 #[test]
 fn every_stunt_jump_is_landed_from_its_runup_on_three_seeds() {
     let d = activities::def().unwrap();
     assert_eq!(d.jump.len(), 5, "PLAN: five stunt jumps");
     let mut missed = Vec::new();
     for j in &d.jump {
-        for seed in 1..=3 {
+        for seed in 1..=seeds() {
             let (ok, how) = jump_run(seed, &j.id);
             eprintln!("{} seed {seed}: {ok} {how}", j.id);
             if !ok {

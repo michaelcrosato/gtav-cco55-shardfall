@@ -53,6 +53,7 @@ pub mod radio;
 pub mod settings;
 pub mod shops;
 pub mod struck;
+pub mod tips;
 pub mod tour;
 pub mod traffic;
 pub mod vehicles;
@@ -61,7 +62,7 @@ pub mod world;
 
 use camera::{Look, OrbitCam};
 use frontend::{Action, Ctx, Front, GameMenu, Page};
-use hud::{Note, WEAPONS, WheelState};
+use hud::{Note, WheelState};
 use settings::Settings;
 
 /// The game's scene key: `load scene=freeway` (the frontend), `freeway/roam` (straight into
@@ -239,6 +240,12 @@ pub struct Freeway {
     /// The last rumble asked of the host (a new serial is a new one).
     #[serde(default)]
     pub rumble: Option<pav_core::present::Rumble>,
+    /// The camera's shake from what just happened (crashes, blasts, heavy guns), dying away.
+    #[serde(default)]
+    pub shake: f32,
+    /// First-time tips: which were shown, the one up now.
+    #[serde(default)]
+    pub tips: tips::Tips,
     #[serde(default)]
     pub mbot: missions::bot::MissionBot,
     #[serde(default)]
@@ -385,6 +392,8 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         attract: attract::Attract::default(),
         cards: cards::Cards::default(),
         rumble: None,
+        shake: 0.0,
+        tips: tips::Tips::default(),
         mbot: missions::bot::MissionBot::default(),
         phone: phone::Phone::default(),
         shop: None,
@@ -703,7 +712,7 @@ impl Freeway {
                             if !self.crew.owns(i) {
                                 self.give_weapon(arg, 0);
                             }
-                            self.weapon = i;
+                            self.weapon = if i == combat::BAT { 0 } else { i };
                         }
                         None => log::warn!("weapon: no weapon '{arg}'"),
                     }
@@ -1007,7 +1016,7 @@ impl Freeway {
                 if let Some(p) = pick.filter(|p| *p != self.weapon && self.crew.owns(*p)) {
                     self.last_weapon = self.weapon;
                     self.weapon = p;
-                    let (name, icon, detail) = WEAPONS[p];
+                    let (name, icon, detail) = hud::slot(p, self.bat());
                     self.note(icon, name, detail);
                 }
             }
@@ -1048,6 +1057,9 @@ impl Freeway {
     /// The camera for this page (shaking less with "Reduce camera shake" on).
     pub fn camera(&self, sim: &Sim) -> CameraIntent {
         let mut c = self.camera_shot(sim);
+        if self.front.page.plays() {
+            c.shake = c.shake.max(self.shake);
+        }
         if self.settings.reduce_shake {
             c.shake *= 0.2;
         }
@@ -1329,14 +1341,21 @@ impl Game for Freeway {
 
     fn post(&mut self, sim: &mut Sim, dt: f32, events: &mut Vec<SimEvent>) {
         self.time += dt;
+        // The camera's shake dies away in a fraction of a second.
+        self.shake *= (-6.0 * dt).exp();
+        if self.shake < 0.01 {
+            self.shake = 0.0;
+        }
         let mut hot: Vec<Vec3> =
             self.police.units.iter().filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos)).collect();
         if self.heat.stars > 0 {
             hot.extend(sim.state.player.and_then(|p| sim.state.entities.get(p)).map(|e| e.pos));
         }
-        self.traffic.crashes(sim, events, &hot);
+        let minds = self.traffic_minds();
+        self.traffic.crashes(sim, events, &hot, self.drive.vehicle().filter(|_| minds));
         self.rumble_from(sim, events);
         audio::crash_sounds(events);
+        self.rain_splashes(sim, events);
         // Explosions hurt everyone near them; whoever sat in the vehicle that blew up dies.
         let blast = fate::blasts(sim, events, sim.state.player);
         let mut out = combat::Outcome::default();
@@ -1399,13 +1418,13 @@ impl Game for Freeway {
             "time": round(self.time),
             "ui_time": round(self.ui_time),
             "player": player,
-            "weapon": WEAPONS[self.weapon].0,
+            "weapon": hud::slot(self.weapon, self.bat()).0,
             "combat": json!({
                 "aiming": self.combat.aiming,
                 "shots": self.combat.shots,
                 "hits": self.combat.hits,
                 "kills": self.combat.kills,
-                "rounds": [self.combat.mag.get(self.weapon).copied().unwrap_or(0), self.combat.reserve.get(self.weapon).copied().unwrap_or(0)],
+                "rounds": [self.combat.mag.get(self.arm_index()).copied().unwrap_or(0), self.combat.reserve.get(self.arm_index()).copied().unwrap_or(0)],
             }),
             "wheel": self.wheel_open(),
             "attract_due": self.front.attract_due,
@@ -1561,17 +1580,25 @@ impl Game for Freeway {
         let mut shop_screen = None;
         if page.plays() {
             let heading = sim.player().and_then(|p| p.character.as_ref()).map(|c| c.facing).unwrap_or(0.0);
-            let help = if self.drive.vehicle().is_some() {
-                (self.drive.card < 8.0).then_some((
-                    "~btn:r2~ accelerates, ~btn:l2~ brakes and reverses, ~btn:r1~ is the handbrake. ~btn:left~ ~btn:right~ change the station, ~btn:north~ gets out.",
-                    self.drive.card,
-                ))
+            let help = if let Some(car) = self.drive.vehicle() {
+                // What this vehicle's controls are, for its first seconds (a helicopter's are its
+                // own; a police car adds the siren).
+                let c = drive::Car::read(sim, car);
+                let text = if c.as_ref().is_some_and(|c| c.heli) {
+                    "~btn:r2~ climbs and ~btn:l2~ descends, ~btn:left_stick~ flies, ~btn:right_stick~ turns. Land, then ~btn:north~ gets out."
+                } else if c.as_ref().is_some_and(|c| c.siren) {
+                    "~btn:r2~ accelerates, ~btn:l2~ brakes and reverses, ~btn:r1~ is the handbrake. Tap ~btn:l3~ for the siren, ~btn:north~ gets out."
+                } else {
+                    "~btn:r2~ accelerates, ~btn:l2~ brakes and reverses, ~btn:r1~ is the handbrake. ~btn:left~ ~btn:right~ change the station, ~btn:north~ gets out."
+                };
+                (self.drive.card < 8.0).then_some((text, self.drive.card))
             } else {
                 (self.roam_age < 12.0).then_some((
                     "Move with ~btn:left_stick~ and look with ~btn:right_stick~. ~btn:west~ jumps, ~btn:north~ enters vehicles, ~btn:start~ pauses.",
                     self.roam_age,
                 ))
             };
+            let help = self.tips.help().or(help);
             let ability = (
                 self.crew.me().map_or(0.0, |m| m.meter),
                 protagonists::def()
@@ -1585,15 +1612,20 @@ impl Game for Freeway {
                 camera_yaw: self.cam.yaw,
                 money: (self.money, self.money_delta, self.money_age),
                 weapon: self.weapon,
+                bat: self.bat(),
                 ability,
                 help,
                 map_blips: blips.clone(),
                 route: self.gps.minimap(feet),
                 vitals: (self.combat.health / combat::MAX_HEALTH, self.combat.armor / combat::MAX_ARMOR),
-                ammo: self.combat.mag.get(self.weapon).map(|&m| (m, self.combat.reserve.get(self.weapon).copied().unwrap_or(0))),
+                ammo: (self.arm_index() != combat::BAT)
+                    .then(|| {
+                        self.combat.mag.get(self.weapon).map(|&m| (m, self.combat.reserve.get(self.weapon).copied().unwrap_or(0)))
+                    })
+                    .flatten(),
                 crosshair: combat::def()
                     .ok()
-                    .and_then(|d| d.weapon.get(self.weapon).cloned())
+                    .and_then(|d| d.weapon.get(self.arm_index()).cloned())
                     .and_then(|w| self.combat.crosshair(&w, self.combat.aiming, false)),
             });
             let mut hud = hud;
@@ -1691,6 +1723,10 @@ impl Game for Freeway {
                 }
                 None => {}
             }
+            // Free roam with the police after the player: what to do now.
+            if self.heat.stars > 0 && self.missions.run.is_none() && !self.street_busy() {
+                hud.objective = Some("Lose the ~b~cops~s~.".into());
+            }
             ui.hud = Some(hud);
             ui.help = help;
             ui.prompts = prompts;
@@ -1701,7 +1737,7 @@ impl Game for Freeway {
             }
             shop_screen = shop;
             if self.wheel_open() {
-                let mut w = self.wheel.as_ref().unwrap().ui(self.weapon);
+                let mut w = self.wheel.as_ref().unwrap().ui(self.weapon, self.bat());
                 for (i, slot) in w.slots.iter_mut().enumerate() {
                     slot.enabled = self.crew.owns(i);
                 }
@@ -1785,6 +1821,14 @@ impl Game for Freeway {
         let mut dialogue = false;
         if page.plays() {
             draw.ribbons.extend(self.gps.ribbon(feet, 160.0));
+            // The sky-cam over the map: a grid and a greyed picture while it is up.
+            if let Some(s) = &self.crew.switch {
+                let k = s.high();
+                ui.overlay.desaturate = ui.overlay.desaturate.max(0.6 * k);
+                if k > 0.6 {
+                    draw.ribbons.extend(s.grid(0.0));
+                }
+            }
             self.mission_ui(sim, &mut ui, &mut draw);
             self.activities_ui(sim, &mut ui, &mut draw);
             self.street_ui(sim, &mut ui, &mut draw);
@@ -1845,7 +1889,7 @@ impl Game for Freeway {
         };
         let mut loops = loops;
         if !menu {
-            audio::vehicle_loops(sim, cam.eye, self.drive.vehicle(), &self.drive.alarms, &mut loops);
+            audio::vehicle_loops(sim, cam.eye, self.drive.vehicle(), self.drive.yelp, &self.drive.alarms, &mut loops);
             if let (Some(c), Some(d)) = (&self.chatter, rdef.as_deref()) {
                 loops.extend(audio::scanner_loop(c, d));
             }
@@ -1861,6 +1905,7 @@ impl Game for Freeway {
                 master: self.settings.master,
                 effects: self.settings.sfx,
                 voice: self.settings.dialogue,
+                reverb: if page.plays() { self.reverb_here(sim, cam.eye.lerp(feet, 0.7)) } else { 0.0 },
                 // Menus duck the radio and the city most, subtitled dialogue a little less.
                 ducking: if menu {
                     audio::DUCK_MENU
@@ -1873,7 +1918,6 @@ impl Game for Freeway {
                 loops,
                 // The radio sits under the engines and the effects.
                 music: rdef.as_ref().and_then(|d| self.radio.music(d, self.radio.clock, self.settings.music * audio::RADIO)),
-                ..Default::default()
             },
             map: self.city.as_ref().map(|c| c.map.clone()),
             far: self.city.as_ref().map(|c| c.far.clone()),
@@ -2066,7 +2110,90 @@ impl Freeway {
         if let Some((low, high, secs)) = want {
             let serial = self.rumble.map_or(1, |r| r.serial + 1);
             self.rumble = Some(pav_core::present::Rumble { serial, low, high, secs });
+            // The camera shakes with it.
+            self.shake = self.shake.max(low * 0.9);
         }
+    }
+
+    /// Raindrops splashing on the open ground round the player (PLAN §5.11's weather effects): a
+    /// few a tick, more as the rain grows. Where comes from a hash of the tick, not the sim's
+    /// random generator: splashes are only for show and must not change what happens.
+    fn rain_splashes(&self, sim: &Sim, events: &mut Vec<SimEvent>) {
+        if !self.front.page.plays() || self.view.is_some() {
+            return;
+        }
+        let (Some(city), Ok(world)) = (self.city.as_ref(), daytime::def()) else { return };
+        let rain = self.sky.rain(&world);
+        if rain < 0.1 {
+            return;
+        }
+        let centre = Self::feet(sim);
+        let n = (rain * 6.0).ceil().min(12.0) as u64;
+        for i in 0..n {
+            // (SplitMix64 of the tick and the drop.)
+            let mut h = sim.state.tick.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ (i + 1).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            h ^= h >> 31;
+            h = h.wrapping_mul(0x94d0_49bb_1331_11eb);
+            h ^= h >> 29;
+            let r = 1.5 + (h & 0xffff) as f32 / 65535.0 * 13.0;
+            let a = ((h >> 16) & 0xffff) as f32 / 65535.0 * std::f32::consts::TAU;
+            let p = Vec2::new(centre.x + r * a.cos(), centre.z + r * a.sin());
+            let y = city.ground_y(p);
+            // On open ground at the player's level (not inside, on a roof or a deck overhead).
+            if city.in_building(p, 0.3) || (y - centre.y).abs() > 4.0 {
+                continue;
+            }
+            events.push(SimEvent::Fx {
+                preset: "splash".into(),
+                pos: Vec3::new(p.x, y + 0.03, p.y),
+                dir: Vec3::ZERO,
+                scale: 0.5,
+            });
+        }
+    }
+
+    /// Traffic minds how the player drives (drivers run into get out, near misses make drivers
+    /// stop short or swerve) in calm free roam only: not in a mission, a street job, the attract
+    /// loop or a chase, where a car stopped in the road or a driver standing in it would spoil
+    /// the run (the evasion bot was wrecked three times in five when they did).
+    pub(crate) fn traffic_minds(&self) -> bool {
+        self.missions.run.is_none() && !self.street_busy() && !self.attract.on && self.heat.stars == 0
+    }
+
+    /// The weapon in hand as weapons.toml lists it: the wheel slot's, or the bat in the fists'
+    /// slot once owned.
+    pub(crate) fn arm_index(&self) -> usize {
+        if self.weapon == 0 && self.bat() { combat::BAT } else { self.weapon }
+    }
+
+    /// The bat is owned (it takes the fists' slot).
+    pub(crate) fn bat(&self) -> bool {
+        self.crew.owns(combat::BAT)
+    }
+
+    /// After dark, or in rain, storm or fog: headlights on.
+    pub(crate) fn dark(&self) -> bool {
+        !(6.3..19.5).contains(&self.sky.hour) || matches!(self.sky.weather.as_str(), "rain" | "storm" | "fog")
+    }
+
+    /// The echo of where the listener is (`AudioScene::reverb`): indoors, under a deck or a
+    /// bridge, down in the Ditch, between downtown's towers, or the open city's slap-back.
+    fn reverb_here(&self, sim: &Sim, ear: Vec3) -> f32 {
+        let Some(city) = self.city.as_ref() else { return 0.05 };
+        let flat = Vec2::new(ear.x, ear.z);
+        if city.walk.get(city.walk.tile_of(flat)) == pav_world::walk::Walk::Indoor {
+            return 0.45;
+        }
+        if sim.raycast_static(ear + Vec3::Y * 0.5, Vec3::Y, 14.0).is_some() {
+            return 0.32;
+        }
+        if ear.y < city.ground_y(flat) - 1.5 || ear.y < -1.5 {
+            return 0.3;
+        }
+        if flat.distance(Vec2::new(world::DOWNTOWN.x, world::DOWNTOWN.z)) < 160.0 {
+            return 0.14;
+        }
+        0.05
     }
 
     /// A protagonist found at a life spot plays its idle until they move.

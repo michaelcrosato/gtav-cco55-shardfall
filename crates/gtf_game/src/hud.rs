@@ -18,6 +18,14 @@ pub const WEAPONS: [(&str, &str, &str); 8] = [
     ("Phone", "phone", "Put the weapon away"),
 ];
 
+/// The bat in the fists' slot (once owned).
+pub const BAT_SLOT: (&str, &str, &str) = ("Bat", "fists", "Melee · knocks people down");
+
+/// Wheel slot `i` as shown (`bat`: the bat owned, in the fists' slot).
+pub fn slot(i: usize, bat: bool) -> (&'static str, &'static str, &'static str) {
+    if i == 0 && bat { BAT_SLOT } else { WEAPONS[i.min(WEAPONS.len() - 1)] }
+}
+
 /// A notification sliding in at the right.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Note {
@@ -58,13 +66,14 @@ impl WheelState {
         self.focus = Some(((a / std::f32::consts::TAU * n as f32 + 0.5).floor() as usize) % n);
     }
 
-    pub fn ui(&self, current: usize) -> Wheel {
+    /// The wheel as drawn (`bat`: the bat in the fists' slot).
+    pub fn ui(&self, current: usize, bat: bool) -> Wheel {
         let focus = self.focus.unwrap_or(current);
-        let (name, _, detail) = WEAPONS[focus];
+        let (name, _, detail) = slot(focus, bat);
         Wheel {
             id: "weapons".into(),
-            slots: WEAPONS
-                .iter()
+            slots: (0..WEAPONS.len())
+                .map(|i| slot(i, bat))
                 .map(|(label, icon, detail)| WheelSlot {
                     label: (*label).into(),
                     icon: (*icon).into(),
@@ -84,7 +93,9 @@ pub struct HudInput<'a> {
     pub heading: f32,
     pub camera_yaw: f32,
     pub money: (i64, i64, f32),
+    /// The wheel slot in hand, and whether the bat fills the fists' slot.
     pub weapon: usize,
+    pub bat: bool,
     /// The ability meter (0..1) and the protagonist's colour.
     pub ability: (f32, Color),
     pub help: Option<(&'a str, f32)>,
@@ -98,7 +109,7 @@ pub struct HudInput<'a> {
 }
 
 pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
-    let armed = h.weapon != 0 && h.weapon != 7;
+    let armed = (h.weapon != 0 || h.bat) && h.weapon != 7;
     let hud = Hud {
         minimap: Some(Minimap {
             center: h.player,
@@ -114,7 +125,7 @@ pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
         vitals: Some(Vitals { health: h.vitals.0, armor: h.vitals.1, ability: h.ability.0, ability_color: h.ability.1 }),
         money: Some(Money { amount: h.money.0, delta: h.money.1, delta_age: h.money.2 }),
         weapon: armed.then(|| {
-            let (name, icon, _) = WEAPONS[h.weapon];
+            let (name, icon, _) = slot(h.weapon, h.bat);
             WeaponHud { name: name.into(), icon: icon.into(), clip: h.ammo.map(|a| a.0), reserve: h.ammo.map(|a| a.1) }
         }),
         crosshair: h.crosshair.clone(),

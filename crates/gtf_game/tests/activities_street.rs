@@ -38,8 +38,13 @@ fn trial(id: &str, seed: u64, secs: u64) -> (Outcome, String) {
     (s.play().unwrap().outcome(), line)
 }
 
+/// How many seeds the bot suites play: 3, or `GTF_SEEDS` (the bug bash plays 5).
+fn seeds() -> u64 {
+    std::env::var("GTF_SEEDS").ok().and_then(|s| s.parse().ok()).unwrap_or(3)
+}
+
 fn three_seeds(id: &str, secs: u64) {
-    let lost: Vec<String> = (1..=3)
+    let lost: Vec<String> = (1..=seeds())
         .filter_map(|seed| {
             let (o, line) = trial(id, seed, secs);
             eprintln!("{line}: {o:?}");

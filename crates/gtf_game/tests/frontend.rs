@@ -78,7 +78,7 @@ fn boot_title_menu_and_into_free_roam() {
     s.step(&press(pad::SOUTH));
     assert_eq!(page(&s), Page::Main, "any button opens the menu");
     idle(&mut s, 2);
-    // Continue is greyed out without a save, so the focus starts on it but skips it moving.
+    // Continue is greyed out without a save: the focus starts on New Game.
     choose(&mut s, "free_roam");
     assert_eq!(page(&s), Page::Loading, "a loading card first");
     let p = present(&mut s);

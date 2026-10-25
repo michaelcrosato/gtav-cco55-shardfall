@@ -1,6 +1,6 @@
-//! The UI gallery (a developer screen, `freeway/gallery` or Pause → Game → UI Gallery): every
-//! widget of the 10-foot UI kit with sample data from the game, one page at a time (L1/R1 or
-//! left/right), so the whole kit can be reviewed in the window and in headless captures
+//! The UI gallery (a developer screen: the `freeway/gallery` scene, not in the player's menus):
+//! every widget of the 10-foot UI kit with sample data from the game, one page at a time (L1/R1
+//! or left/right), so the whole kit can be reviewed in the window and in headless captures
 //! (`gtf capture hud=true`).
 
 use glam::{Vec2, Vec3};
@@ -240,13 +240,14 @@ pub fn results_page() -> UiModel {
 }
 
 pub fn wheel_page(player: Vec2) -> UiModel {
-    let wheel = WheelState { open_for: 1.0, focus: Some(1) }.ui(1);
+    let wheel = WheelState { open_for: 1.0, focus: Some(1) }.ui(1, false);
     let (hud, _, _) = crate::hud::hud(&crate::hud::HudInput {
         player,
         heading: 0.0,
         camera_yaw: 0.0,
         money: (12_480, 0, 10.0),
         weapon: 1,
+        bat: false,
         ability: (0.8, pav_core::Color::hex("#6fe28a")),
         help: None,
         map_blips: lot_blips(),

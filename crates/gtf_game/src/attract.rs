@@ -225,6 +225,8 @@ pub struct Attract {
     pub kept: Option<String>,
     /// The bot for the vignettes on foot.
     pub bot: MissionBot,
+    /// The last tick had a touch (the browser checks see each new one logged).
+    pub touched: bool,
     /// The touch gear's overlay: open, its focus, and About open over it (with its page).
     pub gear: bool,
     pub gear_focus: usize,
@@ -480,6 +482,10 @@ impl Freeway {
             return None;
         }
         if self.attract.kiosk {
+            if input.activity && !self.attract.touched {
+                log::info!("attract: a touch; the loop plays on");
+            }
+            self.attract.touched = input.activity;
             self.gear_input(input);
         } else if device_input(input) {
             // Back to the title; the input that ended the loop does nothing else.
@@ -519,7 +525,9 @@ impl Freeway {
             || v.bot == BotKind::Switch
             || (v.bot == BotKind::Mission && self.mission_holds_controls());
         let fighting = matches!(v.bot, BotKind::Fight | BotKind::Mission) && self.combat.aiming;
-        if feet.distance(self.attract.anchor) > 4.0 || busy || fighting {
+        // (A fight won or a chase shaken off lingers on the aftermath, still on purpose.)
+        let aftermath = self.attract.quiet > 0.0;
+        if feet.distance(self.attract.anchor) > 4.0 || busy || fighting || aftermath {
             self.attract.anchor = feet;
             self.attract.still = 0.0;
         } else {
@@ -553,13 +561,35 @@ impl Freeway {
             && self.attract.t > 3.0
             && self.missions.run.as_ref().is_none_or(|r| !matches!(r.phase, crate::missions::Phase::Play));
         let fallen = !self.fate.alive() && self.fate.since() > 3.0;
-        let stalled = self.attract.still > v.stall.unwrap_or(d.attract.stall);
+        // A chase can also be lost: the protagonist out of the car (bailed or thrown), or the
+        // car boxed in by the police for a few seconds — the director cuts away, as a stalled
+        // shot would be cut; only a stall with nobody to blame is an anomaly.
+        let police_near = self
+            .police
+            .units
+            .iter()
+            .filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos))
+            .chain(self.police.officers.iter().filter_map(|o| sim.state.entities.get(o.id).map(|e| e.pos)))
+            .any(|p| p.distance(feet) < 30.0);
+        let chase_lost = v.bot == BotKind::Escape
+            && self.attract.t > 5.0
+            && ((self.drive.vehicle().is_none() && !self.drive.busy()) || (self.attract.still > 6.0 && police_near));
+        let stalled = self.attract.still > v.stall.unwrap_or(d.attract.stall) && !chase_lost;
         let missed = self.attract.t >= v.seconds && v.bot == BotKind::Cruise && goal.is_some() && !at_goal;
-        if self.attract.t >= v.seconds || at_goal || stunt_done || fight_won || mission_over || fallen || stalled {
+        if self.attract.t >= v.seconds || at_goal || stunt_done || fight_won || mission_over || fallen || chase_lost || stalled {
             if stalled || missed {
                 let why = if stalled { "stalled" } else { "missed its goal" };
-                self.attract.anomalies.push(format!("{}: {why} at {:.0} s", v.id, self.attract.t));
-                log::warn!("attract: {} {why} at {:.0} s", v.id, self.attract.t);
+                // Where, and how (on foot or driving, the stars): what a fix starts from.
+                let how = match self.drive.vehicle() {
+                    Some(car) => format!("driving {}", sim.state.entities.get(car).map_or("?", |e| e.name.as_str())),
+                    None => "on foot".to_string(),
+                };
+                let what = format!(
+                    "{}: {why} at {:.0} s ({how} at {:.0},{:.0}, {}★)",
+                    v.id, self.attract.t, feet.x, feet.z, self.heat.stars
+                );
+                log::warn!("attract: {what}");
+                self.attract.anomalies.push(what);
             }
             self.attract.played += 1;
             self.attract.at += 1;
@@ -690,8 +720,8 @@ impl Freeway {
         }
         let caption = v.as_ref().map(|v| v.caption.clone()).unwrap_or_default();
         let title = "GRAND THEFT FREEWAY".to_string();
-        // ("DEMO" leads the caption: a hint is a button and its verb.)
-        let hints = vec![Prompt { button: PadButton::South, label: "PRESS ANY BUTTON".into(), hold: None }];
+        // (The logo takes the top-left corner, where the FPS readout sits.)
+        ui.perf = false;
         if !self.attract.ready {
             ui.overlay.fade = 1.0;
             ui.banners.clear();
@@ -713,9 +743,10 @@ impl Freeway {
             title,
             tabs: Vec::new(),
             tab: 0,
-            hints,
+            hints: Vec::new(),
             body: ScreenBody::Title(TitleCard {
-                prompt: None,
+                // (Any button at all: no glyph for one of them.)
+                prompt: Some("PRESS ANY BUTTON".into()),
                 menu: None,
                 caption: Some(format!("DEMO · {caption}")),
                 small_logo: true,
@@ -737,6 +768,7 @@ impl Freeway {
                     self.attract.gear = !self.attract.gear;
                 }
                 self.attract.gear_focus = 0;
+                log::info!("attract: gear overlay {}", if self.attract.gear { "open" } else { "closed" });
                 continue;
             }
             if !self.attract.gear {

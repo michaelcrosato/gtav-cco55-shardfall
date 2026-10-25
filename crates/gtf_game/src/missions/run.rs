@@ -482,7 +482,7 @@ impl Freeway {
                 self.give_weapon(weapon, *ammo);
                 // In hand: what the mission hands over is what to use.
                 if let Some(i) = crate::combat::def().ok().and_then(|d| d.weapon.iter().position(|w| &w.id == weapon)) {
-                    self.weapon = i;
+                    self.weapon = if i == crate::combat::BAT { 0 } else { i };
                 }
             }
             Action::Cash(n) => self.pay(*n),
@@ -1613,7 +1613,7 @@ impl Freeway {
                 }
                 let gun = crate::combat::def()
                     .ok()
-                    .and_then(|d| d.weapon.get(self.weapon).map(|w| w.kind == crate::combat::Kind::Gun))
+                    .and_then(|d| d.weapon.get(self.arm_index()).map(|w| w.kind == crate::combat::Kind::Gun))
                     .unwrap_or(false);
                 let aimed = gun
                     && self.combat.aiming

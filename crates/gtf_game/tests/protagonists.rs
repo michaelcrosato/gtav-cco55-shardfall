@@ -1,6 +1,6 @@
 //! M6: the three protagonists. Switching keeps each one's cash, weapons and place; the switch
-//! wheel picks who; the far switch flies the sky-cam; abilities slow the world, change the
-//! damage, wash the screen and drain their meter.
+//! wheel picks who (not while the police are after you); the far switch flies the sky-cam;
+//! abilities slow the world, change the damage, wash the screen and drain their meter.
 
 use glam::Vec2;
 use gtf_game::Freeway;
@@ -99,6 +99,24 @@ fn the_switch_wheel_picks_and_the_sky_cam_flies() {
     assert!(highest > start + 100.0, "the sky-cam went up ({start:.0} → {highest:.0} m)");
     assert_eq!(game(&s).crew.key(), "mack");
     assert!(game(&s).camera(&s).eye.y < start + 10.0, "and came back down behind Mack");
+}
+
+#[test]
+fn the_wheel_will_not_switch_mid_chase() {
+    let mut s = sim("freeway/dev");
+    s.run(30, &InputFrame::default());
+    s.step(&cmd("wanted 2"));
+    s.run(10, &InputFrame::default());
+    assert!(game(&s).heat.stars > 0);
+    s.step(&press(pad::DOWN));
+    s.run(20, &hold(pad::DOWN, Vec2::ZERO));
+    let a = std::f32::consts::TAU / 3.0;
+    s.run(5, &hold(pad::DOWN, Vec2::new(a.sin(), a.cos())));
+    s.step(&InputFrame::default());
+    s.run(30, &InputFrame::default());
+    let g = game(&s);
+    assert!(g.crew.switch.is_none() && g.crew.key() == "dez", "no switch while wanted");
+    assert!(g.notes.iter().any(|n| n.title == "Not now"), "the note says why");
 }
 
 #[test]

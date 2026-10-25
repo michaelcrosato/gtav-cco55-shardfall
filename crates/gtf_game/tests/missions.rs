@@ -182,11 +182,16 @@ fn bot_run_retrying(scene: &str, seed: u64, secs: u64, before: &[&str]) -> (Outc
     (s.play().unwrap().outcome(), game(&s).mission_status(), retries)
 }
 
+/// How many seeds the bot suites play: 3, or `GTF_SEEDS` (the bug bash plays 5).
+fn seeds() -> u64 {
+    std::env::var("GTF_SEEDS").ok().and_then(|s| s.parse().ok()).unwrap_or(3)
+}
+
 /// The bot plays story mission `key` on seeds 1-3 (after the `before` commands) and wins each
 /// (retrying from a checkpoint as a player would; how often it had to is printed).
 fn story(key: &str, before: &[&str]) {
     let scene = format!("freeway/mission/{key}");
-    let lost: Vec<String> = (1..=3)
+    let lost: Vec<String> = (1..=seeds())
         .filter_map(|seed| {
             let (o, st, retries) = bot_run_retrying(&scene, seed, 700, before);
             eprintln!("{key} {before:?} seed {seed}: {o:?} after {retries} retries");

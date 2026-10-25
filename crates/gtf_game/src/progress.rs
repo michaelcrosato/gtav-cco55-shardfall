@@ -56,6 +56,9 @@ pub struct SaveData {
     /// Activities and collectibles done (`activities::Activities::done`).
     #[serde(default)]
     pub activities: BTreeSet<String>,
+    /// First-time tips already shown (`tips::Tips::seen`).
+    #[serde(default)]
+    pub tips: BTreeSet<String>,
 }
 
 /// A save's line in the slot list: who, when, how far.
@@ -181,6 +184,7 @@ impl Freeway {
             resprays: self.resprays,
             completion: self.completion(),
             activities: self.activities.done.clone(),
+            tips: self.tips.seen.clone(),
         }
     }
 
@@ -218,6 +222,7 @@ impl Freeway {
         self.missions.records = d.records;
         self.missions.story = d.story;
         self.activities = crate::activities::Activities { done: d.activities, ..Default::default() };
+        self.tips = crate::tips::Tips { seen: d.tips, now: None };
         self.sky.hour = d.hour;
         if let Ok(world) = crate::daytime::def() {
             let _ = self.sky.set_weather(&world, &d.weather, false);

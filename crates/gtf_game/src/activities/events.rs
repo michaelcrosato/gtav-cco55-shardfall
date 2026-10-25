@@ -912,6 +912,7 @@ impl Freeway {
             run: walks_fast,
             focus: None,
             seat: None,
+            scene: None,
             idle: None,
             swing: 0.0,
         });
@@ -926,6 +927,7 @@ impl Freeway {
             run: running || walks_fast,
             focus: None,
             seat: None,
+            scene: None,
             idle: None,
             swing: 0.0,
             ..base

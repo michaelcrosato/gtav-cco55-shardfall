@@ -69,6 +69,9 @@ pub struct WeaponDef {
     pub cue: String,
     #[serde(default)]
     pub combo: Vec<String>,
+    /// Melee: the clip of the heavy swing ○ held winds up (empty: none).
+    #[serde(default)]
+    pub heavy: String,
     /// Fired from a vehicle's window (L1 aim, R1 fire): pistols and SMGs.
     #[serde(default)]
     pub driveby: bool,
@@ -197,6 +200,16 @@ pub struct Grenade {
 }
 
 /// A grenade's fuse (s), blast radius (m) and throw speed (m/s).
+/// The bat's place in weapons.toml: after the wheel's eight, in the fists' slot once owned.
+pub const BAT: usize = 8;
+
+/// Holding ○ this long (s) winds up the heavy swing; it lands this far in (s) and hits this many
+/// times as hard, knocking people back further (PLAN §5.6.1: heavy on hold).
+pub const HEAVY_HOLD: f32 = 0.45;
+const HEAVY_LANDS: f32 = 0.36;
+const HEAVY_DAMAGE: f32 = 2.2;
+const HEAVY_KNOCK: f32 = 2.6;
+
 pub const FUSE: f32 = 3.0;
 pub const BLAST: f32 = 6.0;
 const THROW: f32 = 13.0;
@@ -242,6 +255,14 @@ pub struct Combat {
     pub combo: u8,
     pub swing: f32,
     pub swing_landed: bool,
+    /// Seconds ○ has been held with fists or a melee weapon, whether this hold already swung
+    /// heavy, and whether the swing under way is the heavy one.
+    #[serde(default)]
+    pub held_east: f32,
+    #[serde(default)]
+    pub heavy_spent: bool,
+    #[serde(default)]
+    pub heavy: bool,
     pub traces: Vec<Trace>,
     /// Seconds since the last shot (the muzzle flash) and the hit and kill markers (0..1).
     pub flash: f32,
@@ -291,6 +312,9 @@ impl Default for Combat {
             combo: 0,
             swing: 9.0,
             swing_landed: true,
+            held_east: 0.0,
+            heavy_spent: false,
+            heavy: false,
             traces: Vec::new(),
             flash: 9.0,
             hit: 0.0,
@@ -356,6 +380,19 @@ fn scatter(dir: Vec3, spread: f32, rng: &mut pav_core::rng::Rng) -> Vec3 {
     let a = rng.f32() * std::f32::consts::TAU;
     let r = rng.f32().sqrt() * spread.to_radians();
     (dir + (right * a.cos() + up * a.sin()) * r.tan()).normalize()
+}
+
+/// The tyre (wheel index) or lamp (0 head left, 1 head right, 2 tail left, 3 tail right) of
+/// vehicle `id` a round struck at `point`, if either.
+fn struck_part(sim: &Sim, id: EntityId, point: Vec3) -> Option<(Option<usize>, Option<usize>)> {
+    let e = sim.state.entities.get(id)?;
+    let v = e.vehicle.as_ref()?;
+    let view = v.view(e.pos, e.rot);
+    let at = |p: Vec3| e.pos + e.rot * (p - Vec3::Y * view.base);
+    let wheel = view.wheels.iter().position(|w| at(w.center).distance(point) < w.radius + 0.12);
+    let lamps = view.head.iter().take(2).enumerate().chain(view.tail.iter().take(2).enumerate().map(|(i, p)| (i + 2, p)));
+    let lamp = lamps.map(|(i, p)| (i, at(*p).distance(point))).filter(|(_, d)| *d < 0.3).min_by(|a, b| a.1.total_cmp(&b.1));
+    Some((wheel, lamp.map(|l| l.0)))
 }
 
 /// Whether an entity is someone who can be hurt (a character other than `not`, still standing).
@@ -457,12 +494,25 @@ impl Combat {
             }
             _ => {}
         }
+        // ○ held past the jab winds up the heavy swing (once a hold).
+        if matches!(w.kind, Kind::Melee | Kind::None) && input.pad.held & pad::EAST != 0 {
+            self.held_east += dt;
+            let mw = if w.kind == Kind::Melee { w } else { &def.weapon[0] };
+            if self.held_east >= HEAVY_HOLD && !self.heavy_spent && !mw.heavy.is_empty() && self.swing >= 0.3 {
+                self.heavy_spent = true;
+                self.start_heavy(sim, mw, s, events);
+            }
+        } else {
+            self.held_east = 0.0;
+            self.heavy_spent = false;
+        }
         // The swing lands partway through.
         self.swing += dt;
-        if !self.swing_landed && self.swing > 0.18 {
+        if !self.swing_landed && self.swing > if self.heavy { HEAVY_LANDS } else { 0.18 } {
             self.swing_landed = true;
+            let heavy = std::mem::take(&mut self.heavy);
             let mw = if w.kind == Kind::Melee { w } else { &def.weapon[0] };
-            self.land(sim, mw, s, events, &mut out);
+            self.land(sim, mw, s, heavy, events, &mut out);
         }
         self.cooldown = (self.cooldown - dt).max(0.0);
         self.bloom = (self.bloom - dt * 4.0).max(0.0);
@@ -529,8 +579,20 @@ impl Combat {
                 out.dealt += amount;
                 self.damage(sim, id, point, (point - muzzle).normalize_or(body), amount, w.knockback, events, out);
             } else if let Some(id) = entity.filter(|&id| sim.state.entities.get(id).is_some_and(|e| e.vehicle.is_some())) {
-                // Cars soak up rounds (four or five dozen from a pistol) until they catch fire.
+                // Cars soak up rounds (four or five dozen from a pistol) until they catch fire; a
+                // round into a tyre bursts it, into a lamp breaks it.
                 sim.damage_vehicle(id, w.damage * 1.5);
+                if let Some((wheel, lamp)) = struck_part(sim, id, point) {
+                    match (wheel, lamp) {
+                        (Some(i), _) => {
+                            sim.burst_tyre(id, i);
+                        }
+                        (None, Some(i)) => {
+                            sim.break_vehicle_light(id, i);
+                        }
+                        _ => {}
+                    }
+                }
                 events.push(sound("bullet.wall", point, 0.7));
                 if !out.vehicles.contains(&id) {
                     out.vehicles.push(id);
@@ -584,8 +646,24 @@ impl Combat {
         }
     }
 
-    /// The swing lands: everyone within reach in front of the player.
-    fn land(&mut self, sim: &mut Sim, w: &WeaponDef, s: &Shooter, events: &mut Vec<SimEvent>, out: &mut Outcome) {
+    /// The heavy swing: slower, harder, a lunge that knocks people down.
+    fn start_heavy(&mut self, sim: &mut Sim, w: &WeaponDef, s: &Shooter, events: &mut Vec<SimEvent>) {
+        self.combo = 0;
+        self.swing = 0.0;
+        self.swing_landed = false;
+        self.heavy = true;
+        events.push(sound(&w.cue, s.feet + Vec3::Y, 1.3));
+        let id = pav_core::clips::find_cached(&w.heavy);
+        if let Some(c) = sim.state.entities.get_mut(s.id).and_then(|e| e.character.as_mut())
+            && id != 0
+        {
+            c.anim.replay_clip(id, pav_core::clips::ONCE | pav_core::clips::QUICK, 1.1);
+        }
+    }
+
+    /// The swing lands: everyone within reach in front of the player (`heavy`: harder, and
+    /// reaching a little further).
+    fn land(&mut self, sim: &mut Sim, w: &WeaponDef, s: &Shooter, heavy: bool, events: &mut Vec<SimEvent>, out: &mut Outcome) {
         let body = Vec3::new(s.facing.sin(), 0.0, s.facing.cos());
         let chest = s.feet + Vec3::Y * 1.2;
         let near: Vec<EntityId> = sim
@@ -596,15 +674,19 @@ impl Combat {
             .filter(|e| {
                 let d = e.pos - chest;
                 let flat = Vec3::new(d.x, 0.0, d.z);
-                flat.length() < w.range + 0.4 && d.y.abs() < 1.2 && flat.normalize_or(body).dot(body) > 0.45
+                flat.length() < w.range + if heavy { 0.7 } else { 0.4 }
+                    && d.y.abs() < 1.2
+                    && flat.normalize_or(body).dot(body) > 0.45
             })
             .map(|e| e.id)
             .collect();
+        let (hard, knock) = if heavy { (HEAVY_DAMAGE, HEAVY_KNOCK) } else { (1.0, 1.0) };
         for id in near {
             let at = sim.state.entities.get(id).map_or(chest, |e| e.pos);
-            out.dealt += w.damage * self.power;
-            self.damage(sim, id, at, body, w.damage * self.power, w.knockback * self.shove, events, out);
-            events.push(sound("melee.hit", at, 1.0));
+            let amount = w.damage * self.power * hard;
+            out.dealt += amount;
+            self.damage(sim, id, at, body, amount, w.knockback * self.shove * knock, events, out);
+            events.push(sound("melee.hit", at, if heavy { 1.4 } else { 1.0 }));
         }
     }
 
@@ -896,13 +978,41 @@ mod tests {
     #[test]
     fn the_weapons_match_the_wheel() {
         let def = def().unwrap();
-        let icons: Vec<&str> = def.weapon.iter().map(|w| w.icon.as_str()).collect();
+        let icons: Vec<&str> = def.weapon.iter().take(BAT).map(|w| w.icon.as_str()).collect();
         let wheel: Vec<&str> = crate::hud::WEAPONS.iter().map(|w| w.1).collect();
         assert_eq!(icons, wheel, "weapons.toml lists the wheel's slots in order");
         assert_eq!(def.weapon[0].kind, Kind::Melee, "the first slot is the fists");
+        let bat = &def.weapon[BAT];
+        assert_eq!(
+            (bat.id.as_str(), bat.icon.as_str(), bat.kind),
+            ("bat", "fists", Kind::Melee),
+            "the bat follows, in the fists' slot"
+        );
+        assert_eq!(def.weapon.len(), BAT + 1);
         for w in def.weapon.iter().filter(|w| w.kind == Kind::Gun) {
             assert!(w.damage > 0.0 && w.rpm > 0.0 && w.magazine > 0 && w.range > 0.0 && !w.cue.is_empty(), "{}", w.id);
         }
+    }
+
+    #[test]
+    fn a_round_at_a_wheel_finds_its_tyre_and_at_a_lamp_the_lamp() {
+        crate::register();
+        let mut sim = Sim::new("freeway/roam", 1).unwrap();
+        sim.step(&pav_core::InputFrame::default());
+        let feet = sim.feet(sim.state.player.unwrap()).unwrap();
+        let car = crate::vehicles::spawn(&mut sim, "okami_kaze", feet + Vec3::new(5.0, 0.05, 0.0), 0.4, None).unwrap();
+        for _ in 0..10 {
+            sim.step(&pav_core::InputFrame::default());
+        }
+        let e = sim.state.entities.get(car).unwrap();
+        let view = e.vehicle.as_ref().unwrap().view(e.pos, e.rot);
+        let at = |p: Vec3| e.pos + e.rot * (p - Vec3::Y * view.base);
+        for (i, w) in view.wheels.iter().enumerate() {
+            assert_eq!(struck_part(&sim, car, at(w.center)).map(|p| p.0), Some(Some(i)), "wheel {i}");
+        }
+        let lamp = at(view.head[0]);
+        assert_eq!(struck_part(&sim, car, lamp), Some((None, Some(0))), "the left headlamp");
+        assert_eq!(struck_part(&sim, car, e.pos + Vec3::Y * 3.0), Some((None, None)), "the roof: neither");
     }
 
     #[test]

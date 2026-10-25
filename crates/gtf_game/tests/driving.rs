@@ -1,7 +1,7 @@
 //! M3: the player and vehicles — △ walks to the driver's door and gets in, R2 drives, △ stops
 //! and gets out; a locked car's window is smashed (its alarm sounds); a driver is pulled out;
-//! held △ at speed bails out and the car rolls on; the helicopter climbs on R2; the chase
-//! camera sits behind and widens with speed.
+//! held △ at speed bails out and the car rolls on; L3 cycles a police car's siren; the
+//! helicopter climbs on R2; the chase camera sits behind and widens with speed.
 
 use glam::Vec3;
 use gtf_game::Freeway;
@@ -186,6 +186,24 @@ fn holding_triangle_at_speed_bails_out_and_the_car_rolls_on() {
     let rolling = sim.vehicle_status(car).unwrap().kmh;
     eprintln!("bailed at {kmh:.0} km/h; the car still rolls at {rolling:.0} km/h");
     assert!(rolling > 20.0, "the empty car coasts on: {rolling}");
+}
+
+#[test]
+fn l3_tapped_in_a_police_car_cycles_the_siren_wail_yelp_off() {
+    let mut sim = roam();
+    cmd(&mut sim, "drive sppd_interceptor");
+    let tap = |sim: &mut Sim| {
+        sim.step(&press(pad::L3));
+        sim.step(&InputFrame::default());
+    };
+    let state = |sim: &Sim| (game(sim).drive.siren, game(sim).drive.yelp);
+    assert_eq!(state(&sim), (false, false));
+    tap(&mut sim);
+    assert_eq!(state(&sim), (true, false), "the wail");
+    tap(&mut sim);
+    assert_eq!(state(&sim), (true, true), "the yelp");
+    tap(&mut sim);
+    assert_eq!(state(&sim), (false, false), "off");
 }
 
 #[test]

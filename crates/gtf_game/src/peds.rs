@@ -35,6 +35,36 @@ pub struct PedsDef {
     #[serde(default)]
     pub police: Option<Officers>,
     pub archetype: Vec<Archetype>,
+    /// Scenario points: the dressing props people stop at for a while.
+    #[serde(default)]
+    pub scenario: Vec<ScenarioDef>,
+}
+
+/// A scenario point (PLAN.md §5.6.7): a kind of dressing prop people stop at — a bench to sit
+/// on, a food stall to eat at, an umbrella on the sand, the volleyball net to cheer at.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScenarioDef {
+    /// The end of the prop's library name (`bench`: `LIB/gtf_city/bench`).
+    pub prop: String,
+    /// Where they stand or sit: metres in front of the prop (along its +z), `seats` places
+    /// `spread` metres apart across it.
+    #[serde(default)]
+    pub ahead: f32,
+    #[serde(default = "one_seat")]
+    pub seats: u32,
+    #[serde(default)]
+    pub spread: f32,
+    /// Facing the prop (a stall, the net) rather than its way (a bench's seat).
+    #[serde(default)]
+    pub face: bool,
+    /// What they do there (one picked) and for how long (s).
+    pub clips: Vec<String>,
+    pub stay: [f32; 2],
+}
+
+fn one_seat() -> u32 {
+    1
 }
 
 /// The SPPD's uniform: skin tones, the uniform's colours and what officers wear with it.
@@ -144,7 +174,7 @@ pub enum Doing {
     /// Running away from a threat (gunfire, a fight), or crouched where it could not get away.
     Flee,
     Cower,
-    /// Sitting on a bench (a scenario point).
+    /// At a scenario point: on a bench, at a stall, under an umbrella, by the net.
     Sit,
     /// Filming an incident on the phone (a witness).
     Film,
@@ -170,11 +200,15 @@ pub struct Ped {
     pub check_t: f32,
     pub check: Vec2,
     pub run: bool,
-    /// What they film or fight (a point; the player for a fight), and the bench they head for.
+    /// What they film or fight (a point; the player for a fight), and the scenario point they
+    /// head for (where, facing).
     #[serde(default)]
     pub focus: Option<Vec3>,
     #[serde(default)]
     pub seat: Option<(Vec3, f32)>,
+    /// The scenario point the seat is at (`PedsDef::scenario`).
+    #[serde(default)]
+    pub scene: Option<u16>,
     /// The idle clip they had before sitting or filming (put back afterwards).
     #[serde(default)]
     pub idle: Option<String>,
@@ -344,6 +378,7 @@ impl Peds {
         }
         p.focus = None;
         p.seat = None;
+        p.scene = None;
         p.doing = Doing::Linger;
         p.timer = 0.5;
         p.run = def.archetype[p.arch as usize].run;
@@ -516,13 +551,20 @@ impl Peds {
         }
     }
 
-    /// A bench within 30 m nobody else sits on: (where to sit, facing).
-    fn bench(&self, city: &City, at: Vec3) -> Option<(Vec3, f32)> {
+    /// The nearest free place at a scenario point within 30 m: (where, facing, which point).
+    fn scenario(&self, def: &PedsDef, city: &City, at: Vec3) -> Option<(Vec3, f32, u16)> {
         let taken: Vec<Vec3> = self.list.iter().filter_map(|p| p.seat.map(|s| s.0)).collect();
-        city.props_near(at, 30.0).into_iter().filter(|s| s.asset.ends_with("/bench")).find_map(|s| {
+        city.props_near(at, 30.0).into_iter().find_map(|s| {
+            let name = s.asset.rsplit('/').next()?;
+            let (k, sc) = def.scenario.iter().enumerate().find(|(_, sc)| sc.prop == name)?;
             let fwd = s.rot * Vec3::Z;
-            let spot = s.pos + fwd * 0.25;
-            (!taken.iter().any(|t| t.distance(spot) < 0.8)).then(|| (spot, fwd.x.atan2(fwd.z)))
+            let across = Vec3::new(fwd.z, 0.0, -fwd.x);
+            let facing = if sc.face { (-fwd.x).atan2(-fwd.z) } else { fwd.x.atan2(fwd.z) };
+            (0..sc.seats).find_map(|n| {
+                let off = (n as f32 - (sc.seats as f32 - 1.0) * 0.5) * sc.spread;
+                let spot = s.pos + fwd * sc.ahead + across * off;
+                (!taken.iter().any(|t| t.distance(spot) < 0.8)).then_some((spot, facing, k as u16))
+            })
         })
     }
 
@@ -531,19 +573,26 @@ impl Peds {
         if let Some(f) = self.react(i, sim, def, m, pos, deeds) {
             return f;
         }
-        // At a bench they were walking to: sit.
+        // At the scenario point they were walking to: sit, eat, cheer...
         if let Some((spot, facing)) = self.list[i].seat
             && self.list[i].doing == Doing::Walk
             && Vec2::new(spot.x, spot.z).distance(pos) < 0.9
         {
+            let sc = self.list[i].scene.and_then(|k| def.scenario.get(k as usize));
+            // (Which clip goes by who it is: no draw on the sim's random generator for a pose.)
+            let clip = match sc {
+                Some(sc) if !sc.clips.is_empty() => sc.clips[self.list[i].id.0 as usize % sc.clips.len()].clone(),
+                _ => SIT_IDLE.to_string(),
+            };
+            let stay = sc.map_or([10.0, 25.0], |sc| sc.stay);
             let p = &mut self.list[i];
             sim.set_position(p.id, spot + Vec3::Y * 0.02);
             if let Some(c) = sim.state.entities.get_mut(p.id).and_then(|e| e.character.as_mut()) {
                 c.face = Some(facing);
             }
-            Self::set_idle(sim, p, Some(SIT_IDLE));
+            Self::set_idle(sim, p, Some(&clip));
             p.doing = Doing::Sit;
-            p.timer = sim.state.rng.range(10.0, 25.0);
+            p.timer = sim.state.rng.range(stay[0], stay[1]);
             return InputFrame::default();
         }
         let walk = &m.city.walk;
@@ -565,10 +614,10 @@ impl Peds {
             if p.timer > 0.0 {
                 return InputFrame::default();
             }
-            // Sometimes a bench nearby instead of a walk somewhere.
+            // Sometimes a scenario point nearby (a bench, a stall...) instead of a walk somewhere.
             let sit = sim.state.rng.f32() < 0.3;
             let feet = Vec3::new(pos.x, m.city.ground_y(pos), pos.y);
-            let bench = if sit { self.bench(m.city, feet) } else { None };
+            let point = if sit { self.scenario(def, m.city, feet) } else { None };
             let p = &mut self.list[i];
             // Knocked off the pavement (into the road): back onto the nearest walkable tile first.
             let from = if walk.walkable(walk.tile_of(pos)) { pos } else { walk.nearest_walkable(pos, 8).unwrap_or(pos) };
@@ -579,13 +628,14 @@ impl Peds {
                 }
                 path
             };
-            if let Some((spot, facing)) = bench {
+            if let Some((spot, facing, k)) = point {
                 let path = walk_path(Vec2::new(spot.x, spot.z), 3000);
                 if path.len() >= 2 {
                     p.path = path;
                     p.next = 1;
                     p.doing = Doing::Walk;
                     p.seat = Some((spot, facing));
+                    p.scene = Some(k);
                     p.check = pos;
                     p.check_t = 0.0;
                     return InputFrame::default();
@@ -609,12 +659,13 @@ impl Peds {
         }
         if p.next >= p.path.len() {
             if let Some((spot, _)) = p.seat {
-                // The walk ends at the bench: the last step onto it.
+                // The walk ends at the scenario point: the last step onto it.
                 let to = Vec2::new(spot.x, spot.z) - pos;
                 if to.length() < 2.5 {
                     return InputFrame { move_dir: to.normalize_or(Vec2::ZERO), held: buttons::FOCUS, ..Default::default() };
                 }
                 p.seat = None;
+                p.scene = None;
             }
             let a = &def.archetype[p.arch as usize];
             // A flight ends in a breather, then the walk resumes at the usual pace.
@@ -757,6 +808,7 @@ impl Peds {
             run: a.run,
             focus: None,
             seat: None,
+            scene: None,
             idle: None,
             swing: 0.0,
         });
@@ -886,10 +938,54 @@ impl Peds {
             run: false,
             focus: None,
             seat: None,
+            scene: None,
             idle: None,
             swing: 0.0,
         });
         self.scare(sim, walk, from, 30.0);
+    }
+
+    /// A driver the player ran into, out of their car at `car_at` to have words (PLAN §5.6.6):
+    /// some square up to the player, some film it, the rest leave in a hurry.
+    pub fn angry(&mut self, sim: &mut Sim, walk: &pav_world::walk::WalkMap, id: EntityId, car_at: Vec3) {
+        if self.list.iter().any(|p| p.id == id) || sim.state.entities.get(id).is_none() {
+            return;
+        }
+        let roll = sim.state.rng.f32();
+        let doing = if roll < 0.4 {
+            Doing::Fight
+        } else if roll < 0.75 {
+            Doing::Film
+        } else {
+            Doing::Walk
+        };
+        self.list.push(Ped {
+            id,
+            arch: 0,
+            doing,
+            path: Vec::new(),
+            next: 0,
+            timer: if doing == Doing::Fight { 12.0 } else { sim.state.rng.range(7.0, 12.0) },
+            check_t: 0.0,
+            check: Vec2::ZERO,
+            run: doing == Doing::Fight,
+            focus: Some(car_at),
+            seat: None,
+            scene: None,
+            idle: None,
+            swing: if doing == Doing::Fight { 0.6 } else { 0.0 },
+        });
+        match doing {
+            Doing::Film => {
+                let i = self.list.len() - 1;
+                Self::set_idle(sim, &mut self.list[i], Some(PHONE_IDLE));
+            }
+            Doing::Walk => {
+                let i = self.list.len() - 1;
+                self.scare_one(i, sim, walk, car_at);
+            }
+            _ => {}
+        }
     }
 
     /// Forgets `id` if they died (an explosion, a crash).

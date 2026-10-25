@@ -3,9 +3,9 @@
 //! out: carjacking), the player slides in and the door shuts — about 1.2 s in all, cancelled by
 //! walking away. Driving reads the pad: R2 throttle and L2 brake / reverse (ramped in over
 //! 0.15 s, as a keyboard's keys jump), R1 handbrake, the left stick steers (and pitches the car
-//! in the air), L3 sounds the horn and, tapped in a police car, toggles the siren. △ stops the
-//! car and gets out; held above 15 m/s it bails out with a roll. A helicopter climbs and
-//! descends on R2 and L2, flies with the left stick and turns with either stick.
+//! in the air), L3 sounds the horn and, tapped in a police car, cycles the siren (wail, yelp,
+//! off). △ stops the car and gets out; held above 15 m/s it bails out with a roll. A helicopter
+//! climbs and descends on R2 and L2, flies with the left stick and turns with either stick.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -32,7 +32,7 @@ const SMASH: f32 = 0.55;
 const JACK: f32 = 0.6;
 const SIT: f32 = 0.3;
 const SHUT: f32 = 0.3;
-/// L3 let go sooner than this toggles a police car's siren; held longer, the horn (s).
+/// L3 let go sooner than this cycles a police car's siren; held longer, the horn (s).
 const TAP: f32 = 0.22;
 /// A car alarm sounds this long after its window breaks (s).
 pub const ALARM: f32 = 12.0;
@@ -195,8 +195,10 @@ pub struct Drive {
     pub alarms: BTreeMap<EntityId, f32>,
     /// Cars rolling on with nobody in them after a bail-out: seconds left.
     pub coasting: BTreeMap<EntityId, f32>,
-    /// The siren is on (a police car's), seconds L3 and △ have been held.
+    /// The siren is on (a police car's) and yelping rather than wailing; seconds L3 and △
+    /// have been held.
     pub siren: bool,
+    pub yelp: bool,
     l3: f32,
     hold: f32,
     /// This tick's input for the player's vehicle (worked out in `pre`, handed to the engine
@@ -401,6 +403,7 @@ impl Drive {
                     Stage::Open if t >= OPEN => {
                         sim.exit_vehicle(pid, car);
                         self.siren = false;
+                        self.yelp = false;
                         self.phase = Phase::Exit { car, stage: Stage::Shut, t: 0.0 };
                     }
                     Stage::Shut if t >= SHUT => {
@@ -445,6 +448,7 @@ impl Drive {
         if riding != Some(car) {
             self.phase = Phase::Foot;
             self.siren = false;
+            self.yelp = false;
             return;
         }
         // Gone under with the engine drowned: out of it, to swim up.
@@ -489,13 +493,17 @@ impl Drive {
         let steer_to = if c.heli { (p.stick_l.x + p.stick_r.x).clamp(-1.0, 1.0) } else { p.stick_l.x.clamp(-1.0, 1.0) };
         let rate = 1.0 / 0.12;
         self.smooth.steer += (steer_to - self.smooth.steer).clamp(-rate * dt, rate * dt);
-        // L3: the horn while held; tapped in a police car, the siren.
+        // L3: the horn while held; tapped in a police car, the siren (off, wail, yelp, off).
         let l3 = p.held & pad::L3 != 0 && p.held & pad::R3 == 0;
         if l3 {
             self.l3 += dt;
         } else {
             if self.l3 > 0.0 && self.l3 < TAP && c.siren {
-                self.siren = !self.siren;
+                (self.siren, self.yelp) = match (self.siren, self.yelp) {
+                    (false, _) => (true, false),
+                    (true, false) => (true, true),
+                    (true, true) => (false, false),
+                };
             }
             self.l3 = 0.0;
         }

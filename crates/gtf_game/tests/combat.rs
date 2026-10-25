@@ -1,6 +1,6 @@
 //! M5: on-foot combat — a pistol drops someone in front of the camera in a few shots (the aim
-//! assist finds them on L2), the magazine empties and reloads, fists land a combo, and the
-//! people nearby run from the gunfire.
+//! assist finds them on L2), the magazine empties and reloads, fists land a combo (and a heavy
+//! hook on a held ○), and the people nearby run from the gunfire.
 
 use glam::Vec3;
 use gtf_game::Freeway;
@@ -105,6 +105,61 @@ fn fists_land_a_combo() {
     let g = game(&sim);
     assert!(g.combat.hits >= 3, "{} hits", g.combat.hits);
     assert!(g.combat.hp.get(&who.0).is_none_or(|hp| *hp < 100.0), "the target was hurt");
+}
+
+#[test]
+fn holding_circle_swings_one_heavy_hook() {
+    gtf_game::register();
+    let mut sim = Sim::new("freeway/roam", 6).unwrap();
+    for _ in 0..30 {
+        sim.step(&InputFrame::default());
+    }
+    cmd(&mut sim, "weapon fists");
+    let p = sim.state.player.unwrap();
+    let facing = sim.state.entities.get(p).and_then(|e| e.character.as_ref()).map_or(0.0, |c| c.facing);
+    let feet = sim.feet(p).unwrap() + Vec3::new(facing.sin(), 0.0, facing.cos()) * 1.0;
+    let who = sim.spawn_npc("target", feet, facing + std::f32::consts::PI, pav_core::puppet::PuppetDef::default(), None, None);
+    // ○ pressed and held for a second and a half: the jab, then one heavy hook (not one a tick).
+    for t in 0..90 {
+        let mut f = InputFrame::default();
+        f.pad.held = pad::EAST;
+        if t == 0 {
+            f.pad.pressed = pad::EAST;
+        }
+        sim.step(&f);
+    }
+    for _ in 0..30 {
+        sim.step(&InputFrame::default());
+    }
+    let g = game(&sim);
+    let hp = g.combat.hp.get(&who.0).copied().unwrap_or(100.0);
+    eprintln!("{} hits, the target at {hp:.0}", g.combat.hits);
+    assert_eq!(g.combat.hits, 2, "the jab and one heavy hook");
+    assert!(hp <= 100.0 - 15.0 - 15.0 * 2.0, "the hook hit harder than a jab: {hp}");
+}
+
+#[test]
+fn the_bat_fills_the_fists_slot_and_hits_harder() {
+    gtf_game::register();
+    let mut sim = Sim::new("freeway/roam", 6).unwrap();
+    for _ in 0..30 {
+        sim.step(&InputFrame::default());
+    }
+    cmd(&mut sim, "weapon bat");
+    assert_eq!(game(&sim).weapon, 0, "the bat sits in the fists' slot");
+    let p = sim.state.player.unwrap();
+    let facing = sim.state.entities.get(p).and_then(|e| e.character.as_ref()).map_or(0.0, |c| c.facing);
+    let feet = sim.feet(p).unwrap() + Vec3::new(facing.sin(), 0.0, facing.cos()) * 1.6;
+    let who = sim.spawn_npc("target", feet, facing + std::f32::consts::PI, pav_core::puppet::PuppetDef::default(), None, None);
+    let mut f = InputFrame::default();
+    f.pad.pressed = pad::EAST;
+    f.pad.held = pad::EAST;
+    sim.step(&f);
+    for _ in 0..40 {
+        sim.step(&InputFrame::default());
+    }
+    let hp = game(&sim).combat.hp.get(&who.0).copied().unwrap_or(100.0);
+    assert!(hp <= 100.0 - 35.0 + 0.01, "one swing of the bat, out at 1.6 m: {hp}");
 }
 
 #[test]

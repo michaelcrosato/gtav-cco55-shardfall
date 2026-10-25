@@ -23,7 +23,9 @@ use crate::protagonists::money_text;
 pub struct GunItem {
     pub weapon: String,
     pub price: i64,
+    #[serde(default)]
     pub ammo: u32,
+    #[serde(default)]
     pub ammo_price: i64,
 }
 
@@ -278,6 +280,9 @@ impl Freeway {
                         let i = wd.weapon.iter().position(|w| w.id == it.weapon)?;
                         let name = wd.weapon[i].name.clone();
                         Some(if self.crew.owns(i) {
+                            if it.ammo == 0 {
+                                return None;
+                            }
                             Line {
                                 id: format!("ammo:{}", it.weapon),
                                 label: format!("{name} rounds ×{}", it.ammo),

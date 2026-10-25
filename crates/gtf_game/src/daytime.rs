@@ -283,6 +283,11 @@ impl Sky {
         });
     }
 
+    /// How hard it is raining now (the weather's `rain`, blended between weathers).
+    pub fn rain(&self, def: &WorldDef) -> f32 {
+        self.mix(def, |w| w.rain)
+    }
+
     /// A weather value blended between the previous weather and this one.
     fn mix(&self, def: &WorldDef, f: impl Fn(&WeatherDef) -> f32) -> f32 {
         let a = def.weather.get(&self.previous).map(&f).unwrap_or(0.0);

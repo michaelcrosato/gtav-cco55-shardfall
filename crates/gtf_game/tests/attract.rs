@@ -119,6 +119,19 @@ fn touch_screens_never_leave_it_and_show_only_the_gear() {
 }
 
 #[test]
+fn the_loop_shows_its_card_and_prompt_but_no_fps_readout() {
+    let mut s = sim("freeway/attract", 2);
+    idle(&mut s, 4.0);
+    let p = (*s.frame().present.unwrap()).clone();
+    let screen = p.ui.screen.expect("the attract card");
+    assert_eq!(screen.id, "attract");
+    let pav_core::present::ScreenBody::Title(t) = &screen.body else { panic!("a title card") };
+    assert_eq!(t.prompt.as_deref(), Some("PRESS ANY BUTTON"), "any button: no glyph for one");
+    assert!(t.small_logo && screen.hints.is_empty());
+    assert!(!p.ui.perf, "the FPS readout would sit on the logo");
+}
+
+#[test]
 fn each_vignette_sets_up_and_plays() {
     let d = gtf_game::attract::def().unwrap();
     let mut s = sim("freeway/attract", 3);

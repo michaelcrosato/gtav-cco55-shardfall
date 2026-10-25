@@ -48,12 +48,16 @@ const MAX_HEARD: usize = 8;
 const LIGHT: f32 = 1500.0;
 const HEAVY: f32 = 7000.0;
 
-/// The loops of the vehicles near `ear`: `driving` is the player's (louder), `alarms` the cars
-/// whose alarms are sounding.
+/// A police car's siren yelps instead of wailing this near the listener (m): closing in.
+const YELP_NEAR: f32 = 30.0;
+
+/// The loops of the vehicles near `ear`: `driving` is the player's (louder; `yelp`: its siren
+/// yelps), `alarms` the cars whose alarms are sounding.
 pub fn vehicle_loops(
     sim: &Sim,
     ear: Vec3,
     driving: Option<EntityId>,
+    yelp: bool,
     alarms: &BTreeMap<EntityId, f32>,
     out: &mut Vec<LoopSource>,
 ) {
@@ -93,7 +97,13 @@ pub fn vehicle_loops(
         }
         // (A helicopter's light bar flashes without a wail.)
         if s.siren_on && v.def.kind != VehicleKind::Helicopter {
-            push(out, 2, "siren.wail", 0.9, 1.0, 1.0);
+            // The player's as they set it; a patrol's yelps when it closes in.
+            let yelping = if mine { yelp } else { e.pos.distance(ear) < YELP_NEAR };
+            if yelping {
+                push(out, 5, "siren.yelp", 0.9, 1.0, 1.0);
+            } else {
+                push(out, 2, "siren.wail", 0.9, 1.0, 1.0);
+            }
         }
         if s.horn {
             push(out, 3, "horn", 0.8, 1.0, 1.0);

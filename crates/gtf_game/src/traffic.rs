@@ -170,6 +170,13 @@ pub struct Agent {
     /// Waiting for a light, a person or a car that is itself waiting (not stuck).
     #[serde(default)]
     pub held: bool,
+    /// Run into by the player: once shaken, the driver gets out.
+    #[serde(default)]
+    pub crossed: bool,
+    /// A near miss by the player: seconds left swerving away (the sign: to the lane's right,
+    /// positive, or its left), the horn down.
+    #[serde(default)]
+    pub swerve: f32,
     #[serde(default)]
     pub bus: Option<BusState>,
     /// The player's own car on autopilot (bots, the attract mode): driven like traffic, never
@@ -277,6 +284,10 @@ pub struct Traffic {
     /// Fleeing cars bearing down on people this tick (they honk; the people jump clear).
     #[serde(skip)]
     pub honks: Vec<Vec3>,
+    /// Drivers the player ran into, getting out of their cars now (car, driver): the crowd
+    /// takes them over (they fight, film or run).
+    #[serde(skip)]
+    pub angry: Vec<(EntityId, EntityId)>,
     /// The bus loop (derived from the city and the data).
     #[serde(skip)]
     pub bus_loop: Option<Arc<BusLoop>>,
@@ -644,6 +655,8 @@ impl Traffic {
             honk: 0.0,
             change_t: 0.0,
             held: false,
+            crossed: false,
+            swerve: 0.0,
             bus: None,
             pilot: true,
             passing: 0.0,
@@ -744,6 +757,8 @@ impl Traffic {
             honk: 0.0,
             change_t: 0.0,
             held: false,
+            crossed: false,
+            swerve: 0.0,
             bus: None,
             pilot: false,
             passing: 0.0,
@@ -831,11 +846,33 @@ impl Traffic {
     /// physics); two traffic cars hitting each other count as an AI crash — an incident's when one
     /// of them was fleeing, pulled over or shaken, or it happened within 40 m of a chase (`hot`:
     /// the police vehicles, and the player while wanted).
-    pub fn crashes(&mut self, sim: &mut Sim, events: &[pav_core::frame::SimEvent], hot: &[Vec3]) {
+    pub fn crashes(&mut self, sim: &mut Sim, events: &[pav_core::frame::SimEvent], hot: &[Vec3], player_car: Option<EntityId>) {
         for ev in events {
             let pav_core::frame::SimEvent::Crash { vehicle, other, impulse, .. } = ev else { continue };
             if *impulse < 800.0 {
                 continue;
+            }
+            // Run into by the player hard enough to mind (not chased, not wrecked, not a
+            // mission's car or a bus): the driver gets out once the shock passes (PLAN §5.6.6).
+            if *impulse >= 2500.0
+                && hot.is_empty()
+                && let Some(pc) = player_car
+            {
+                let theirs = if *vehicle == pc {
+                    *other
+                } else if *other == Some(pc) {
+                    Some(*vehicle)
+                } else {
+                    None
+                };
+                if let Some(a) = theirs.and_then(|t| self.cars.iter_mut().find(|a| a.car == t && !a.pilot && !a.mission))
+                    && a.bus.is_none()
+                    && a.driver.is_some()
+                    && a.mood != Mood::Flee
+                    && sim.vehicle_status(a.car).is_some_and(|s| s.health > 0.3)
+                {
+                    a.crossed = true;
+                }
             }
             let ours = |id: EntityId| self.cars.iter().any(|a| a.car == id && !a.pilot);
             if let Some(o) = other
@@ -898,6 +935,26 @@ impl Traffic {
                     }
                 }
             }
+        }
+    }
+
+    /// A near miss by the player's car at `from` (PLAN §5.6.6): the driver brakes hard (a short
+    /// stop) or swerves away from it with the horn down (`roll`: a draw from the sim's random
+    /// generator, 0..1).
+    pub fn startle(&mut self, sim: &Sim, car: EntityId, from: Vec3, roll: f32) {
+        let Some(a) = self.cars.iter_mut().find(|a| a.car == car && !a.pilot && !a.mission && a.bus.is_none()) else {
+            return;
+        };
+        if a.tier != Tier::Full || a.mood != Mood::Cruise || a.swerve != 0.0 {
+            return;
+        }
+        let Some(c) = Car::read(sim, car) else { return };
+        if roll < 0.5 {
+            a.mood = Mood::Shaken;
+            a.mood_t = 1.2;
+        } else {
+            // Passed on its left: over to the right, and the other way round.
+            a.swerve = if (from - c.center).dot(c.left()) > 0.0 { 0.8 } else { -0.8 };
         }
     }
 
@@ -1295,6 +1352,8 @@ impl Traffic {
                 honk: 0.0,
                 change_t: 0.0,
                 held: false,
+                crossed: false,
+                swerve: 0.0,
                 bus: None,
                 pilot: false,
                 passing: 0.0,
@@ -1376,6 +1435,8 @@ impl Traffic {
                 honk: 0.0,
                 change_t: 99.0,
                 held: false,
+                crossed: false,
+                swerve: 0.0,
                 bus: Some(BusState { stop, dwell: 0.0 }),
                 pilot: false,
                 passing: 0.0,
@@ -1753,6 +1814,10 @@ impl Traffic {
             a.mood_t -= dt;
             a.plan_wait -= dt;
             a.honk -= dt;
+            if a.swerve != 0.0 {
+                let left = (a.swerve.abs() - dt).max(0.0);
+                a.swerve = left * a.swerve.signum();
+            }
             a.change_t -= dt;
             if let Some(at) = gunfire
                 && at.distance(c.center) < 40.0
@@ -1769,6 +1834,12 @@ impl Traffic {
             });
             match a.mood {
                 Mood::PullOver if !behind_siren && a.mood_t <= 0.0 => a.mood = Mood::Cruise,
+                Mood::Shaken if a.mood_t <= 0.0 && a.crossed && a.tier == Tier::Full => {
+                    // Out of the car to have words (the game hands them to the crowd).
+                    if let Some(d) = a.driver {
+                        self.angry.push((a.car, d));
+                    }
+                }
                 Mood::Shaken | Mood::Flee if a.mood_t <= 0.0 => a.mood = Mood::Cruise,
                 _ => {}
             }
@@ -2195,7 +2266,7 @@ impl Traffic {
                 a.blocked = 0.0;
             }
             a.held = held && a.speed.abs() < 1.0;
-            let horn = a.blocked > d.drive.honk_after && a.honk <= 0.0 && a.tier == Tier::Full;
+            let horn = (a.blocked > d.drive.honk_after && a.honk <= 0.0 || a.swerve != 0.0) && a.tier == Tier::Full;
             if horn {
                 a.honk = 4.0;
             }
@@ -2249,6 +2320,9 @@ impl Traffic {
                     } else {
                         let pull = if a.mood == Mood::PullOver {
                             lane.width * 0.45
+                        } else if a.swerve != 0.0 {
+                            // Away from the player's car that just shaved past.
+                            lane.width * 0.7 * a.swerve.signum()
                         } else if a.passing > 0.0 {
                             // Over the centre line to pass.
                             -lane.width * 0.9

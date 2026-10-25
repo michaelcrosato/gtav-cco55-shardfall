@@ -44,6 +44,23 @@ pub(crate) fn play_clip(sim: &mut Sim, id: EntityId, name: &str, flags: u8) {
     }
 }
 
+/// Whether character `id`, running along `dir` (the input's move direction), meets something
+/// it can vault (PLAN §5.6.1): an obstacle between knee and chest height (0.45-1.35 m) within a
+/// stride, with room above it.
+fn vault_ahead(sim: &Sim, id: EntityId, dir: Vec2) -> bool {
+    let Some(c) = sim.state.entities.get(id).and_then(|e| e.character.as_ref()) else { return false };
+    let speed = Vec2::new(c.vel.x, c.vel.z).length();
+    if dir.length() < 0.6 || speed < 3.0 || !c.grounded || c.riding.is_some() {
+        return false;
+    }
+    let Some(feet) = sim.feet(id) else { return false };
+    let d = Vec3::new(dir.x, 0.0, dir.y).normalize_or(Vec3::Z);
+    let low = sim.raycast(feet + Vec3::Y * 0.5, d, 0.85, Some(id));
+    // (A wall square across the way: a slope or a kerb's face is walked up.)
+    let wall = low.is_some_and(|h| h.normal.y.abs() < 0.5 && h.normal.dot(d) < -0.5);
+    wall && sim.raycast(feet + Vec3::Y * 1.4, d, 1.4, Some(id)).is_none()
+}
+
 /// How often the same kind of crime is counted again (s): a burst of fire is one shooting.
 const CRIME_REPEAT: f32 = 3.0;
 /// A police unit this close to the evasion bot while they search is what it runs from (m).
@@ -63,6 +80,23 @@ impl Freeway {
     ) -> BTreeMap<EntityId, InputFrame> {
         let mut out = BTreeMap::new();
         self.roam_age += real;
+        self.tips.tick(real);
+        // First-time tips (not while a mission's card or cutscene has the screen).
+        if !self.mission_holds_controls() {
+            let gun = combat::def().ok().and_then(|d| d.weapon.get(self.arm_index()).map(|w| w.kind)) == Some(combat::Kind::Gun);
+            let swimming = sim.player().and_then(|p| p.character.as_ref()).is_some_and(|c| c.swimming);
+            if self.heat.stars > 0 {
+                self.tips.offer("wanted");
+            } else if swimming {
+                self.tips.offer("swim");
+            } else if gun && self.drive.vehicle().is_none() {
+                self.tips.offer("gun");
+            } else if self.crew.me().is_some_and(|m| m.meter >= 1.0) {
+                self.tips.offer("ability");
+            } else if self.weapon == 0 && self.drive.vehicle().is_none() && self.roam_age > 20.0 {
+                self.tips.offer("fists");
+            }
+        }
         let alive = self.fate.alive();
         let (notes, was_open) = (self.next_note, self.wheel_open());
         if self.drive.vehicle().is_none() && alive {
@@ -97,7 +131,8 @@ impl Freeway {
         }
         // The weapon in hand shows (a gun or a grenade; in a vehicle only while aiming a drive-by).
         if let Some(id) = pid {
-            let shown = combat::def().ok().and_then(|d| d.weapon.get(self.weapon).map(|w| w.asset.clone())).unwrap_or_default();
+            let shown =
+                combat::def().ok().and_then(|d| d.weapon.get(self.arm_index()).map(|w| w.asset.clone())).unwrap_or_default();
             let driveby = input.pad.held & pad::L1 != 0;
             let hand = if self.drive.vehicle().is_none() && !self.drive.busy() || driveby { shown } else { String::new() };
             combat::hold(sim, id, &hand);
@@ -146,7 +181,7 @@ impl Freeway {
                 let flat = Vec3::new(view.target.x - view.eye.x, 0.0, view.target.z - view.eye.z).normalize_or(Vec3::Z);
                 let seat = sim.feet(id).unwrap_or(feet);
                 let head = seat + Vec3::Y * 1.25;
-                let range = wdef.weapon.get(self.weapon).map_or(30.0, |w| w.range);
+                let range = wdef.weapon.get(self.arm_index()).map_or(30.0, |w| w.range);
                 let lock = sim
                     .state
                     .entities
@@ -182,13 +217,12 @@ impl Freeway {
                 if input.pad.pressed & pad::R1 != 0 {
                     f.pad.pressed |= pad::R2;
                 }
-                res = self.combat.tick(sim, &wdef, self.weapon, &f, &shooter, &mut self.cam, dt, events);
+                res = self.combat.tick(sim, &wdef, self.arm_index(), &f, &shooter, &mut self.cam, dt, events);
             } else {
                 self.combat.aiming = false;
             }
             // Headlights after dark and in bad weather.
-            let dark = !(6.3..19.5).contains(&self.sky.hour) || matches!(self.sky.weather.as_str(), "rain" | "storm" | "fog");
-            sim.set_vehicle_lights(car, dark);
+            sim.set_vehicle_lights(car, self.dark());
         } else if self.wheel_open() {
             let hit = |o: Vec3, d: Vec3, max: f32| sim.raycast_static(o, d, max).map(|h| h.point.distance(o));
             self.cam.update(&InputFrame::default(), feet, look, camera::Moving::default(), real, &hit);
@@ -228,12 +262,34 @@ impl Freeway {
                     None => None,
                 };
                 let stamina = self.crew.me().map_or(50.0, |m| m.stats.stamina);
-                let (frame, haste) = match in_cover {
+                let covered = in_cover.is_some();
+                let (mut frame, haste) = match in_cover {
                     Some(f) => (f, 0.0),
                     None => self.foot.input(input, &self.cam, stamina, self.settings.sprint_toggle, dt),
                 };
+                // A long fall hurts when it lands (not into water, onto a ledge or a ladder).
+                if let Some(c) = sim.state.entities.get(id).and_then(|e| e.character.as_ref()) {
+                    if c.swimming || c.hang.is_some() || c.climbing.is_some() || c.riding.is_some() {
+                        self.foot.fall = 0.0;
+                    } else if !c.grounded {
+                        self.foot.fall = self.foot.fall.max(-c.vel.y);
+                    } else {
+                        let v = std::mem::take(&mut self.foot.fall);
+                        if v > crate::player::FALL_SAFE {
+                            self.combat.hurt_player((v - crate::player::FALL_SAFE) * crate::player::FALL_HURT);
+                            self.shake = self.shake.max(0.35);
+                            events.push(SimEvent::Sound { cue: "melee.hit".into(), pos: Some(feet), gain: 1.2, pitch: 0.6 });
+                        }
+                    }
+                }
+                // Running into something low (a wall, a barrier, a car's bonnet): over it — the
+                // jump clears it, or the ledge grab climbs what it falls short of.
+                if !covered && !self.foot.crouched && vault_ahead(sim, id, frame.move_dir) {
+                    frame.held |= pav_core::input::buttons::JUMP;
+                    frame.pressed |= pav_core::input::buttons::JUMP;
+                }
                 let wdef = combat::def().ok();
-                let gun = wdef.as_ref().and_then(|d| d.weapon.get(self.weapon)).is_some_and(|w| w.kind == combat::Kind::Gun);
+                let gun = wdef.as_ref().and_then(|d| d.weapon.get(self.arm_index())).is_some_and(|w| w.kind == combat::Kind::Gun);
                 let cam = self.cam.intent();
                 let look = (cam.target - cam.eye).normalize_or(Vec3::NEG_Z);
                 if let Some(c) = sim.state.entities.get_mut(id).and_then(|e| e.character.as_mut()) {
@@ -259,8 +315,8 @@ impl Freeway {
                         blind,
                         exclude: None,
                     };
-                    res = self.combat.tick(sim, &wdef, self.weapon, input, &shooter, &mut self.cam, dt, events);
-                    melee = wdef.weapon.get(self.weapon).is_some_and(|w| w.kind == combat::Kind::Melee);
+                    res = self.combat.tick(sim, &wdef, self.arm_index(), input, &shooter, &mut self.cam, dt, events);
+                    melee = wdef.weapon.get(self.arm_index()).is_some_and(|w| w.kind == combat::Kind::Melee);
                 }
             }
         }
@@ -294,6 +350,10 @@ impl Freeway {
             return out;
         }
         // The people react to what the weapon did.
+        if res.gunfire.is_some() {
+            // Each shot kicks the camera a little.
+            self.shake = self.shake.max(0.18);
+        }
         if let Some(at) = res.gunfire {
             self.peds.scare(sim, &city.walk, at, 40.0);
             // (An officer on vigilante duty fires without a report.)
@@ -373,7 +433,10 @@ impl Freeway {
             self.strike(sim, &city, hit, events);
         }
         let gun_out = self.combat.aiming
-            && combat::def().ok().and_then(|d| d.weapon.get(self.weapon).map(|w| w.kind == combat::Kind::Gun)).unwrap_or(false);
+            && combat::def()
+                .ok()
+                .and_then(|d| d.weapon.get(self.arm_index()).map(|w| w.kind == combat::Kind::Gun))
+                .unwrap_or(false);
         let m = peds::Moment {
             city: &city,
             player,
@@ -465,6 +528,21 @@ impl Freeway {
         });
         let mut inputs = BTreeMap::new();
         self.traffic.tick(sim, &tm, &mut inputs, &mut self.drive.locked);
+        // Drivers the player ran into get out and have words (or film it, or leave).
+        for (car, driver) in std::mem::take(&mut self.traffic.angry) {
+            self.traffic.cars.retain(|a| a.car != car);
+            self.traffic.loose.push(car);
+            sim.exit_vehicle(driver, car);
+            let at = sim.state.entities.get(car).map_or(feet, |e| e.pos);
+            self.peds.angry(sim, &city.walk, driver, at);
+        }
+        // Traffic drives with its lights on after dark and in bad weather, as the player does.
+        let dark = self.dark();
+        for a in &self.traffic.cars {
+            if !a.pilot {
+                sim.set_vehicle_lights(a.car, dark);
+            }
+        }
         // People in front of a fleeing car jump clear (off the road first, then away).
         for at in std::mem::take(&mut self.traffic.honks) {
             self.peds.dodge(sim, &city.walk, at, 4.0);

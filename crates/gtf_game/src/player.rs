@@ -51,11 +51,20 @@ pub struct Foot {
     /// out).
     #[serde(default)]
     pub sprint_on: bool,
+    /// The fastest the player has fallen since leaving the ground (m/s, downward).
+    #[serde(default)]
+    pub fall: f32,
 }
+
+/// Landing faster than this (m/s) hurts: about a 3.3 m drop (the jump's own landing is far
+/// below it). Each m/s beyond costs this much health, so about an 18 m drop is fatal from full
+/// health and no armour.
+pub const FALL_SAFE: f32 = 12.0;
+pub const FALL_HURT: f32 = 12.0;
 
 impl Default for Foot {
     fn default() -> Self {
-        Foot { stamina: 1.0, sprinting: false, crouched: false, rest: 9.0, since_tap: 9.0, sprint_on: false }
+        Foot { stamina: 1.0, sprinting: false, crouched: false, rest: 9.0, since_tap: 9.0, sprint_on: false, fall: 0.0 }
     }
 }
 

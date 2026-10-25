@@ -265,9 +265,10 @@ fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
 
 /// `soak mode=attract`: the attract loop on its own for `seconds` (PLAN §7.5). Reports the
 /// vignettes that stalled, how often each was played, each vignette's entity count 8 s in on its
-/// first and its latest play, and the process's memory at the start of each loop; flat means
-/// within 10% (the memory from the second loop on: the first visits every place for the first
-/// time).
+/// first and its latest play, and per loop the sum of those counts and the process's memory at
+/// its start. Flat means no loop's sum grew past the first complete loop's by 10% (one sample of
+/// a vignette varies with the traffic round it; a leak grows every loop) and the memory from
+/// the second loop on stays within 10% (the first visits every place for the first time).
 fn soak_attract(s: &mut Session, a: &Args, seconds: f64, seed: u64) -> Result<Output> {
     let mut args = Args::new();
     args.insert("scene".into(), json!("freeway/attract"));
@@ -276,8 +277,11 @@ fn soak_attract(s: &mut Session, a: &Args, seconds: f64, seed: u64) -> Result<Ou
     let shots = text(a, "shots").map(str::to_string);
     let ticks = (seconds * 60.0) as u64;
     let (mut nan, mut fell, mut slowest, mut total_ms) = (0u32, 0u32, 0.0f64, 0.0f64);
+    let mut fallen: Vec<String> = Vec::new();
     // Per vignette: plays, and the entities 8 s in on its first and its latest play.
     let mut plays: std::collections::BTreeMap<String, (u32, usize, usize)> = Default::default();
+    // Per loop, the vignettes' entity counts summed (and how many were summed).
+    let mut loop_entities: Vec<(usize, u32)> = vec![(0, 0)];
     let mut memory: Vec<u64> = Vec::new();
     let (mut loops, mut ready, mut counted) = (u32::MAX, false, false);
     let mut shot = 0u32;
@@ -296,6 +300,7 @@ fn soak_attract(s: &mut Session, a: &Args, seconds: f64, seed: u64) -> Result<Ou
         if st.loops != loops {
             loops = st.loops;
             memory.push(resident_kib());
+            loop_entities.push((0, 0));
         }
         let id = g.attract_vignette().unwrap_or_default();
         if st.ready && !ready {
@@ -306,6 +311,10 @@ fn soak_attract(s: &mut Session, a: &Args, seconds: f64, seed: u64) -> Result<Ou
         if st.ready && st.t >= 8.0 && !counted {
             counted = true;
             let n = s.sim.state.entities.iter().count();
+            if let Some(l) = loop_entities.last_mut() {
+                l.0 += n;
+                l.1 += 1;
+            }
             let e = plays.entry(id.clone()).or_default();
             if e.1 == 0 {
                 e.1 = n;
@@ -316,6 +325,9 @@ fn soak_attract(s: &mut Session, a: &Args, seconds: f64, seed: u64) -> Result<Ou
                     nan += 1;
                 } else if e.pos.y < -40.0 {
                     fell += 1;
+                    if fallen.len() < 12 {
+                        fallen.push(format!("{id}: {}#{} at {:.0},{:.0},{:.0}", e.name, e.id.0, e.pos.x, e.pos.y, e.pos.z));
+                    }
                 }
             }
             // A picture of each vignette (8 s in), as long as `shots` asks.
@@ -334,7 +346,7 @@ fn soak_attract(s: &mut Session, a: &Args, seconds: f64, seed: u64) -> Result<Ou
     let st = &g.attract;
     let stalls = st.anomalies.len();
     let n = gtf_game::attract::def()?.vignette.len();
-    let flat = |a: usize, b: usize| (a as f64 - b as f64).abs() <= (a as f64 * 0.1).max(4.0);
+    let flat = |first: usize, last: usize| last as f64 <= first as f64 * 1.1 + 4.0;
     let vignettes: serde_json::Map<String, Value> = plays
         .iter()
         .map(|(id, (p, first, last))| {
@@ -342,18 +354,20 @@ fn soak_attract(s: &mut Session, a: &Args, seconds: f64, seed: u64) -> Result<Ou
         })
         .collect();
     let every_twice = plays.len() == n && plays.values().all(|(p, _, _)| *p >= 2);
-    let entities_flat = plays.values().all(|(_, first, last)| flat(*first, *last));
+    // (Complete loops only: every vignette in it played once.)
+    let sums: Vec<usize> = loop_entities.iter().filter(|l| l.1 as usize == n).map(|l| l.0).collect();
+    let entities_flat = sums.first().is_none_or(|&first| sums.iter().all(|&s| s as f64 <= first as f64 * 1.1));
     let base = memory.get(1).copied().unwrap_or(0);
     let peak = memory.iter().skip(1).copied().max().unwrap_or(0);
     let memory_flat = base == 0 || (peak as f64) <= base as f64 * 1.1;
     let ok = stalls == 0 && every_twice && entities_flat && memory_flat && nan == 0 && fell == 0;
     Ok(Output::Json(json!({
         "mode": "attract", "seconds": seconds, "seed": seed, "ok": ok,
-        "limits": "vignette_stalls 0, every vignette played at least twice, each vignette's entity count and the memory (from the second loop) flat within 10%, NaN 0, fell through 0",
+        "limits": "vignette_stalls 0, every vignette played at least twice, the entities per loop and the memory (from the second loop) flat within 10%, NaN 0, fell through 0",
         "vignette_stalls": stalls, "anomalies": st.anomalies, "played": st.played, "loops": st.loops,
-        "vignettes": vignettes, "every_vignette_twice": every_twice, "entities_flat": entities_flat,
+        "vignettes": vignettes, "every_vignette_twice": every_twice, "entities_per_loop": sums, "entities_flat": entities_flat,
         "memory_kib_per_loop": memory, "memory_flat": memory_flat,
-        "nan_positions": nan, "fell_through_world": fell,
+        "nan_positions": nan, "fell_through_world": fell, "fallen": fallen,
         "ms_per_tick": (total_ms / ticks.max(1) as f64 * 1000.0).round() / 1000.0,
         "slowest_tick_ms": (slowest * 100.0).round() / 100.0,
     })))
@@ -410,6 +424,9 @@ const BUDGETS: &[(&str, f64, f64)] = &[
     ("triangles", 2_500_000.0, 3_500_000.0),
     ("sdf", 3000.0, 3000.0),
     ("lights", 64.0, 64.0),
+    ("shadow_lights", 4.0, 4.0),
+    ("particles", 30_000.0, 30_000.0),
+    ("entities", 450.0, 450.0),
     ("view_ms", 4.0, 6.0),
     ("sim_ms", 3.0, 3.0),
 ];
@@ -482,6 +499,7 @@ fn t_perf(s: &mut Session, a: &Args) -> Result<Output> {
         let sim_ms = t.elapsed().as_secs_f64() * 1000.0 / ticks as f64;
         stats["view_ms"] = json!((view_ms * 100.0).round() / 100.0);
         stats["sim_ms"] = json!((sim_ms * 1000.0).round() / 1000.0);
+        stats["entities"] = json!(s.sim.state.entities.len());
         if let Some(split) = split {
             stats["view_ms_split"] = split;
         }

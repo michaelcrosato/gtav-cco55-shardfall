@@ -321,6 +321,10 @@ impl Front {
             }
             Page::Main => {
                 let items = self.main_items(ctx.has_save, ctx.web);
+                // (Never resting on a greyed-out item: Continue without a save.)
+                if !items.get(self.main).is_some_and(|i| i.enabled) {
+                    self.main = items.iter().position(|i| i.enabled).unwrap_or(0);
+                }
                 self.main = move_focus(self.main, items.len(), dy, |i| items[i].enabled);
                 if back {
                     self.go(Page::Title, now);
