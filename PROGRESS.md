@@ -150,8 +150,27 @@ resumed or compacted session reads first.
         drawn, settings labels cut off, a "→" in a font without it, the title's bare slope,
         cine shots inside walls, the stunt banner carried into the next vignette, the switch
         vignette standing off-road, "DEMO" shown as a hint.
-- [ ] **M9 Polish** — art, animation, audio mix, UX against the 10-foot rules, accessibility,
-      performance, bug bash.
+- [x] **M9 Polish** — art, animation, audio mix, UX against the 10-foot rules, accessibility,
+      performance, bug bash. *Acceptance (2026-10-25):* every D-item but D14-D15 is true, with
+      the evidence in the DoD table (the analysis table of D16 is in `ENGINE_ANALYSIS.md` §7).
+      - **The passes** (Remaining work → M9 has each with its evidence): the gameplay gaps, the
+        audio mix in six scenes (`out/m9/audio/`), the art pass at every time of day and in
+        every weather (`out/m9/art/`), the vehicle effects (`out/m9/vfx/`), the performance
+        pass with margin (`out/m9/perf/`: every view builds a frame in at most 2.15 ms, budget
+        4, and ticks in at most 2.33 ms, budget 3).
+      - **Animation:** the heavy hook (the fists' `Melee_Hook` clip) and the bat's swing, the
+        vault (a running jump into the ledge grab), the scenario points' sitting, eating and
+        watching clips by who sits there, on top of M3's enter and exit and M5's aim and cover
+        poses (`tests/combat.rs`, `tests/player.rs`; the captures in `out/m10/ui/` and
+        `out/m9/art/`).
+      - **UX at ten feet:** every §5.9 screen captured with the HUD and looked at
+        (`out/m10/ui/`: the gallery's ten pages, the HUD on foot and driving, the phone, the
+        weapon, switch and radio wheels, the gun store, wanted, WASTED, BUSTED, MISSION PASSED
+        with the results, the stunt bonus and its camera, the planning board; `out/m8/front/`:
+        the frontend). The accessibility settings are each read by the game or the host
+        (`tests/frontend.rs`); first-time tips cover the actions.
+      - **Bug bash:** two rounds on five seeds; after the fixes every mission and activity bot
+        wins on seeds 1-5 (Remaining work → M9).
 - [ ] **M10 Release** — builds (native, Windows `.exe`, `dist/GrandTheftFreeway-BX.html`), docs,
       final verification, delivery.
 
@@ -338,9 +357,25 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
       and `gtf perf`'s shadowed lights, particles and entities. Culling unseen vehicles and
       people took downtown's frame build from 5.26 ms to 1.7 ms: every view now builds a frame
       in at most 2.15 ms (budget 4) and ticks in at most 2.33 ms (budget 3) (`out/m9/perf/`).
-- [ ] **Bug bash.** Clear the Open issues. Run the bots on 5 seeds. Edge cases: water (swim;
-      `driving.rs` sinks a car), falling (fall damage), interiors (`landmarks.rs`), switching
-      mid-chase (refused: `protagonists.rs`), saving during heat (refused: `economy.rs`).
+- [x] **Bug bash** (2026-10-25, release; Decisions → M9). Every mission and activity bot ran on
+      five seeds (`GTF_SEEDS=5`).
+      - **Round 1** (`out/m9/bash/`) found three failures: h1 Smart seed 1 (a retry left the
+        mission's van in the truck's road), h1 Loud seed 2 (a one-star patrol car tailed the
+        getaway for 300 s) and the Pretzel Run seed 2 (lost the race, then its retry never
+        finished; with the retry fix the same run's retry wins). It also found a traffic car
+        wedged at the Ditch's turning circle in the seed 1 traffic soak.
+      - **Round 2, after the fixes** (`out/m9/bash2/`):
+        - every story mission and activity suite (12 of 12) wins on seeds 1-5;
+        - the street activities (vigilante, the Purse Snatcher, Getaway Needed) 3 of 3;
+        - every stunt jump landed from its run-up.
+      - **Soaks** on the fixed traffic (`out/m9/bash/`, `out/m9/stuck/`): traffic seeds 1-2,
+        peds seed 1 and roam seeds 1-3 pass with no stuck car.
+      - **Edge cases**, each a test in the default suites:
+        - water: `deep_water_is_swum_in`, `a_car_that_goes_under_lets_the_player_out_to_swim_and_climb_out`;
+        - falling: `a_long_fall_hurts_and_a_short_one_does_not`;
+        - interiors: `landmarks.rs` (5);
+        - switching mid-chase is refused: `the_wheel_will_not_switch_mid_chase`;
+        - saving during heat is refused: `the_safehouse_saves_into_a_slot`.
 
 **M10 release**
 - [ ] **Builds.** `scripts/build-windows.sh` doesn't zip the `.exe`. `pack_single_html.py`
@@ -815,6 +850,16 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
   - **The heist's jump loses the police** (`{ search = true }`, a new mission action): after
     the broken-ramp jump the one remaining star flashes and the search starts at the landing,
     as the mission says ("the jump shook off all but one unit").
+  - **The evasion bot's boxed-in check stays as it was** (tried and dropped in the bug bash):
+    it measures how long the car stays within 3 m of an anchor that moves with it, so a getaway
+    car rocking against a car stopped in a one-lane street resets it (3★ on seed 1 rocked for
+    234 s; Open issues). Measuring the net way made over each 8 s stretch instead got such cars
+    out, but at two stars that bot then left cars it could have kept and was busted on foot
+    (m2 seed 2 lost its retries), and the escape rates did not move. The 3★ rates now: rolling
+    3 of 8 (session 5: 8 of 8 — M9's traffic changes, near misses, angry drivers and scenario
+    points, reshuffled the chases), standing 7 of 8 (was 4-5 of 8); an A/B with the wedged-car
+    rescue off gave the same 3★ results seed for seed. `the_evasion_bot_escapes_three_stars`
+    holds at 3 of its first 5 chases.
   - **PLAN §7.1's commands** work as written: `teleport <anchor>` (`landmark:bank`, `spot:`,
     `at:x,z`), `heat N` (= `wanted N`), `give weapon <id>` (= `give <id>`) and `validate` (every
     content file and mission checked, the same function `tests/content.rs` asserts on).
@@ -843,8 +888,16 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 - ~~Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround~~ fixed in
   M9: cars wedged out of view are put on rails through it (Decisions → M9). The bug bash's
   roam soaks on seeds 1-3 pass with no stuck car; AI crashes 0-2 per 900 s.
-- Evasion bot at 3★ (`evasion_rate`, session 5): rolling 8/8, from a standstill 4/8 (pinned by
-  a PIT, or caught getting going). The 3★ test passes. M9: fast-road routing from a standstill.
+- Evasion bot at 3★ (`evasion_rate`, M9's bug bash): rolling 3/8 (it was 8/8 in session 5;
+  M9's traffic changes reshuffled the chases), from a standstill 7/8 (it was 4-5/8). The ones
+  lost are shot after long tails or boxed in early, and one (seed 1, rolling) rocks for minutes
+  against a car stopped in a one-lane street, its boxed-in check reset by every rock. The test
+  holds at 3 of its first 5 chases. Tried in the bug bash and dropped (Decisions → M9): driving
+  the open road harder with a unit on the tail, preferring fast roads, and a boxed-in check on
+  net progress (it got the rocking car out, but at 2★ the bot was then busted on foot).
+- **The death camera after a fall beside a building** can sit against the wall (the WASTED
+  card over a close view of the facade, `out/m10/ui/live_09_wasted_b.png`); the card reads, the
+  view is just dull.
 - Vigilante: getaway cars take turns at 1.375 times the safe speed (only the autopilot and cars
   with a goal are held to it), so on a winding route the bot rarely closes in and a long chase
   is what costs a run (seeds 1-3 win since the placed-car rule; seed 6 of 1-8 ran out level 3's
