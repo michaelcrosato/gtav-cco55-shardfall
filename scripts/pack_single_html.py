@@ -2,14 +2,14 @@
 """Packs the browser build into one self-contained HTML page: no other files, no network loads.
 
 usage: python3 -I scripts/pack_single_html.py BINDGEN_DIR [--title T] [--description D]
-           [--theme-color C] [--scene NAME] [--out PATH]
+           [--theme-color C] [--scene NAME] [--header FILE] [--out PATH]
 
 BINDGEN_DIR is wasm-bindgen's output (shardfall.js, shardfall_bg.wasm); scripts/build-web.sh
 --single-file makes it and runs this. The page is web/index.html with the options written into
 its <title>, <meta name=description> and <meta name=theme-color> (left as they are when not
-given), the manifest link dropped, and, before </body>, the gzipped wasm as base64 text, a
-loader that sets window.loadGame (index.html's script calls it when set) and the JS glue as an
-inline module script. The loader shows a progress line, bakes in --scene (used when the address
+given), --header's text as a comment at the top, the manifest link dropped, and, before
+</body>, the gzipped wasm as base64 text, a loader that sets window.loadGame (index.html's
+script calls it when set) and the JS glue as an inline module script. The loader shows a progress line, bakes in --scene (used when the address
 names no room or scene) and unpacks with the browser's DecompressionStream. No blob: or data:
 URLs are needed. Out: target/web/<title>.html.
 """
@@ -94,6 +94,7 @@ def main():
     ap.add_argument("--description", help="<meta name=description> (default: index.html's)")
     ap.add_argument("--theme-color", help="<meta name=theme-color> (default: index.html's)")
     ap.add_argument("--scene", help="start scene when the address names no room or scene (default: the game's)")
+    ap.add_argument("--header", type=pathlib.Path, help="a text file put at the top of the page as an HTML comment")
     ap.add_argument("--out", type=pathlib.Path, help="output file (default: target/web/<title>.html)")
     a = ap.parse_args()
 
@@ -123,6 +124,10 @@ def main():
                 lambda m, name=name, value=value: f'<meta name="{name}" content="{html.escape(value)}">',
                 f"<meta name={name}>",
             )
+    if a.header is not None:
+        # (A comment cannot hold "--": spaced apart, the text still reads.)
+        text = a.header.read_text(encoding="utf-8").strip().replace("--", "- -")
+        page = replace_one(page, r"(?i)<!doctype html>\n", lambda m: f"{m[0]}<!--\n{text}\n-->\n", "<!doctype html>")
     # A manifest is another file to load: the single page goes without one.
     page = replace_one(page, r'[ \t]*<link rel="manifest"[^>]*>\n', lambda m: "", "manifest link")
 
