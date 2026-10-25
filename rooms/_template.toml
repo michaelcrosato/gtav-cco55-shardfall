@@ -272,6 +272,10 @@ body = "dynamic"                # dynamic | fixed | kinematic | none
 # tail_length, antenna_length), animation (stride, step_height, step_time, squash, lean, wobble,
 # anim_fps = 12 for "on twos") and look = "cel" | "flat" | "lit" | "cutout". A biped can hold a
 # library object by its grip socket: look = { weapon = { kind = "staff", asset = "LIB/core/mage_staff" } }.
+# A biped's hair = buzz | short | long | bun | ponytail | curly | afro | bald (hair_color = "#..";
+# beard = stubble | mustache | goatee | full; neck = metres) and what it wears: gear = { helm =
+# cap | ballcap | hardhat | tactical | hood (helm_color), glasses = "#..", bag = backpack |
+# shoulder (bag_color), badge = "#..", vest = "#..", tie = "#.." } (docs/REFERENCE.md, "Characters").
 # Performers: clips = ["SET/Clip", ...] (the clips tool lists them), moves = [...], hold = 5 (s).
 # seat = "chair" sits it on the room object named chair through that prop's sit socket (its
 # pos and yaw are ignored; give it a sitting clip first, and the seat body = "none").

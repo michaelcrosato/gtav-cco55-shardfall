@@ -33,6 +33,14 @@ impl Rng {
     pub fn below(&mut self, n: u32) -> u32 {
         if n == 0 { 0 } else { self.next_u32() % n }
     }
+
+    /// A generator of its own, seeded from this one's state and `salt`, leaving this one where
+    /// it is: for choices added to old content (a look's hair and accessories) that must not
+    /// shift the draws after them. Deterministic like the rest: the same state and salt give
+    /// the same stream.
+    pub fn fork(&self, salt: u64) -> Rng {
+        Rng::new(hash3(self.state ^ salt, (self.inc >> 1) as i32, (self.inc >> 33) as i32, 0x5eed))
+    }
 }
 
 /// Stateless hash for seed-derived procedural content (terrain, placement).
@@ -49,4 +57,21 @@ pub fn hash3(seed: u64, x: i32, y: i32, z: i32) -> u64 {
 /// Hash to a float in [0, 1).
 pub fn hash_f32(seed: u64, x: i32, y: i32, z: i32) -> f32 {
     (hash3(seed, x, y, z) >> 40) as f32 / (1u64 << 24) as f32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_fork_leaves_the_stream_alone_and_differs_by_state_and_salt() {
+        let mut a = Rng::new(7);
+        let mut b = Rng::new(7);
+        let mut f = a.fork(1);
+        assert_eq!(a.next_u32(), b.next_u32(), "forking draws nothing");
+        let mut g = a.fork(1);
+        assert_ne!(f.next_u32(), g.next_u32(), "a later state forks another stream");
+        assert_eq!(a.fork(2).next_u32(), a.fork(2).next_u32(), "the same state and salt, the same stream");
+        assert_ne!(a.fork(2).next_u32(), a.fork(3).next_u32());
+    }
 }

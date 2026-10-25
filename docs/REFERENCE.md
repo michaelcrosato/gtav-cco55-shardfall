@@ -28,7 +28,10 @@ crates/
               plans biped/spider/lizard/beetle/blob/quadruped, procedural animation, hit recoil,
               creature lunges, foot IK, legs that stride the way the body travels, idle breathing
               and blinks, cutout look and camera cheats; the biped is a `Skel` of joints that the
-              procedural animation, moves and clips each produce and `dress` turns into parts),
+              procedural animation, moves and clips each produce and `dress` turns into parts,
+              so what it wears follows every animation: hair styles and beards under headwear,
+              caps, hard hats, tactical helmets, sunglasses, bags, badges, vests, ties —
+              "Characters" below),
               moves.rs (attacks and gestures as data, anim/moves.toml: arcs around the shoulders,
               wind-up from wherever the hands were, strikes with lunge/lean/twist/hop/spin,
               follow-through; skills name a move, a look may name its own per skill and combo
@@ -468,13 +471,33 @@ it sinks and the engine drowns.
 - **Feel:** `vehicle::feel::run(&def, &Test::ALL)` builds test tracks in an empty world (a 4 km
   slab, a 15% grade, a 12 m kicker) and measures 0–100 km/h (80% of top speed for slower
   vehicles), top speed, braking, skidpad g, handbrake slide, the climb and the jump.
-- **Drawing** (`pav_view::vehicles`): a `body_asset` prop placed on the ground under the centre,
-  its door parts (`door_l`, `door_r`, or a group) swung by the doors, parts in a dented zone
-  pushed in, lamp parts lit by state (`head_*`, `tail_*` brighter braking, `rev_*`, `siren_*`
-  red and blue in turn); `wheel_asset` at each wheel (authored at 0.33 m radius, hub toward
-  +x); busts in taken seats; smoke and fire by damage. Without a body prop: the box, a cabin,
-  wheels and lamps. `pav_view::assets::emit_asset_tweaked` draws any asset with per-part
-  turns, offsets and glow.
+- **Drawing** (`pav_view::vehicles`): a `body_asset` prop (a car's or a helicopter's) placed on
+  the ground under the centre, its door parts (`door_l`, `door_r`, or a group) swung by the
+  doors, parts in a dented zone pushed in, lamp parts lit by state (`head_*`, `tail_*` brighter
+  braking, `rev_*`, `siren_*` red and blue in turn); `wheel_asset` at each wheel (authored at
+  0.33 m radius, hub toward +x); busts in taken seats; smoke and fire by damage. A
+  helicopter's body turns its `rotor` group by `VehicleView::rotor` about the mast (up through
+  the group's middle) and its `tail_rotor` group 1.7 times as fast about its own axle (the way
+  the group is thinnest); crewed, its `beacon*` parts blink and `nav*` lights glow. Without a
+  body prop (or when it is missing): the box with a cabin, wheels and lamps, or a helicopter's
+  cockpit, tail, crossed blades and skids. `pav_view::assets::emit_asset_tweaked` draws any
+  asset with per-part turns, offsets and glow.
+
+## Characters
+The biped (`pav_core::puppet::PuppetDef`; a room's `look = { .. }`, a game's own looks) is
+built from its proportions (`head_radius`, `neck` — 0 keeps 0.55 × the head radius —
+`torso_length`, `leg_length`, ...) and dressed in `dress`, from the skeleton every animation
+path produces (procedural, moves, clips, low-detail characters alike), so what it wears follows
+the head and torso. `hair` = `buzz | short | long | bun | ponytail | curly | afro | bald` in
+`hair_color` (a cap of hair with its hairline above the eyes, plus a hanging part, bun or a
+tail that swings as it walks), `beard` = `stubble | mustache | goatee | full`. `gear`: `helm` =
+`cap` (a beanie) `| ballcap | hardhat | tactical | hood` and Shardfall's armour helms; under
+headwear only the hair at the nape shows (and long hair or a ponytail below it), a hood hides it
+all. `glasses` (a colour: sunglasses in place of the eyes), `bag = backpack | shoulder` with
+`bag_color`, `badge`, `vest` and `tie` (colours; empty = none). Each is a few rounded cones; the
+new fields are left out of a look's serialization while unset, so older looks keep their bytes.
+`Rng::fork(salt)` gives choices added to old content (a crowd's hair and accessories) a stream of
+their own without shifting the draws after them.
 
 ## Radio and voices
 A station is data (`pav_core::radio::StationDef`: genre, tempo range, seed, slot length, title

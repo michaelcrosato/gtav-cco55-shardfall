@@ -90,10 +90,82 @@ choice_enum! {
         Halo => "halo",
         /// A cloth hood with a drape down the back (townsfolk).
         Hood => "hood",
+        /// A baseball cap: a crown over the top of the head and a visor out front.
+        Ballcap => "ballcap",
+        /// A builder's hard hat: a high dome with a peak.
+        Hardhat => "hardhat",
+        /// A modern ballistic helmet (police tactical units, soldiers), goggles on its brow.
+        Tactical => "tactical",
     }
 }
 
-/// Worn armour's look: helmet, shoulder plates, cape, gloves, belt buckle.
+impl HelmKind {
+    /// Headwear that hides the top of the head (hair shows only below it).
+    pub fn covers_crown(self) -> bool {
+        !matches!(self, HelmKind::None | HelmKind::Crown | HelmKind::Halo)
+    }
+}
+
+choice_enum! {
+    /// Hair (bipeds), drawn over the head in `PuppetDef::hair_color`. Headwear hides what it
+    /// covers: under a hat or helmet only the hair at the nape shows, with a ponytail or long
+    /// hair hanging below it; a hood hides it all.
+    #[derive(Default)]
+    pub enum HairStyle {
+        /// No hair drawn (the head as it is).
+        #[default]
+        None => "none",
+        /// Close-cropped all over.
+        Buzz => "buzz",
+        Short => "short",
+        /// Down to the shoulders.
+        Long => "long",
+        /// Gathered in a bun on the back of the crown.
+        Bun => "bun",
+        /// Tied back in a tail that swings as the character walks.
+        Ponytail => "ponytail",
+        /// Thick, close curls.
+        Curly => "curly",
+        Afro => "afro",
+        /// Bald on top, a fringe round the back.
+        Bald => "bald",
+    }
+}
+
+choice_enum! {
+    /// Facial hair (bipeds), in the hair's colour.
+    #[derive(Default)]
+    pub enum BeardStyle {
+        #[default]
+        None => "none",
+        /// A shadow over the jaw and chin.
+        Stubble => "stubble",
+        Mustache => "mustache",
+        /// A tuft on the chin and a mustache.
+        Goatee => "goatee",
+        Full => "full",
+    }
+}
+
+choice_enum! {
+    /// A bag a biped carries.
+    #[derive(Default)]
+    pub enum BagKind {
+        #[default]
+        None => "none",
+        /// On the back, its straps over both shoulders.
+        Backpack => "backpack",
+        /// At the hip, its strap across the chest from the other shoulder.
+        Shoulder => "shoulder",
+    }
+}
+
+fn is_default<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
+/// Worn armour's look: helmet, shoulder plates, cape, gloves, belt buckle; and clothes'
+/// accessories: sunglasses, a bag, a badge, a vest, a tie.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GearLook {
@@ -110,6 +182,23 @@ pub struct GearLook {
     pub belt: String,
     /// Enchanted shine on the helmet.
     pub glow: f32,
+    /// Sunglasses' colour ("" = none): one dark band over both eyes (bipeds).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub glasses: String,
+    /// A bag (bipeds) and its colour ("" = a dark brown).
+    #[serde(skip_serializing_if = "is_default")]
+    pub bag: BagKind,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub bag_color: String,
+    /// A badge on the left of the chest, its colour ("" = none): police, security, rangers.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub badge: String,
+    /// A vest over the torso, its colour ("" = none): body armour, a high-visibility vest.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub vest: String,
+    /// A tie down the front of the shirt, its colour ("" = none).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub tie: String,
 }
 
 impl Default for GearLook {
@@ -124,6 +213,12 @@ impl Default for GearLook {
             gloves: String::new(),
             belt: String::new(),
             glow: 0.0,
+            glasses: String::new(),
+            bag: BagKind::None,
+            bag_color: String::new(),
+            badge: String::new(),
+            vest: String::new(),
+            tie: String::new(),
         }
     }
 }
@@ -154,6 +249,10 @@ choice_enum! {
 pub struct PuppetDef {
     pub scale: f32,
     pub head_radius: f32,
+    /// From the shoulder line to the base of the skull (m; 0 = 0.55 × `head_radius`): a
+    /// smaller head on a longer neck keeps clear of the shoulders (bipeds).
+    #[serde(skip_serializing_if = "is_default")]
+    pub neck: f32,
     pub torso_length: f32,
     pub torso_radius: f32,
     pub hip_width: f32,
@@ -198,8 +297,15 @@ pub struct PuppetDef {
     pub accent: String,
     /// Held weapon and off hand.
     pub weapon: WeaponLook,
-    /// Worn armour.
+    /// Worn armour and accessories.
     pub gear: GearLook,
+    /// Hair, its colour ("" = a dark brown) and facial hair, in the hair's colour (bipeds).
+    #[serde(skip_serializing_if = "is_default")]
+    pub hair: HairStyle,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub hair_color: String,
+    #[serde(skip_serializing_if = "is_default")]
+    pub beard: BeardStyle,
     /// Horns, spikes, wings... (any body plan).
     pub parts: Vec<crate::parts::Attach>,
     /// A motion clip (`SET/Clip`, see the `clips` tool) the character plays while it stands
@@ -286,6 +392,7 @@ impl Default for PuppetDef {
         Self {
             scale: 1.0,
             head_radius: 0.21,
+            neck: 0.0,
             torso_length: 0.42,
             torso_radius: 0.19,
             hip_width: 0.11,
@@ -318,6 +425,9 @@ impl Default for PuppetDef {
             accent: "#3a3f4b".into(),
             weapon: WeaponLook::default(),
             gear: GearLook::default(),
+            hair: HairStyle::None,
+            hair_color: String::new(),
+            beard: BeardStyle::None,
             parts: Vec::new(),
             idle_clip: String::new(),
             walk_clip: String::new(),
@@ -333,9 +443,15 @@ impl Default for PuppetDef {
 
 impl PuppetDef {
     /// Whether `key` is a look setting: a field of the serialized puppet `table`, or one the
-    /// serialization leaves out while empty (`figure`, so looks without one keep their bytes).
+    /// serialization leaves out while empty (`figure`, `neck`, the hair: so looks without them
+    /// keep their bytes).
     pub fn is_look_setting(table: &toml::Table, key: &str) -> bool {
-        table.contains_key(key) || key == "figure"
+        table.contains_key(key) || matches!(key, "figure" | "neck" | "hair" | "hair_color" | "beard")
+    }
+
+    /// The neck's length before `scale` (m): `neck`, or 0.55 × `head_radius` when unset.
+    pub fn neck_length(&self) -> f32 {
+        if self.neck > 0.0 { self.neck } else { self.head_radius * 0.55 }
     }
 
     /// Sensible proportions and colours for a body plan.
@@ -1134,7 +1250,7 @@ pub fn procedural(def: &PuppetDef, st: &PuppetState, table: &crate::moves::MoveT
         .lerp(Vec3::new(0.0, 0.45, 1.0).normalize(), swim)
         .normalize();
     let chest = pelvis + torso_dir * def.torso_length * k * (1.0 + 0.012 * breath * still);
-    let neck = chest + torso_dir * (hr * 0.55);
+    let neck = chest + torso_dir * (def.neck_length() * k);
     // The head snaps a little further than the torso on a hit.
     let head_dir = (torso_dir + Vec3::new(st.hit_side, 0.0, st.hit_fwd) * 0.6).normalize();
     let head = neck + head_dir.lerp(Vec3::new(0.0, 0.5, 1.0).normalize(), crawl) * hr * 0.95;
@@ -1313,14 +1429,52 @@ fn dress(def: &PuppetDef, st: &PuppetState, sk: &Skel, feet: Vec3, cam_fwd: Vec3
     push(pelvis, chest, tr * 0.92, tr, shirt);
     push(head, head, hr, hr, skin);
     let gear = &def.gear;
+    // The head's frame: up through the crown, the face's forward and across.
+    let hu = sk.crown;
+    let (f, x) = (hq * Vec3::Z, hq * Vec3::X);
+    if def.hair != HairStyle::None || def.beard != BeardStyle::None {
+        let fwd = (f - hu * f.dot(hu)).normalize_or(f);
+        let frame = HeadFrame { c: head, r: hr, up: hu, fwd, side: hu.cross(fwd).normalize_or(x) };
+        // Long hair falls to the top of the back, between the shoulder blades.
+        let back = chest + cr * Vec3::new(0.0, 0.04 * k, -tr * 0.6);
+        let sway = (cyc * 2.0).sin() * walk;
+        hair(def, &frame, back, sway, skin, &mut push);
+    }
+    if !gear.vest.is_empty() {
+        // Over the shirt from the waist to the chest, a little proud of it.
+        let c = Color::try_hex(&gear.vest).unwrap_or(Color::hex("#2a2d33"));
+        push(pelvis + torso_dir * 0.1 * k, chest - torso_dir * 0.06 * k, tr * 1.0, tr * 1.07, c);
+    }
     glow_now.set(gear.glow);
     if gear.helm != HelmKind::None {
         let hc = Color::try_hex(&gear.helm_color).unwrap_or(Color::hex("#8a8f99"));
         let gold = Color::hex("#e8c45a");
-        let hu = sk.crown;
-        let (f, x) = (hq * Vec3::Z, hq * Vec3::X);
         match gear.helm {
             HelmKind::Cap => push(head + hu * hr * 0.3, head + hu * hr * 0.3, hr * 0.9, hr * 0.9, hc),
+            HelmKind::Ballcap => {
+                // The crown, and a visor of two rounded bars out over the brow.
+                let c = head + hu * hr * 0.24 - f * hr * 0.05;
+                push(c, c, hr * 0.94, hr * 0.94, hc);
+                for s in [-1.0f32, 1.0] {
+                    let root = head + hu * hr * 0.44 + f * hr * 0.66 + x * s * hr * 0.27;
+                    push(root, root + f * hr * 0.55 - hu * hr * 0.1, hr * 0.13, hr * 0.11, hc);
+                }
+            }
+            HelmKind::Hardhat => {
+                // A high dome with a ridge over the top and a peak out front.
+                let c = head + hu * hr * 0.36 - f * hr * 0.04;
+                push(c, c, hr * 0.98, hr * 0.98, hc);
+                push(c + hu * hr * 0.94 + f * hr * 0.4, c + hu * hr * 0.94 - f * hr * 0.4, hr * 0.1, hr * 0.1, hc);
+                let peak = head + hu * hr * 0.34 + f * hr * 1.06;
+                push(peak - x * hr * 0.36, peak + x * hr * 0.36, hr * 0.11, hr * 0.11, hc);
+            }
+            HelmKind::Tactical => {
+                // A dome down over the ears and the nape, its brim above the eyes; goggles on it.
+                let c = head + hu * hr * 0.2 - f * hr * 0.18;
+                push(c, c, hr * 1.08, hr * 1.08, hc);
+                let g = head + hu * hr * 0.62 + f * hr * 0.8;
+                push(g - x * hr * 0.42, g + x * hr * 0.42, hr * 0.15, hr * 0.15, Color::hex("#454c57"));
+            }
             HelmKind::Hood => {
                 let c = head + hu * hr * 0.2 - f * hr * 0.32;
                 push(c, c, hr * 1.12, hr * 1.12, hc);
@@ -1409,6 +1563,58 @@ fn dress(def: &PuppetDef, st: &PuppetState, sk: &Skel, feet: Vec3, cam_fwd: Vec3
         let at = pelvis + torso_dir * def.torso_length * k * 0.12 + pr * Vec3::Z * tr * 0.92;
         push(at, at, lr * 0.75, lr * 0.75, b);
     }
+    // The chest's front surface `h` of the way up the torso (0 the waist, 1 the shoulder line),
+    // `across` of the way out to the side.
+    let front = |h: f32, across: f32| {
+        let at = pelvis.lerp(chest, h) + cr * Vec3::new(across * tr, 0.0, 0.0);
+        at + cr
+            * Vec3::Z
+            * (tr * (0.92 + 0.08 * h) * (1.0 - across * across).max(0.0).sqrt()
+                + if gear.vest.is_empty() { 0.0 } else { tr * 0.07 })
+    };
+    if !gear.badge.is_empty() {
+        let c = Color::try_hex(&gear.badge).unwrap_or(Color::hex("#d4af37"));
+        let at = front(0.78, -0.42);
+        push(at, at, 0.024 * k, 0.024 * k, c);
+    }
+    if !gear.tie.is_empty() {
+        let c = Color::try_hex(&gear.tie).unwrap_or(Color::hex("#7a1f2b"));
+        let (top, bottom) = (front(0.92, 0.0), front(0.36, 0.0));
+        push(top, top, 0.032 * k, 0.032 * k, c);
+        push(top, bottom, 0.022 * k, 0.03 * k, c);
+    }
+    if gear.bag != BagKind::None {
+        let c = Color::try_hex(&gear.bag_color).unwrap_or(Color::hex("#4a3424"));
+        let strap = c.scale(0.7);
+        let back = cr * Vec3::NEG_Z;
+        match gear.bag {
+            BagKind::Backpack => {
+                // A pack on the back, its straps over the shoulders to the chest.
+                let top = chest - torso_dir * 0.08 * k + back * (tr * 0.95 + 0.055 * k);
+                let bottom = pelvis.lerp(chest, 0.3) + back * (tr * 0.9 + 0.06 * k);
+                push(top, bottom, 0.105 * k, 0.115 * k, c);
+                for s in [-1.0f32, 1.0] {
+                    // Down the front from the top of the shoulder, standing off the shirt.
+                    let over = chest + cr * (Vec3::new(s * 0.5, 0.75, 0.6).normalize() * tr * 1.12);
+                    let low = front(0.55, s * 0.55) + cr * Vec3::Z * 0.02 * k;
+                    push(over, low, 0.024 * k, 0.024 * k, strap);
+                }
+            }
+            BagKind::Shoulder => {
+                // At the right hip, a little behind; its strap from the left shoulder across the
+                // chest.
+                let side = def.hip_width * k + lr * 1.25 + 0.065 * k;
+                let at = pelvis + pr * Vec3::new(side, 0.0, -0.07 * k);
+                let along = pr * Vec3::Z * 0.085 * k;
+                push(at - along, at + along, 0.07 * k, 0.07 * k, c);
+                let over = chest + cr * Vec3::new(-def.shoulder_width * k * 0.62, 0.035 * k, 0.0);
+                let mid = front(0.55, 0.3);
+                push(over, mid, 0.018 * k, 0.018 * k, strap);
+                push(mid, at + pr * Vec3::Y * 0.06 * k, 0.018 * k, 0.018 * k, strap);
+            }
+            BagKind::None => {}
+        }
+    }
     if gear.cape > 0.0 {
         // The cape hangs from the back of the shoulders and streams out behind as the body moves.
         let cc = Color::try_hex(&gear.cape_color).unwrap_or(Color::hex("#3a2f4a"));
@@ -1467,14 +1673,24 @@ fn dress(def: &PuppetDef, st: &PuppetState, sk: &Skel, feet: Vec3, cam_fwd: Vec3
     let face_dir = (Vec3::Z * (1.0 - cam_up) + Vec3::Y * cam_up * 1.2).normalize();
     let face_dir = face_dir.lerp(Vec3::new(0.0, 0.3 + cam_up * 0.5, 1.0).normalize(), st.crawl).normalize();
     let out = if def.gear.helm == HelmKind::Great { 1.13 } else { 0.9 };
-    for s in [-1.0f32, 1.0] {
-        let side = Vec3::new(s * 0.36, 0.08, 0.0) * hr;
-        let e = head + hq * ((face_dir * hr * 0.93 + side).normalize() * hr * out);
-        if sk.blink > 0.5 {
-            let x = hq * Vec3::X * hr * 0.12;
-            push(e - x, e + x, hr * 0.06, hr * 0.06, eyes);
-        } else {
-            push(e, e, hr * 0.17, hr * 0.17, eyes);
+    let eye = |s: f32| head + hq * ((face_dir * hr * 0.93 + Vec3::new(s * 0.36, 0.08, 0.0) * hr).normalize() * hr * out);
+    match Color::try_hex(&def.gear.glasses) {
+        // Sunglasses: one dark band over both eyes, standing off the face.
+        Some(c) if def.gear.helm != HelmKind::Great => {
+            let (l, r) = (eye(-1.0), eye(1.0));
+            let off = ((l + r) * 0.5 - head).normalize_or(hq * Vec3::Z) * hr * 0.06;
+            push(l + off, r + off, hr * 0.2, hr * 0.2, c);
+        }
+        _ => {
+            for s in [-1.0f32, 1.0] {
+                let e = eye(s);
+                if sk.blink > 0.5 {
+                    let x = hq * Vec3::X * hr * 0.12;
+                    push(e - x, e + x, hr * 0.06, hr * 0.06, eyes);
+                } else {
+                    push(e, e, hr * 0.17, hr * 0.17, eyes);
+                }
+            }
         }
     }
     parts.extend(held_parts);
@@ -1489,6 +1705,93 @@ fn dress(def: &PuppetDef, st: &PuppetState, sk: &Skel, feet: Vec3, cam_fwd: Vec3
         span = span.map(|(a, b)| (pivot + q * (a - pivot), pivot + q * (b - pivot)));
     }
     (parts, span)
+}
+
+/// The head as hair sees it: its centre and radius, up through the crown, the face's forward
+/// and across (character space).
+struct HeadFrame {
+    c: Vec3,
+    r: f32,
+    up: Vec3,
+    fwd: Vec3,
+    side: Vec3,
+}
+
+/// A sphere over the cap of a unit head round `dir` (unit) out to `theta` radians from it,
+/// standing `t` proud at its middle and meeting the head at its edge: (centre, radius).
+fn cap(dir: Vec3, theta: f32, t: f32) -> (Vec3, f32) {
+    let m = (t + t * t * 0.5) / (1.0 + t - theta.cos());
+    (dir * m, 1.0 + t - m)
+}
+
+/// Hair and beard (`def.hair`, `def.beard`) about head `h`, under whatever `def.gear.helm`
+/// covers: `back` is the point long hair falls to, `sway` (-1..1) swings a ponytail, `skin`
+/// shades stubble. A few parts each: a cap of hair (hairlines from about 35° above the eyes at
+/// the front to below the ears at the back), and a hanging part, bun or tail.
+fn hair(def: &PuppetDef, h: &HeadFrame, back: Vec3, sway: f32, skin: Color, push: &mut dyn FnMut(Vec3, Vec3, f32, f32, Color)) {
+    let hc = Color::try_hex(&def.hair_color).unwrap_or(Color::hex("#3b2a20"));
+    let helm = def.gear.helm;
+    let at = |v: Vec3| h.c + v * h.r;
+    // Straight up tilted back by `deg` degrees.
+    let tilt = |deg: f32| {
+        let (s, c) = deg.to_radians().sin_cos();
+        (h.up * c - h.fwd * s).normalize()
+    };
+    let ball = |push: &mut dyn FnMut(Vec3, Vec3, f32, f32, Color), dir: Vec3, theta: f32, t: f32, color: Color| {
+        let (c, r) = cap(dir, theta.to_radians(), t);
+        push(at(c), at(c), r * h.r, r * h.r, color);
+    };
+    let style = def.hair;
+    if helm != HelmKind::Hood && style != HairStyle::None {
+        let nape = (-h.fwd - h.up * 0.36).normalize();
+        if helm.covers_crown() {
+            // Under headwear only the hair at the nape shows.
+            let thick = if matches!(style, HairStyle::Curly | HairStyle::Afro) { 0.15 } else { 0.07 };
+            ball(push, nape, 45.0, thick, hc);
+        } else {
+            match style {
+                HairStyle::Buzz => ball(push, tilt(31.5), 83.5, 0.05, hc),
+                HairStyle::Short => ball(push, tilt(37.5), 87.5, 0.13, hc),
+                HairStyle::Curly => ball(push, tilt(39.0), 93.0, 0.3, hc),
+                HairStyle::Afro => ball(push, tilt(47.0), 103.0, 0.75, hc),
+                HairStyle::Long | HairStyle::Bun | HairStyle::Ponytail => ball(push, tilt(34.0), 86.0, 0.1, hc),
+                HairStyle::Bald => ball(push, (-h.fwd - h.up * 0.27).normalize(), 62.0, 0.07, hc),
+                HairStyle::None => {}
+            }
+        }
+        match style {
+            HairStyle::Long => push(at(h.up * 0.12 - h.fwd * 0.42), back, h.r * 0.92, h.r * 0.62, hc),
+            HairStyle::Bun if !helm.covers_crown() => {
+                let c = at(h.up * 0.72 - h.fwd * 0.62);
+                push(c, c, h.r * 0.36, h.r * 0.36, hc);
+            }
+            HairStyle::Ponytail => {
+                // Out of the back of the crown (or the cap's strap), hanging back and down.
+                let root = at(h.up * if helm.covers_crown() { 0.25 } else { 0.5 } - h.fwd * 0.95);
+                let hang = (-h.up * 0.5 - Vec3::Y * 0.35 - h.fwd * 0.55 + h.side * sway * 0.3).normalize();
+                push(root, root + hang * h.r * 1.55, h.r * 0.27, h.r * 0.15, hc);
+            }
+            _ => {}
+        }
+    }
+    if helm == HelmKind::Great {
+        return;
+    }
+    let mustache = |push: &mut dyn FnMut(Vec3, Vec3, f32, f32, Color)| {
+        let end = |s: f32| at(-h.up * 0.36 + h.fwd * 0.9 + h.side * s * 0.32);
+        push(end(-1.0), end(1.0), h.r * 0.09, h.r * 0.09, hc);
+    };
+    match def.beard {
+        BeardStyle::Stubble => ball(push, (h.fwd - h.up * 1.1).normalize(), 42.0, 0.035, skin.lerp(hc, 0.45)),
+        BeardStyle::Full => ball(push, (h.fwd - h.up).normalize(), 47.0, 0.17, hc),
+        BeardStyle::Goatee => {
+            let chin = at(-h.up * 0.72 + h.fwd * 0.6);
+            push(chin, chin, h.r * 0.27, h.r * 0.27, hc);
+            mustache(push);
+        }
+        BeardStyle::Mustache => mustache(push),
+        BeardStyle::None => {}
+    }
 }
 
 /// Reach of a weapon from the hand to its tip (before size and scale).
@@ -1613,6 +1916,149 @@ mod tests {
             def.look = Look::Cutout;
             let flat = pose(&def, &PuppetState::default(), None, Vec3::ZERO, Vec3::new(0.0, -0.5, -0.86).normalize());
             assert!(flat.iter().all(|p| p.a.is_finite() && p.b.is_finite()));
+        }
+    }
+
+    /// A biped with a small head on a long neck, as a game with believable people builds one.
+    fn person() -> PuppetDef {
+        PuppetDef {
+            head_radius: 0.13,
+            neck: 0.12,
+            torso_length: 0.47,
+            leg_length: 0.9,
+            eyes_to_camera: 0.3,
+            ..Default::default()
+        }
+    }
+
+    fn colored(parts: &[PuppetPart], hex: &str) -> Vec<PuppetPart> {
+        let c = Color::hex(hex);
+        parts.iter().filter(|p| p.color == c).copied().collect()
+    }
+
+    #[test]
+    fn looks_without_the_new_fields_read_and_write_as_before() {
+        let old = toml::Table::try_from(PuppetDef::default()).unwrap();
+        for key in ["hair", "hair_color", "beard", "neck"] {
+            assert!(!old.contains_key(key), "{key} is left out while unset");
+            assert!(PuppetDef::is_look_setting(&old, key), "a room's look may set {key}");
+        }
+        let gear = old["gear"].as_table().unwrap();
+        for key in ["glasses", "bag", "bag_color", "badge", "vest", "tie"] {
+            assert!(!gear.contains_key(key), "gear.{key} is left out while unset");
+        }
+        // A look written before them reads with none of them.
+        let back: PuppetDef = toml::Value::Table(old).try_into().unwrap();
+        assert_eq!(back, PuppetDef::default());
+    }
+
+    #[test]
+    fn a_longer_neck_lifts_the_head_and_unset_keeps_the_old_one() {
+        let st = PuppetState::default();
+        let old = biped_skel(&PuppetDef::default(), &st);
+        let unset = PuppetDef { neck: 0.0, ..Default::default() };
+        assert_eq!(biped_skel(&unset, &st).head, old.head, "neck 0 is 0.55 × the head radius, as before");
+        let long = PuppetDef { neck: 0.3, ..Default::default() };
+        let lifted = biped_skel(&long, &st).head.y - old.head.y;
+        assert!((lifted - (0.3 - 0.21 * 0.55)).abs() < 1e-4, "{lifted}");
+    }
+
+    #[test]
+    fn every_hair_style_and_accessory_dresses_a_biped_near_where_it_belongs() {
+        let st = PuppetState::default();
+        let bare = pose(&person(), &st, None, Vec3::ZERO, Vec3::NEG_Z);
+        let head = bare[1];
+        for (i, name) in HairStyle::NAMES.iter().enumerate() {
+            let style = HairStyle::from_index(i);
+            let def = PuppetDef { hair: style, hair_color: "#123456".into(), ..person() };
+            let hair = colored(&pose(&def, &st, None, Vec3::ZERO, Vec3::NEG_Z), "#123456");
+            let want = match style {
+                HairStyle::None => 0,
+                HairStyle::Long | HairStyle::Bun | HairStyle::Ponytail => 2,
+                _ => 1,
+            };
+            assert_eq!(hair.len(), want, "{name}: parts");
+            for p in &hair {
+                assert!(p.a.distance(head.a) < head.ra * 3.2 && p.ra < head.ra * 1.5, "{name}: by the head");
+            }
+        }
+        for beard in [BeardStyle::Stubble, BeardStyle::Mustache, BeardStyle::Goatee, BeardStyle::Full] {
+            let def = PuppetDef { beard, hair_color: "#123456".into(), ..person() };
+            let parts = pose(&def, &st, None, Vec3::ZERO, Vec3::NEG_Z);
+            let tuft = parts.len() - bare.len();
+            assert!((1..=2).contains(&tuft), "{beard:?}: {tuft} parts");
+            // Below the eyes and in front of the head's centre.
+            for p in &parts[2..2 + tuft] {
+                assert!(p.a.y < head.a.y && p.a.z > head.a.z - 0.01, "{beard:?}");
+            }
+        }
+        // Accessories: a handful of parts each, all finite.
+        let gear = |g: GearLook| pose(&PuppetDef { gear: g, ..person() }, &st, None, Vec3::ZERO, Vec3::NEG_Z);
+        let n = |g: GearLook| gear(g).len() as i32 - bare.len() as i32;
+        assert_eq!(n(GearLook { glasses: "#111111".into(), ..Default::default() }), -1, "sunglasses replace the eyes");
+        assert_eq!(n(GearLook { bag: BagKind::Backpack, ..Default::default() }), 3);
+        assert_eq!(n(GearLook { bag: BagKind::Shoulder, ..Default::default() }), 3);
+        assert_eq!(
+            n(GearLook { badge: "#d4af37".into(), vest: "#222222".into(), tie: "#aa2222".into(), ..Default::default() }),
+            4
+        );
+        for helm in [HelmKind::Ballcap, HelmKind::Hardhat, HelmKind::Tactical] {
+            let parts = gear(GearLook { helm, ..Default::default() });
+            assert!((2..=3).contains(&(parts.len() - bare.len())), "{helm:?}");
+            assert!(parts.iter().all(|p| p.a.is_finite() && p.b.is_finite()), "{helm:?}");
+        }
+        // A backpack on the back, a badge on the front.
+        let pack =
+            colored(&gear(GearLook { bag: BagKind::Backpack, bag_color: "#0000ff".into(), ..Default::default() }), "#0000ff");
+        assert!(pack.len() == 1 && pack[0].a.z < -0.15, "{:?}", pack[0].a);
+        let badge = colored(&gear(GearLook { badge: "#d4af37".into(), ..Default::default() }), "#d4af37");
+        assert!(badge.len() == 1 && badge[0].a.z > 0.12, "{:?}", badge[0].a);
+    }
+
+    #[test]
+    fn hair_hides_under_headwear() {
+        let st = PuppetState::default();
+        let head = pose(&person(), &st, None, Vec3::ZERO, Vec3::NEG_Z)[1];
+        let hair = |hair: HairStyle, helm: HelmKind| {
+            let def = PuppetDef { hair, hair_color: "#123456".into(), gear: GearLook { helm, ..Default::default() }, ..person() };
+            colored(&pose(&def, &st, None, Vec3::ZERO, Vec3::NEG_Z), "#123456")
+        };
+        // Under a cap only the hair at the nape shows: behind and below the head's centre.
+        for helm in [HelmKind::Cap, HelmKind::Ballcap, HelmKind::Hardhat, HelmKind::Tactical] {
+            let nape = hair(HairStyle::Afro, helm);
+            assert_eq!(nape.len(), 1, "{helm:?}");
+            assert!(nape[0].a.z < head.a.z && nape[0].a.y < head.a.y, "{helm:?}: {:?}", nape[0].a);
+            assert!(hair(HairStyle::Bun, helm).len() == 1, "{helm:?}: no bun under it");
+            assert!(hair(HairStyle::Ponytail, helm).len() == 2, "{helm:?}: a ponytail comes out the back");
+        }
+        assert!(hair(HairStyle::Long, HelmKind::Hood).is_empty(), "a hood hides it all");
+        assert_eq!(hair(HairStyle::Short, HelmKind::Crown).len(), 1, "a crown sits on the hair");
+    }
+
+    #[test]
+    fn what_a_biped_wears_follows_its_head_through_a_clip() {
+        let def = PuppetDef {
+            hair: HairStyle::Short,
+            hair_color: "#123456".into(),
+            gear: GearLook { glasses: "#111111".into(), ..Default::default() },
+            ..person()
+        };
+        let id = crate::clips::find("MESH2MOTION/Death_A").expect("an embedded clip");
+        let dur = crate::clips::with(id, |c| c.dur).unwrap();
+        for i in 0..8 {
+            let st = PuppetState { clip: id, clip_t: dur * i as f32 / 7.0, clip_w: 1.0, ..Default::default() };
+            let sk = biped_skel(&def, &st);
+            let parts = pose(&def, &st, None, Vec3::ZERO, Vec3::NEG_Z);
+            let (head, cap) = (parts[1], colored(&parts, "#123456")[0]);
+            assert!(head.a.distance(sk.head) < 1e-3, "frame {i}: the head is where the clip put it");
+            // The cap of hair sits over the crown, up and back from the head's centre, whichever
+            // way the clip turns the head.
+            let fwd = (sk.head_rot * Vec3::Z - sk.crown * (sk.head_rot * Vec3::Z).dot(sk.crown)).normalize();
+            let off = (cap.a - head.a) / head.ra;
+            assert!(off.length() < 0.2 && off.dot(sk.crown) > 0.05 && off.dot(fwd) < 0.0, "frame {i}: {off}");
+            // The sunglasses stay on the face.
+            let shades = colored(&parts, "#111111")[0];
+            assert!(((shades.a + shades.b) * 0.5 - head.a).dot(fwd) > head.ra * 0.7, "frame {i}");
         }
     }
 

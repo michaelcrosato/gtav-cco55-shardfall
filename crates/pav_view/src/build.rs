@@ -1933,7 +1933,10 @@ fn emit_puppet(scene: &mut Scene, def: &PuppetDef, o: &RenderObject, p: &PuppetF
     if let (false, Some((hand, tip))) = (def.weapon.asset.is_empty(), span) {
         held_asset(scene, &def.weapon.asset, hand, tip, o.rot * Vec3::Z, o.id.0);
     }
-    for part in parts {
+    // Far off, parts under a pixel across (at 1080 lines) are left out — eyes, sunglasses,
+    // badges, straps first: distant people cost fewer primitives (low detail).
+    let tiny = puppet_detail(&scene.camera, o.pos);
+    for part in parts.into_iter().filter(|p| p.ra.max(p.rb) >= tiny) {
         scene.sdfs.push(SdfInstance {
             a: part.a,
             b: part.b,
@@ -1947,6 +1950,15 @@ fn emit_puppet(scene: &mut Scene, def: &PuppetDef, o: &RenderObject, p: &PuppetF
             material: 0,
         });
     }
+}
+
+/// The radius (m) below which a puppet part at `at` is under a pixel across at 1080 lines for
+/// `cam` (0 for an orthographic camera: every part draws).
+fn puppet_detail(cam: &rs::CameraData, at: Vec3) -> f32 {
+    if cam.ortho {
+        return 0.0;
+    }
+    at.distance(cam.eye) / (cam.proj.y_axis.y.abs().max(1e-3) * 1080.0)
 }
 
 /// A library prop held in the hand (a look's `weapon.asset`): its `grip` socket at `hand`, the
@@ -2735,5 +2747,41 @@ mod tests {
             generated_total += keys.len();
         }
         assert!(generated_total > 0, "the fixtures use generated shapes");
+    }
+
+    #[test]
+    fn far_people_leave_out_parts_under_a_pixel() {
+        let gear = pav_core::puppet::GearLook { badge: "#d4af37".into(), glasses: "#111111".into(), ..Default::default() };
+        let def = PuppetDef { gear, ..Default::default() };
+        let cam = Scene::default().camera;
+        let draw = |distance: f32| {
+            let mut scene = Scene::default();
+            let frame = PuppetFrame { state: Default::default(), feet_offset: 0.9, def: None, rig: None, tint: None };
+            let o = RenderObject {
+                id: EntityId(9),
+                pos: cam.eye + cam.forward * distance,
+                rot: Quat::IDENTITY,
+                visual: Visual::new(Shape::Sphere { radius: 0.0 }, Color::WHITE),
+                prop: None,
+                puppet: Some(frame.clone()),
+                pulse: -1.0,
+                soft: None,
+                vehicle: None,
+                cone: None,
+                scenery: false,
+            };
+            emit_puppet(&mut scene, &def, &o, &frame, cam.forward, StyleOverride::PerObject);
+            scene.sdfs
+        };
+        // At 140 m (45° of view) a pixel is about 0.1 m across: the sunglasses and the badge go.
+        let (near, far) = (draw(8.0), draw(140.0));
+        let parts = pav_core::puppet::pose(&def, &Default::default(), None, Vec3::ZERO, cam.forward);
+        assert_eq!(near.len(), parts.len(), "near, every part");
+        let small = parts.iter().filter(|p| p.ra.max(p.rb) < 0.05).count();
+        assert!(small >= 2 && far.len() <= parts.len() - small, "far: {} of {} ({small} small)", far.len(), parts.len());
+        assert!(far.iter().all(|s| s.ra.max(s.rb) >= 0.05), "the head, torso and limbs stay");
+        // An orthographic view draws every part at any distance.
+        let ortho = rs::CameraData { ortho: true, ..cam };
+        assert_eq!(puppet_detail(&ortho, cam.eye + cam.forward * 400.0), 0.0);
     }
 }

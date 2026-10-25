@@ -1,12 +1,16 @@
-//! Drawing vehicles. A car with a body prop (`VehicleView::body_asset`) is that prop, placed
-//! where the ground under its centre would be: its door parts swing by the doors' open amounts,
-//! parts in a dented crumple zone sit pushed in, and its lamp parts glow by the lamps' states
-//! (`head_*` with the headlights, `tail_*` brighter braking, `rev_*` reversing, `siren_*`
-//! flashing red and blue in turn while the siren is on). Its wheels are the wheel prop, spun and
-//! steered; occupants are simple busts in their seats; a damaged car smokes, a burning one
-//! burns, a wreck is charred. Without a body prop a car is the collider's box (drawn from the
-//! entity's visual) with a cabin, wheels and lamps; a helicopter adds its cockpit, tail, rotors
-//! and skids. No lights are added except the driven car's headlight beam.
+//! Drawing vehicles. A car or a helicopter with a body prop (`VehicleView::body_asset`) is that
+//! prop, placed where the ground under its centre would be: its door parts swing by the doors'
+//! open amounts, parts in a dented crumple zone sit pushed in, and its lamp parts glow by the
+//! lamps' states (`head_*` with the headlights, `tail_*` brighter braking, `rev_*` reversing,
+//! `siren_*` flashing red and blue in turn while the siren is on). A helicopter's `rotor` group
+//! turns by `VehicleView::rotor` about the mast (the body's up, through the middle of the
+//! group) and its `tail_rotor` group 1.7 times as fast about its own axle (the way the group is
+//! thinnest, through its middle); while it is crewed its `beacon*` parts blink red and its
+//! `nav*` lights glow. A car's wheels are the wheel prop, spun and steered; occupants are simple
+//! busts in their seats; a damaged vehicle smokes, a burning one burns, a wreck is charred.
+//! Without a body prop (or when it is missing) a car is the collider's box with a cabin, wheels
+//! and lamps, and a helicopter the box with a cockpit, tail, crossed rotor blades and skids. No
+//! lights are added except the driven car's headlight beam.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -33,6 +37,8 @@ pub const WHEEL_PROP_RADIUS: f32 = 0.33;
 const WHEEL_DETAIL: f32 = 60.0;
 /// How far a door swings open (radians).
 const DOOR_SWING: f32 = 1.15;
+/// A helicopter body's spinning groups and how fast each turns against `VehicleView::rotor`.
+const ROTORS: [(&str, f32); 2] = [("rotor", 1.0), ("tail_rotor", 1.7)];
 
 /// Asset names that failed to draw (reported once each).
 static FAILED: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -88,6 +94,21 @@ fn leaf(id: &str) -> &str {
     id.rsplit('.').next().unwrap_or(id)
 }
 
+/// Whether part `id` is the node `name` or inside that group (`door_l`, `door_l.glass`).
+fn in_group(id: &str, name: &str) -> bool {
+    id.strip_prefix(name).is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
+}
+
+/// The box round the parts of group `name` (body frame), or None when it has none.
+fn group_bounds(parts: &[ResolvedPart], name: &str) -> Option<(Vec3, Vec3)> {
+    let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+    for p in parts.iter().filter(|p| in_group(&p.id, name)) {
+        lo = lo.min(p.centre - p.extent);
+        hi = hi.max(p.centre + p.extent);
+    }
+    (lo.x <= hi.x).then_some((lo, hi))
+}
+
 /// The swing of each door, by part name: its pivot (body frame) and turn.
 fn door_turns(v: &VehicleView, parts: &[ResolvedPart]) -> BTreeMap<String, (Vec3, Quat)> {
     let mut out = BTreeMap::new();
@@ -95,15 +116,7 @@ fn door_turns(v: &VehicleView, parts: &[ResolvedPart]) -> BTreeMap<String, (Vec3
         let left = d.side == Side::Left;
         let pivot = d.hinge.unwrap_or_else(|| {
             // The front edge of the door's parts, on its outer face, half way up.
-            let mine = parts.iter().filter(|p| p.id == d.part || p.id.starts_with(&format!("{}.", d.part)));
-            let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-            for p in mine {
-                lo = lo.min(p.centre - p.extent);
-                hi = hi.max(p.centre + p.extent);
-            }
-            if lo.x > hi.x {
-                return Vec3::ZERO;
-            }
+            let Some((lo, hi)) = group_bounds(parts, &d.part) else { return Vec3::ZERO };
             Vec3::new(if left { hi.x } else { lo.x }, (lo.y + hi.y) * 0.5, hi.z)
         });
         // The back of a left door swings out to +x (a turn about -y), a right door's to -x.
@@ -113,22 +126,70 @@ fn door_turns(v: &VehicleView, parts: &[ResolvedPart]) -> BTreeMap<String, (Vec3
     out
 }
 
-/// What a part of a body prop does this frame: doors, dents, lamps, a wreck's char.
-fn body_tweak(
-    v: &VehicleView,
-    p: &ResolvedPart,
-    doors: &BTreeMap<String, (Vec3, Quat)>,
-    flash: bool,
+/// The turn of each rotor group of a helicopter's body (`ROTORS`), by group name: its pivot
+/// (body frame, the middle of the group's parts) and turn. The main rotor turns about the
+/// mast (the body's up); the tail rotor about its own axle, the way its parts are thinnest.
+fn rotor_turns(v: &VehicleView, parts: &[ResolvedPart]) -> BTreeMap<String, (Vec3, Quat)> {
+    let mut out = BTreeMap::new();
+    if v.kind != VehicleKind::Helicopter {
+        return out;
+    }
+    for (name, rate) in ROTORS {
+        let Some((lo, hi)) = group_bounds(parts, name) else { continue };
+        let size = hi - lo;
+        let axis = if name == "rotor" || (size.y <= size.x && size.y <= size.z) {
+            Vec3::Y
+        } else if size.x <= size.z {
+            Vec3::X
+        } else {
+            Vec3::Z
+        };
+        out.insert(name.to_string(), ((lo + hi) * 0.5, Quat::from_axis_angle(axis, v.rotor * rate)));
+    }
+    out
+}
+
+/// What moves and glows on a body prop this frame.
+struct BodyFrame {
+    doors: BTreeMap<String, (Vec3, Quat)>,
+    rotors: BTreeMap<String, (Vec3, Quat)>,
+    /// Light bars alternate four times a second (`lit_red`: the red lamps' beat), each colour
+    /// flashing twice (`flash`: lit this instant).
     lit_red: bool,
-) -> Option<PartTweak> {
+    flash: bool,
+    /// A crewed helicopter's beacons: lit this instant (a short blink each second).
+    beacon: bool,
+}
+
+impl BodyFrame {
+    fn new(v: &VehicleView, parts: &[ResolvedPart], time: f32) -> Self {
+        let t = time * 4.0;
+        Self {
+            doors: door_turns(v, parts),
+            rotors: rotor_turns(v, parts),
+            lit_red: (t.floor() as i64) % 2 == 0,
+            flash: (t * 2.0).fract() < 0.7,
+            beacon: v.driven && time.fract() < 0.14,
+        }
+    }
+}
+
+/// What a part of a body prop does this frame: doors, rotors, dents, lamps, a wreck's char.
+fn body_tweak(v: &VehicleView, p: &ResolvedPart, f: &BodyFrame) -> Option<PartTweak> {
     let mut t = PartTweak::default();
     let mut changed = false;
-    let door = doors.iter().find(|(name, _)| p.id == **name || p.id.starts_with(&format!("{name}.")));
+    let door = f.doors.iter().find(|(name, _)| in_group(&p.id, name));
     if let Some((_, turn)) = door {
         t.turn = Some(*turn);
         changed = true;
     }
-    // Dents: parts in a crumpled zone's outer part are pushed in (and a little down).
+    let rotor = f.rotors.iter().find(|(name, _)| in_group(&p.id, name));
+    if let Some((_, turn)) = rotor {
+        t.turn = Some(*turn);
+        changed = true;
+    }
+    // Dents: parts in a crumpled zone's outer part are pushed in (and a little down); a
+    // spinning rotor keeps its shape.
     let h = v.half;
     let c = p.centre;
     let mut push = Vec3::ZERO;
@@ -144,7 +205,7 @@ fn body_tweak(
     if v.crumple[3] > 0.0 && c.x < -0.55 * h.x {
         push += Vec3::new(0.15, -0.02, 0.0) * v.crumple[3];
     }
-    if push != Vec3::ZERO {
+    if push != Vec3::ZERO && rotor.is_none() {
         t.offset = push;
         changed = true;
     }
@@ -187,8 +248,14 @@ fn body_tweak(
     } else if name.starts_with("siren") {
         // Red lamps on one beat, blue on the other.
         let red = p.color.as_deref().and_then(Color::try_hex).map(|c| c.0[0] > c.0[2]).unwrap_or(left);
-        let on = lamps.siren_on && (red == lit_red) && flash;
+        let on = lamps.siren_on && (red == f.lit_red) && f.flash;
         t.emissive = Some(if on { 7.0 } else { 0.2 });
+        changed = true;
+    } else if v.kind == VehicleKind::Helicopter && name.starts_with("beacon") {
+        t.emissive = Some(if f.beacon { 6.0 } else { 0.15 });
+        changed = true;
+    } else if v.kind == VehicleKind::Helicopter && name.starts_with("nav") {
+        t.emissive = Some(if v.driven { 2.5 } else { 0.1 });
         changed = true;
     }
     if v.wrecked {
@@ -202,16 +269,12 @@ fn body_tweak(
 /// Draws a body prop; Err when the prop is missing (the caller draws a box instead).
 fn emit_body(scene: &mut Scene, o: &RenderObject, v: &VehicleView, name: &str) -> Result<(), String> {
     let (_, def, _) = pav_core::props::resolve_placed(name, &pav_core::props::Params::new())?;
-    let doors = door_turns(v, &def.compiled.parts);
-    // Light bars alternate four times a second, each colour flashing twice.
-    let t = scene.time * 4.0;
-    let lit_red = (t.floor() as i64) % 2 == 0;
-    let flash = (t * 2.0).fract() < 0.7;
+    let frame = BodyFrame::new(v, &def.compiled.parts, scene.time);
     let mut palette = Palette::new();
     palette.insert("$accent".into(), v.color.clone());
     palette.insert("$pillar".into(), v.accent.clone());
     let at = Placement::at(world(o, v, Vec3::ZERO)).rot(o.rot).id(o.id.0);
-    emit_asset_tweaked(scene, name, at, 0, &palette, &|p| body_tweak(v, p, &doors, flash, lit_red))
+    emit_asset_tweaked(scene, name, at, 0, &palette, &|p| body_tweak(v, p, &frame))
 }
 
 /// One wheel from the wheel prop: steered, spun, the hub facing out.
@@ -237,24 +300,27 @@ pub fn emit_vehicle(scene: &mut Scene, o: &RenderObject, v: &VehicleView, style:
     let mut part = |scene: &mut Scene, shape: Shape, pos: Vec3, r: Quat, color: Vec3, emissive: f32| {
         emit_shape(&mut scene.meshes, &mut scene.sdfs, &mut lights, &shape, pos, r, color, emissive, style, group, 0, 0);
     };
+    let capsule = |scene: &mut Scene, a: Vec3, b: Vec3, ra: f32, rb: f32, color: Vec3| {
+        scene.sdfs.push(rs::SdfInstance { a, b, ra, rb, color, emissive: 0.0, style, flags: 0, group, material: 0 });
+    };
+    let char_tint = |c: Vec3| if v.wrecked { c * 0.15 } else { c };
+    // The body prop (a car's or a helicopter's); when it is missing the collider's box stands in.
+    let drawn = match v.body_asset.as_deref() {
+        Some(name) => match emit_body(scene, o, v, name) {
+            Ok(()) => true,
+            Err(e) => {
+                report(name, &e);
+                false
+            }
+        },
+        None => false,
+    };
+    if !drawn && v.body_asset.is_some() {
+        part(scene, Shape::RoundedBox { half: h, radius: h.y.min(h.x) * 0.45 }, o.pos, rot, char_tint(body), 0.0);
+    }
     match v.kind {
         VehicleKind::Car => {
-            let char_tint = |c: Vec3| if v.wrecked { c * 0.15 } else { c };
-            let drawn = match v.body_asset.as_deref() {
-                Some(name) => match emit_body(scene, o, v, name) {
-                    Ok(()) => true,
-                    Err(e) => {
-                        report(name, &e);
-                        false
-                    }
-                },
-                None => false,
-            };
             if !drawn {
-                if v.body_asset.is_some() {
-                    // The prop is missing: the collider's box stands in for it.
-                    part(scene, Shape::RoundedBox { half: h, radius: h.y.min(h.x) * 0.45 }, o.pos, rot, char_tint(body), 0.0);
-                }
                 // Cabin with dark glass, set back a little.
                 let cabin = o.pos + up * (h.y * 1.55) - fwd * (h.z * 0.12);
                 part(
@@ -330,41 +396,6 @@ pub fn emit_vehicle(scene: &mut Scene, o: &RenderObject, v: &VehicleView, style:
                     part(scene, Shape::Sphere { radius: r * 0.35 }, hub, rot, Vec3::splat(0.75), 0.0);
                 }
             }
-            // Occupants: a torso and a head in each taken seat.
-            for (i, s) in v.seated.iter().enumerate() {
-                let hip = world(o, v, *s);
-                let shirt = [
-                    Vec3::new(0.18, 0.2, 0.26),
-                    Vec3::new(0.45, 0.12, 0.1),
-                    Vec3::new(0.85, 0.82, 0.75),
-                    Vec3::new(0.12, 0.3, 0.2),
-                ][(o.id.0 as usize + i) % 4];
-                scene.sdfs.push(rs::SdfInstance {
-                    a: hip + up * 0.08,
-                    b: hip + up * 0.45,
-                    ra: 0.17,
-                    rb: 0.15,
-                    color: shirt,
-                    emissive: 0.0,
-                    style,
-                    flags: 0,
-                    group,
-                    material: 0,
-                });
-                let head = hip + up * 0.7;
-                scene.sdfs.push(rs::SdfInstance {
-                    a: head,
-                    b: head,
-                    ra: 0.11,
-                    rb: 0.11,
-                    color: Vec3::new(0.62, 0.44, 0.33),
-                    emissive: 0.0,
-                    style,
-                    flags: 0,
-                    group,
-                    material: 0,
-                });
-            }
             // The driven car's headlight beam (the engine demo's cars: always while driven).
             if v.driven && (v.lamps.head || v.body_asset.is_none()) && !v.wrecked {
                 scene.point_lights.push(rs::PointLight {
@@ -374,63 +405,17 @@ pub fn emit_vehicle(scene: &mut Scene, o: &RenderObject, v: &VehicleView, style:
                     shadows: false,
                 });
             }
-            if particles {
-                // Tyre smoke from the rear wheels while sliding.
-                if v.drift > 2.5 {
-                    for w in v.wheels.iter().skip(2) {
-                        let (mut b, _) = crate::fx::preset("smoke");
-                        b.pos = world(o, v, w.center) - Vec3::Y * (w.radius * 0.7);
-                        b.count = ((v.drift - 2.0) * 0.6).clamp(1.0, 6.0) as u32;
-                        b.size = (0.25, 1.0);
-                        b.life = (0.8, 1.4);
-                        b.color0 = glam::Vec4::new(0.85, 0.85, 0.88, 0.35);
-                        b.color1 = glam::Vec4::new(0.9, 0.9, 0.92, 0.0);
-                        b.vel = Vec3::Y * 0.5;
-                        scene.particles.push(b);
-                    }
-                }
-                // Damage: smoke from the engine, then fire; a wreck smoulders.
-                let engine = o.pos + fwd * (h.z * 0.6) + up * (h.y * 0.9);
-                if v.burning {
-                    let (mut b, _) = crate::fx::preset("fire");
-                    b.pos = engine;
-                    b.count = 2;
-                    b.area = Vec3::new(h.x * 0.6, 0.1, h.z * 0.3);
-                    b.size = (0.5, 0.08);
-                    scene.particles.push(b);
-                }
-                if v.health < pav_core::vehicle::SMOKE_BELOW || v.wrecked {
-                    let (mut b, _) = crate::fx::preset("smoke");
-                    b.pos = engine;
-                    b.count = 1;
-                    let dark = if v.burning || v.wrecked { 0.12 } else { 0.5 - v.health };
-                    b.color0 = glam::Vec4::new(dark, dark, dark, 0.6);
-                    b.size = (0.3, 1.2);
-                    scene.particles.push(b);
-                }
-            }
         }
-        VehicleKind::Helicopter => {
+        VehicleKind::Helicopter if !drawn => {
             // Cockpit bubble.
             let glass = o.pos + fwd * (h.z * 0.55) + up * (h.y * 0.25);
             part(scene, Shape::Sphere { radius: h.y * 0.82 }, glass, rot, Vec3::new(0.55, 0.75, 0.9), 0.0);
             // Tail boom, fin and tail rotor.
             let boom_a = o.pos - fwd * (h.z * 0.7) + up * (h.y * 0.2);
             let boom_b = o.pos - fwd * (h.z * 2.7) + up * (h.y * 0.45);
-            scene.sdfs.push(rs::SdfInstance {
-                a: boom_a,
-                b: boom_b,
-                ra: 0.16,
-                rb: 0.09,
-                color: body,
-                emissive: 0.0,
-                style,
-                flags: 0,
-                group,
-                material: 0,
-            });
+            capsule(scene, boom_a, boom_b, 0.16, 0.09, body);
             part(scene, Shape::Box { half: Vec3::new(0.04, 0.38, 0.22) }, boom_b + up * 0.3, rot, accent, 0.0);
-            let tail_rot = rot * Quat::from_rotation_x(v.rotor * 1.7);
+            let tail_rot = rot * Quat::from_rotation_x(v.rotor * ROTORS[1].1);
             part(
                 scene,
                 Shape::Box { half: Vec3::new(0.02, 0.45, 0.05) },
@@ -441,18 +426,7 @@ pub fn emit_vehicle(scene: &mut Scene, o: &RenderObject, v: &VehicleView, style:
             );
             // Mast and main rotor (two crossed blades).
             let mast = o.pos + up * (h.y + 0.25);
-            scene.sdfs.push(rs::SdfInstance {
-                a: o.pos + up * (h.y * 0.8),
-                b: mast,
-                ra: 0.07,
-                rb: 0.07,
-                color: Vec3::splat(0.25),
-                emissive: 0.0,
-                style,
-                flags: 0,
-                group,
-                material: 0,
-            });
+            capsule(scene, o.pos + up * (h.y * 0.8), mast, 0.07, 0.07, Vec3::splat(0.25));
             for k in 0..2 {
                 let q = rot * Quat::from_rotation_y(v.rotor + k as f32 * std::f32::consts::FRAC_PI_2);
                 part(scene, Shape::Box { half: Vec3::new(3.1, 0.025, 0.11) }, mast, q, Vec3::splat(0.18), 0.0);
@@ -460,32 +434,10 @@ pub fn emit_vehicle(scene: &mut Scene, o: &RenderObject, v: &VehicleView, style:
             // Skids on struts.
             for s in [-1.0f32, 1.0] {
                 let base = o.pos + right * (s * h.x * 0.85) - up * (h.y + 0.28);
-                scene.sdfs.push(rs::SdfInstance {
-                    a: base - fwd * (h.z * 0.95),
-                    b: base + fwd * (h.z * 0.95),
-                    ra: 0.06,
-                    rb: 0.06,
-                    color: accent,
-                    emissive: 0.0,
-                    style,
-                    flags: 0,
-                    group,
-                    material: 0,
-                });
+                capsule(scene, base - fwd * (h.z * 0.95), base + fwd * (h.z * 0.95), 0.06, 0.06, accent);
                 for z in [-0.5f32, 0.5] {
                     let top = o.pos + right * (s * h.x * 0.7) - up * (h.y * 0.8) + fwd * (z * h.z);
-                    scene.sdfs.push(rs::SdfInstance {
-                        a: top,
-                        b: base + fwd * (z * h.z),
-                        ra: 0.04,
-                        rb: 0.04,
-                        color: accent,
-                        emissive: 0.0,
-                        style,
-                        flags: 0,
-                        group,
-                        material: 0,
-                    });
+                    capsule(scene, top, base + fwd * (z * h.z), 0.04, 0.04, accent);
                 }
             }
             // Beacon; a police unit's light bar flashes red and blue under the nose.
@@ -500,6 +452,195 @@ pub fn emit_vehicle(scene: &mut Scene, o: &RenderObject, v: &VehicleView, style:
                 }
             }
         }
+        VehicleKind::Helicopter => {}
+    }
+    // Occupants: a torso and a head in each taken seat.
+    for (i, s) in v.seated.iter().enumerate() {
+        let hip = world(o, v, *s);
+        let shirt =
+            [Vec3::new(0.18, 0.2, 0.26), Vec3::new(0.45, 0.12, 0.1), Vec3::new(0.85, 0.82, 0.75), Vec3::new(0.12, 0.3, 0.2)]
+                [(o.id.0 as usize + i) % 4];
+        capsule(scene, hip + up * 0.08, hip + up * 0.45, 0.17, 0.15, shirt);
+        let head = hip + up * 0.7;
+        capsule(scene, head, head, 0.11, 0.11, Vec3::new(0.62, 0.44, 0.33));
+    }
+    if particles {
+        // Tyre smoke from a car's rear wheels while sliding.
+        if v.kind == VehicleKind::Car && v.drift > 2.5 {
+            for w in v.wheels.iter().skip(2) {
+                let (mut b, _) = crate::fx::preset("smoke");
+                b.pos = world(o, v, w.center) - Vec3::Y * (w.radius * 0.7);
+                b.count = ((v.drift - 2.0) * 0.6).clamp(1.0, 6.0) as u32;
+                b.size = (0.25, 1.0);
+                b.life = (0.8, 1.4);
+                b.color0 = glam::Vec4::new(0.85, 0.85, 0.88, 0.35);
+                b.color1 = glam::Vec4::new(0.9, 0.9, 0.92, 0.0);
+                b.vel = Vec3::Y * 0.5;
+                scene.particles.push(b);
+            }
+        }
+        // Damage: smoke from the engine (a car's under the bonnet, a helicopter's behind the
+        // mast), then fire; a wreck smoulders.
+        let engine = match v.kind {
+            VehicleKind::Car => o.pos + fwd * (h.z * 0.6) + up * (h.y * 0.9),
+            VehicleKind::Helicopter => o.pos - fwd * (h.z * 0.45) + up * (h.y * 1.3),
+        };
+        if v.burning {
+            let (mut b, _) = crate::fx::preset("fire");
+            b.pos = engine;
+            b.count = 2;
+            b.area = Vec3::new(h.x * 0.6, 0.1, h.z * 0.3);
+            b.size = (0.5, 0.08);
+            scene.particles.push(b);
+        }
+        if v.health < pav_core::vehicle::SMOKE_BELOW || v.wrecked {
+            let (mut b, _) = crate::fx::preset("smoke");
+            b.pos = engine;
+            b.count = 1;
+            let dark = if v.burning || v.wrecked { 0.12 } else { 0.5 - v.health };
+            b.color0 = glam::Vec4::new(dark, dark, dark, 0.6);
+            b.size = (0.3, 1.2);
+            scene.particles.push(b);
+        }
     }
     scene.point_lights.extend(lights);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pav_core::entity::EntityId;
+    use pav_core::props::{self, Doc, PropDef};
+    use pav_core::shape::Visual;
+    use pav_core::vehicle::LampView;
+    use std::sync::Arc;
+
+    /// A small helicopter body: a cabin, a two-bladed main rotor over it, a tail rotor on the
+    /// left of the fin, a beacon and a red/blue pair of siren lamps.
+    const HELI: &str = r##"{"format":2,"name":"heli","unit":"cm","parts":{
+        "cabin":{"type":"box","size":[160,140,380],"pos":[0,110,0],"color":"#2f6fb0"},
+        "fin":{"type":"box","size":[6,90,40],"pos":[0,150,-500],"color":"#2f6fb0"},
+        "rotor":{"color":"#333333","parts":{
+            "hub":{"type":"cylinder","radius":14,"height":9,"pos":[0,248,20]},
+            "blade":{"type":"box","size":[22,3,300],"pos":[0,249,20],"radial":{"count":2,"radius":162}}}},
+        "tail_rotor":{"color":"#333333","parts":{
+            "hub":{"type":"cylinder","radius":5,"height":8,"pos":[6,170,-500],"axis":"x"},
+            "blade_a":{"type":"box","size":[2,100,10],"pos":[10,170,-500]},
+            "blade_b":{"type":"box","size":[2,10,100],"pos":[10,170,-500]}}},
+        "beacon":{"type":"box","size":[8,8,8],"pos":[0,184,-60],"color":"#e02424"},
+        "siren_l":{"type":"box","size":[4,6,30],"pos":[82,60,40],"color":"#e02424"},
+        "siren_r":{"type":"box","size":[4,6,30],"pos":[-82,60,40],"color":"#2050e8"}}}"##;
+
+    /// The fixture installed as `WORKSHOP/<name>` (each test its own: tests run at once).
+    fn install(name: &str) -> Arc<PropDef> {
+        let mut doc = Doc::read(HELI).unwrap();
+        doc.name = name.into();
+        props::install(&format!("WORKSHOP/{name}"), PropDef::new(doc).unwrap()).unwrap();
+        props::get(&format!("WORKSHOP/{name}")).unwrap()
+    }
+
+    fn heli(name: &str, rotor: f32) -> VehicleView {
+        VehicleView {
+            kind: VehicleKind::Helicopter,
+            half: Vec3::new(0.9, 0.85, 2.0),
+            base: 0.85,
+            color: "#2f6fb0".into(),
+            accent: "#f2f2f2".into(),
+            body_asset: Some(format!("WORKSHOP/{name}")),
+            wheel_asset: None,
+            wheels: Vec::new(),
+            rotor,
+            drift: 0.0,
+            driven: true,
+            doors: Vec::new(),
+            head: Vec::new(),
+            tail: Vec::new(),
+            lamps: LampView::default(),
+            crumple: [0.0; 4],
+            seated: Vec::new(),
+            health: 1.0,
+            burning: false,
+            wrecked: false,
+        }
+    }
+
+    fn object() -> RenderObject {
+        RenderObject {
+            id: EntityId(7),
+            pos: Vec3::new(10.0, 0.85, -4.0),
+            rot: Quat::from_rotation_y(0.6),
+            visual: Visual::new(Shape::Sphere { radius: 0.0 }, Color::WHITE),
+            prop: None,
+            puppet: None,
+            pulse: -1.0,
+            soft: None,
+            vehicle: None,
+            cone: None,
+            scenery: false,
+        }
+    }
+
+    #[test]
+    fn a_helicopter_body_turns_its_rotors_with_the_rotor_angle() {
+        let def = install("view_heli_rotor");
+        let parts = &def.compiled.parts;
+        let angle = 0.7;
+        let v = heli("view_heli_rotor", angle);
+        let frame = BodyFrame::new(&v, parts, 0.0);
+        let turn = |id: &str| {
+            let p = parts.iter().find(|p| p.id == id).unwrap_or_else(|| panic!("no part {id}"));
+            body_tweak(&v, p, &frame).and_then(|t| t.turn)
+        };
+        // The main rotor turns about the mast (up through the hub), the whole group alike.
+        let (pivot, q) = turn("rotor.blade[0]").expect("the main rotor turns");
+        assert_eq!(turn("rotor.blade[1]"), Some((pivot, q)));
+        assert_eq!(turn("rotor.hub"), Some((pivot, q)));
+        assert!(pivot.x.abs() < 1e-4 && (pivot.z - 0.2).abs() < 1e-4, "about the hub: {pivot}");
+        let (axis, a) = q.to_axis_angle();
+        assert!(axis.distance(Vec3::Y) < 1e-4 && (a - angle).abs() < 1e-4, "{axis} {a}");
+        // The tail rotor turns faster, about its own axle (x, through its middle).
+        let (pivot, q) = turn("tail_rotor.blade_a").expect("the tail rotor turns");
+        assert_eq!(turn("tail_rotor.blade_b"), Some((pivot, q)));
+        assert!((pivot.y - 1.7).abs() < 1e-4 && (pivot.z + 5.0).abs() < 1e-4, "about its hub: {pivot}");
+        let (axis, a) = q.to_axis_angle();
+        assert!(axis.distance(Vec3::X) < 1e-4 && (a - angle * 1.7).abs() < 1e-4, "{axis} {a}");
+        // The rest of the body holds still.
+        assert_eq!(turn("cabin"), None);
+        assert_eq!(turn("fin"), None);
+
+        // Drawn: between two rotor angles only the rotor parts move (the hub and two blades, the
+        // tail rotor's hub and two blades).
+        let draw = |rotor: f32| {
+            let mut scene = Scene::default();
+            emit_vehicle(&mut scene, &object(), &heli("view_heli_rotor", rotor), Style::Cel, false);
+            scene
+        };
+        let (a, b) = (draw(0.0), draw(1.1));
+        assert_eq!(a.meshes.len(), b.meshes.len());
+        let moved = a.meshes.iter().zip(&b.meshes).filter(|(x, y)| x.transform != y.transform).count();
+        assert_eq!(moved, 6, "the rotor parts, and nothing else");
+        // A car's parts named alike do not spin.
+        let car = VehicleView { kind: VehicleKind::Car, ..heli("view_heli_rotor", 1.1) };
+        assert!(rotor_turns(&car, parts).is_empty());
+        props::remove("WORKSHOP/view_heli_rotor").unwrap();
+    }
+
+    #[test]
+    fn a_crewed_helicopter_blinks_its_beacon_and_flashes_its_sirens() {
+        let def = install("view_heli_lamps");
+        let parts = &def.compiled.parts;
+        let glow = |v: &VehicleView, id: &str, time: f32| {
+            let p = parts.iter().find(|p| p.id == id).unwrap();
+            body_tweak(v, p, &BodyFrame::new(v, parts, time)).and_then(|t| t.emissive).unwrap_or(0.0)
+        };
+        let mut v = heli("view_heli_lamps", 0.0);
+        assert!(glow(&v, "beacon", 2.05) > 3.0 && glow(&v, "beacon", 2.5) < 1.0, "a short blink each second");
+        v.driven = false;
+        assert!(glow(&v, "beacon", 2.05) < 1.0, "dark while nobody flies it");
+        v.lamps.siren_on = true;
+        // Four beats a second: red on the even ones, blue on the odd.
+        assert!(glow(&v, "siren_l", 0.05) > 3.0 && glow(&v, "siren_r", 0.05) < 1.0);
+        assert!(glow(&v, "siren_r", 0.3) > 3.0 && glow(&v, "siren_l", 0.3) < 1.0);
+        props::remove("WORKSHOP/view_heli_lamps").unwrap();
+    }
 }
