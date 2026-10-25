@@ -45,7 +45,7 @@ ask). With E1 + E4 in place:
 - the game is two crates with no graphics, window or audio dependencies, and it builds for wasm;
 - the window, the browser, captures, `gtf ui` and tests all read the same `PlayFrame`, so a HUD
   bug is visible to a test without pixels;
-- engine work stayed upstreamable: 42 `engine:` commits, none containing game code.
+- engine work stayed upstreamable: 47 `engine:` commits, none containing game code.
 
 The change we would make **next**, from this build's evidence, is the browser loop on slow
 devices: on SwiftShader the title screen draws a frame every several seconds and the sim gets at
@@ -80,10 +80,10 @@ frame when rendering is the bottleneck) and picking Low quality on software adap
 ## 5. Numbers
 | What | Size |
 |---|---|
-| Engine changes since the pin (`git diff 689142b -- crates/pav_*`) | about 29,900 lines added, 1,070 removed; the new crates `pav_world` 8,230 and `pav_ui` 5,990 |
-| Game code (`crates/gtf_game`, `crates/gtf_app`) | about 35,700 lines of Rust |
-| Game data (`content/freeway`) | about 8,200 lines of TOML |
-| `engine:` commits | 42 |
+| Engine changes since the pin (`git diff 689142b -- crates/pav_*`) | about 30,100 lines added, 1,090 removed; the new crates `pav_world` 8,220 and `pav_ui` 5,990 |
+| Game code (`crates/gtf_game`, `crates/gtf_app`) | about 36,500 lines of Rust |
+| Game data (`content/freeway`) | about 8,300 lines of TOML |
+| `engine:` commits | 47 |
 
 Build times, budgets reached and the browser's figures are recorded in `PROGRESS.md` (D1, D12).
 
@@ -94,7 +94,9 @@ presentation as data, E2-E4), `b5de689` (hook-game app shell, sound bank and loo
 regions, E8 and E12-E14), `367da03` (sky, weather, night lights, facade windows, culling, E7),
 `990907f` (vehicles v2, E9), `63c64c0` (radio genres, talk and voices, E8), `86f6570`
 (landmarks built from parts), `5185f23` (player settings, painterly looks, loading cards) and
-the M9 commits (Fx events drawn, software-adapter quality, perf statistics).
+the M9 commits (Fx events drawn, software-adapter quality, perf statistics; `1667b10`, the view
+no longer building what the camera cannot see; `e611720`, Auto quality for hook games and the
+FPS readout's true frame time).
 
 ## 7. The engine's systems: used, extended, unused
 The Proving Grounds (`freeway/dev`, D16) has a station for each system the game relies on, its
