@@ -599,6 +599,10 @@ impl Sim {
                     _ => &idle,
                 }
             };
+            // (A kept character over ground not loaded here holds still rather than fall.)
+            if self.kept_held(id) {
+                continue;
+            }
             let own = self.state.entities.get(id).and_then(|e| e.character.as_ref()).and_then(|c| c.puppet.clone());
             character::tick(
                 &mut self.state,
@@ -646,6 +650,7 @@ impl Sim {
         let vehicle_inputs = self.play_vehicles(dt);
         self.drive_vehicles(input, &vehicle_inputs, legacy, dt);
         self.zone_props(dt);
+        self.hold_kept();
         let collector = EventCollector::default();
         self.state.physics.step(&mut self.pipeline, &collector);
         self.sync_from_physics();

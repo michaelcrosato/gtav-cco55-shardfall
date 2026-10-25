@@ -1,7 +1,8 @@
 //! World regions for game cities (`pav_core::region`, PLAN.md E14): a provider fills chunks on
 //! demand; streaming keeps the area around the player loaded even at freeway speed, lets far
 //! chunks go, bounds what it keeps, and stays exact under rewind; static meshes collide; entities
-//! sleep, despawn or stay with their region as asked.
+//! sleep, despawn or stay with their region as asked (those that stay held still over ground
+//! that is not loaded).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -113,9 +114,12 @@ fn entities_sleep_despawn_or_stay_with_their_region() {
     let parked = sim.spawn(Spawn::new("parked", at).visual(look("#e8443a")).body(BodyKind::Dynamic));
     let walker = sim.spawn(Spawn::new("walker", at + Vec3::X).visual(look("#3d8bff")).body(BodyKind::Dynamic));
     let actor = sim.spawn(Spawn::new("actor", at + Vec3::X * 2.0).visual(look("#ffc145")).body(BodyKind::Dynamic));
+    let guard = sim.spawn_character("guard", at + Vec3::X * 3.0);
     sim.state.entities.get_mut(walker).unwrap().unload = Unload::Despawn;
     sim.state.entities.get_mut(actor).unwrap().unload = Unload::Keep;
+    sim.state.entities.get_mut(guard).unwrap().unload = Unload::Keep;
     sim.run(30, &InputFrame::default());
+    let (actor_y, guard_y) = (sim.state.entities.get(actor).unwrap().pos.y, sim.feet(guard).unwrap().y);
     // Walk away (teleport) far enough for their chunk to unload.
     let pid = sim.state.player.unwrap();
     sim.set_position(pid, Vec3::new(-450.0, 1.0, -450.0));
@@ -128,6 +132,13 @@ fn entities_sleep_despawn_or_stay_with_their_region() {
     assert!(sim.state.entities.get(walker).is_none());
     assert!(!sim.state.world.dormant_entities.values().flatten().any(|d| d.entity.id == walker), "the walker is gone for good");
     assert!(sim.state.entities.get(actor).is_some(), "the mission actor stays");
+    // ...held where it was, not dropping through where the ground was (nor the kept character).
+    let a = sim.state.entities.get(actor).unwrap().pos.y;
+    let g = sim.feet(guard).unwrap().y;
+    assert!(
+        (a - actor_y).abs() < 0.3 && (g - guard_y).abs() < 0.3,
+        "kept, held still: actor {actor_y} -> {a}, guard {guard_y} -> {g}"
+    );
     // Come back: the parked car wakes where it was.
     sim.set_position(pid, at + Vec3::new(0.0, 1.0, 6.0));
     for _ in 0..8 {
@@ -135,6 +146,10 @@ fn entities_sleep_despawn_or_stay_with_their_region() {
     }
     let p = sim.state.entities.get(parked).expect("woke with its chunk").pos;
     assert!(p.distance(at) < 1.0, "where it was parked: {p}");
+    // The kept actor falls (and rests) again with the ground back under it.
+    let b = sim.state.entities.get(actor).and_then(|e| e.body).unwrap();
+    assert_eq!(sim.state.physics.bodies.get(b).unwrap().gravity_scale(), 1.0, "gravity back on");
+    assert!(sim.state.entities.get(actor).unwrap().pos.distance(at + Vec3::X * 2.0) < 1.0);
 }
 
 #[test]

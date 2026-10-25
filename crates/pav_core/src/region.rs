@@ -15,6 +15,7 @@ use std::sync::Arc;
 use glam::{IVec2, Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::{EntityId, Unload};
 use crate::sim::Sim;
 use crate::statics::{Block, CHUNK_SIZE, Decor, Ladder, RegionKey, StaticProp};
 use crate::terrain::TerrainPatch;
@@ -99,6 +100,70 @@ impl Sim {
 
     pub fn region_provider(&self) -> Option<&Arc<dyn RegionProvider>> {
         self.region_provider.as_ref()
+    }
+
+    /// Whether the ground at `p` is loaded: always without a game's streamed world, and beyond
+    /// its edge (nothing ever loads there); else whether the chunk under `p` is active.
+    pub fn ground_streamed_in(&self, p: Vec3) -> bool {
+        let Some(provider) = &self.region_provider else { return true };
+        let (lo, hi) = provider.bounds();
+        let RegionKey::Chunk(x, z) = RegionKey::chunk_of(p) else { return true };
+        if x < lo.x || z < lo.y || x > hi.x || z > hi.y {
+            return true;
+        }
+        self.state.statics.is_active(RegionKey::Chunk(x, z))
+    }
+
+    /// Kept entities (a game's mission actors, `Unload::Keep`) stay in the world wherever they
+    /// are, but over ground that is not loaded they would drop through where it would be: their
+    /// bodies hold still there (no gravity, no motion) until it is back. Characters hold by
+    /// skipping their move (`kept_held`); vehicles flying or carried on rails by a game are left
+    /// alone, as is anything the player drives.
+    pub(crate) fn hold_kept(&mut self) {
+        if self.region_provider.is_none() {
+            return;
+        }
+        let player = self.state.player;
+        let kept: Vec<(EntityId, bool)> = self
+            .state
+            .entities
+            .iter()
+            .filter(|e| e.unload == Unload::Keep && Some(e.id) != player && e.character.is_none())
+            .filter(|e| {
+                e.vehicle.as_ref().is_none_or(|v| {
+                    v.def.kind != crate::vehicle::VehicleKind::Helicopter
+                        && !v.state.kinematic
+                        && (v.driver.is_none() || v.driver != player)
+                })
+            })
+            .map(|e| (e.id, self.ground_streamed_in(e.pos)))
+            .collect();
+        for (id, ground) in kept {
+            let Some(b) = self.state.entities.get(id).and_then(|e| e.body).and_then(|h| self.state.physics.bodies.get_mut(h))
+            else {
+                continue;
+            };
+            if !b.is_dynamic() {
+                continue;
+            }
+            if !ground {
+                b.set_gravity_scale(0.0, true);
+                b.set_linvel(Vec3::ZERO, true);
+                b.set_angvel(Vec3::ZERO, true);
+            } else if b.gravity_scale() == 0.0 {
+                b.set_gravity_scale(1.0, true);
+            }
+        }
+    }
+
+    /// A kept character over ground that is not loaded holds still (see `hold_kept`).
+    pub(crate) fn kept_held(&self, id: EntityId) -> bool {
+        self.state.entities.get(id).is_some_and(|e| {
+            e.unload == Unload::Keep
+                && Some(id) != self.state.player
+                && e.character.as_ref().is_some_and(|c| c.riding.is_none())
+                && !self.ground_streamed_in(e.pos)
+        })
     }
 
     /// Loads every chunk the interest points want right now (no budget): a scene's start, a
