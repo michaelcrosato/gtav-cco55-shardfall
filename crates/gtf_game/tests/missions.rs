@@ -1,6 +1,7 @@
 //! M6: missions. Every mission file validates against its district; the bot finishes both test
 //! missions (every step kind, both ways through the choice) on three seeds, and (ignored, long)
-//! every story mission and both heist approaches on three seeds; a failed mission
+//! every story mission, both heist approaches, the street race and the two hold-ups on three
+//! seeds; a failed mission
 //! retries from its checkpoint, offers Skip after three fails, and Skip moves on; a pass pays,
 //! keeps the record and autosaves.
 
@@ -193,6 +194,25 @@ fn story_h1_freeway_job_loud() {
 #[ignore = "long: the story missions, three seeds each"]
 fn story_h1_freeway_job_smart() {
     story("h1_freeway_job", &["mission story smart"]);
+}
+
+// The activities played as missions (the street race and the two hold-ups), three seeds each.
+#[test]
+#[ignore = "long: the activities, three seeds each"]
+fn activity_pretzel_run() {
+    story("act_pretzel_run", &[]);
+}
+
+#[test]
+#[ignore = "long: the activities, three seeds each"]
+fn activity_holdup_gas() {
+    story("act_holdup_gas", &[]);
+}
+
+#[test]
+#[ignore = "long: the activities, three seeds each"]
+fn activity_holdup_grind() {
+    story("act_holdup_grind", &[]);
 }
 
 /// Plays `scene` with the bot until the mission reaches step `n`.
