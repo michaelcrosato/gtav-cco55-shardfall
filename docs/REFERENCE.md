@@ -136,6 +136,11 @@ game's `ViewIntent` (`pav_core::present`):
   per mesh kind. Distance classes (`Scene::cull`): `flags::SMALL` beyond 90 m, `flags::DETAIL`
   beyond 150 m, whole regions past the fog's end (horizontal distance from the fog's centre).
   `Scene::all_meshes()` and `all_sdfs()` walk the regions' instances, then the loose ones.
+- The view builds no vehicle or person the camera cannot see (`pav_view` `build.rs`): one whose
+  bounding sphere lies more than 8 m outside the frustum (a low sun's shadow or a headlight's
+  pool can still reach into the picture) or past the fog's end is skipped before its parts are
+  made. The renderer culled them anyway, so the picture is unchanged; building them cost the
+  CPU about 30 µs a car.
 - Mesh detail by screen size: the regions' instances of the round built-ins (`MeshKey::Sphere`,
   `Cylinder`, `Cone`; 32 segments) draw as `MeshKey::Coarse` with 16 segments under 26 px of
   radius and 8 under 6.5 px (`MeshKey::for_size`: the outline stays within half a pixel), one
@@ -620,8 +625,10 @@ the small developer district is `content/freeway/dev_district.toml`.
   walls; roads crossing them keep their own characters and become bridges; `[[channel_ramp]]`
   adds ramps down the walls. Channel roads never join street roads in road roles.
 - **Placements:** `[[jump]]` (a kicker wedge: `at` cell coords, `yaw`, length/width/height),
-  `[[sign]]` (words on a post) and `[[prop]]` (a library prop or a row of them, as a landmark's
-  `prop` but with `at` in cell coords, standing on the ground there).
+  `[[sign]]` (words on a post: `text`, `height` 3.2 m, letter `size` 0.9 m and `color`, default
+  `#f4f1ea`; a `\n` in the text starts a second line; dark letters read against the sky) and
+  `[[prop]]` (a library prop or a row of them, as a landmark's `prop` but with `at` in cell
+  coords, standing on the ground there).
 - **Lanes** (`City::lanes`, `lanes::LaneGraph`): every drivable lane as a polyline in its
   direction (right-hand traffic), connectors through junctions (straight/left/right, U-turns at
   dead ends), freeway and ramp lanes, channel lanes (closed to ambient traffic), lane-change
