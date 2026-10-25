@@ -624,7 +624,17 @@ impl Police {
                 if ram && c.center.distance(m.player) < c.half.z * 2.0 + 1.4 {
                     u.ram_t = sim.state.rng.range(4.0, 7.0);
                 }
-                let target = if ram {
+                // Coming the other way at one or two stars: over to its own side and slow, to
+                // turn and give chase once the car is past, not head-on into it.
+                let oncoming = m.stars <= 2 && seen && m.player_vel.length() > 4.0 && {
+                    let to_unit = c.center - m.player;
+                    to_unit.length() < 45.0
+                        && to_unit.dot(m.player_vel.normalize()) > 0.0
+                        && c.forward().dot(-to_unit.normalize_or(Vec3::Z)) > 0.6
+                };
+                let target = if oncoming {
+                    c.center + c.forward() * 8.0 - c.left() * 3.5
+                } else if ram {
                     // A PIT: the nose into the rear quarter, from the side it is already on.
                     let back = -m.player_vel.normalize_or(Vec3::Z);
                     let side = Vec3::new(back.z, 0.0, -back.x);
@@ -646,7 +656,9 @@ impl Police {
                     2 => (4.5, 36.0),
                     _ => (7.0, 42.0),
                 };
-                let pace = if ram {
+                let pace = if oncoming {
+                    3.0
+                } else if ram {
                     (pv + 3.0).clamp(4.0, 40.0)
                 } else if c.center.distance(m.player) < 30.0 {
                     (pv + gain * 0.6).clamp(8.0, top - 2.0)

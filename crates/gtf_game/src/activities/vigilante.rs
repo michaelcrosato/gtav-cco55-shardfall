@@ -40,6 +40,8 @@ const BOXED_FOR: f32 = 3.0;
 const BOXED_NEAR: f32 = 25.0;
 /// Seconds the level's call shows before its suspects turn up.
 const CALL: f32 = 1.5;
+/// Seconds of finding nowhere to put them before looking wider (and at any level).
+const WIDEN_AFTER: f32 = 6.0;
 /// Seconds a getaway car runs with the police car well behind before it slows down again.
 const CALM: f32 = 8.0;
 /// Seconds suspects stand dazed after scrambling out of their car.
@@ -577,6 +579,9 @@ impl Freeway {
                 if run.suspects.iter().all(|s| s.down) {
                     run.stage = Stage::Clear;
                     run.stage_t = 0.0;
+                    for w in &run.cars {
+                        crate::world::ambient(sim, w.id);
+                    }
                     run.cars.clear();
                     if run.level + 1 >= vd.level.len() {
                         return Some(Ending::Done);
@@ -600,6 +605,10 @@ impl Freeway {
                     run.level += 1;
                     run.stage = Stage::Call;
                     run.stage_t = 0.0;
+                    // (Those taken in stay where they are and go with their ground.)
+                    for s in &run.suspects {
+                        crate::world::ambient(sim, s.id);
+                    }
                     run.suspects.clear();
                     self.vigilante_call(vd, run.level, events);
                 }
@@ -698,9 +707,13 @@ impl Freeway {
         let Some(city) = self.city.clone() else { return false };
         let me = self.player_point(sim);
         let cam = self.camera(sim);
+        // Nowhere in the band a while (the unit up on the freeway, out on a spit by the water):
+        // a wider one, at any level.
+        let wide = run.stage_t > CALL + WIDEN_AFTER;
+        let (near, far) = if wide { (vd.spawn[0] * 0.5, vd.spawn[1] * 1.6) } else { (vd.spawn[0], vd.spawn[1]) };
         let band = |p: Vec3| {
             let d = Vec2::new(p.x - me.x, p.z - me.z).length();
-            d >= vd.spawn[0] && d <= vd.spawn[1] && (p.y - me.y).abs() < 6.0
+            d >= near && d <= far && (wide || (p.y - me.y).abs() < 6.0)
         };
         let free = |sim: &Sim, p: Vec3| {
             crate::world::ground_loaded(sim, p)
@@ -735,7 +748,7 @@ impl Freeway {
                     break;
                 }
                 let a = sim.state.rng.f32() * std::f32::consts::TAU;
-                let r = sim.state.rng.range(vd.spawn[0], vd.spawn[1]);
+                let r = sim.state.rng.range(near, far);
                 let want = me + Vec3::new(a.cos() * r, 0.0, a.sin() * r);
                 let keep = |l: &pav_world::lanes::Lane| !l.closed && matches!(l.kind, Street | Avenue | Boulevard);
                 let Some((lane, along, off)) = city.lanes.nearest(want, keep) else { continue };
@@ -755,6 +768,11 @@ impl Freeway {
         }
         if places.is_empty() {
             return false;
+        }
+        // The last level's people and cars (those taken in, the wrecks) go back to the world:
+        // they go with their ground.
+        for id in run.cars.iter().map(|w| w.id).chain(run.suspects.iter().map(|s| s.id)) {
+            crate::world::ambient(sim, id);
         }
         run.cars.clear();
         run.suspects.clear();
@@ -922,12 +940,14 @@ impl Freeway {
         let cam = self.camera(sim);
         for s in run.suspects.iter_mut() {
             if s.down {
-                // Those who gave up stay on their knees, taken away once out of sight.
-                if s.cuffed
-                    && let Some(f) = sim.feet(s.id)
-                {
-                    out.insert(s.id, InputFrame::default());
-                    if f.distance(me) > 50.0 && !crate::traffic::seen(&cam, f) {
+                // Those who gave up stay on their knees, taken away once out of sight (the fallen
+                // too: kept loaded, they would drop through the ground once it unloads).
+                if let Some(f) = sim.feet(s.id) {
+                    if s.cuffed {
+                        out.insert(s.id, InputFrame::default());
+                    }
+                    let below = f.y < city.ground_y(Vec2::new(f.x, f.z)) - 8.0;
+                    if below || (f.distance(me) > 50.0 && !crate::traffic::seen(&cam, f)) {
                         sim.despawn(s.id);
                     }
                 }
@@ -1114,13 +1134,17 @@ impl Freeway {
             }
             crate::world::ambient(sim, w.id);
         }
-        for s in run.suspects.iter().filter(|s| !s.down) {
+        for s in &run.suspects {
+            // (Those taken in or down stay where they are, and go with their ground.)
+            crate::world::ambient(sim, s.id);
+            if s.down {
+                continue;
+            }
             self.enemies.list.retain(|e| e.id != s.id);
             self.combat.hp.remove(&s.id.0);
             if sim.state.entities.get(s.id).is_none() {
                 continue;
             }
-            crate::world::ambient(sim, s.id);
             if s.car.is_none() {
                 self.back_to_crowd(sim, &city, s.id, None, "", Some(Vec::new()));
             }

@@ -32,8 +32,6 @@ const CORNER_BONUS: f32 = 35.0;
 /// (metres of reach): a block's loop is eight lanes.
 const TRAIL: usize = 24;
 const TRAIL_COST: f32 = 150.0;
-/// Making for the freeway, what each metre farther from it costs a choice (in metres of reach).
-const FREEWAY_PULL: f32 = 0.8;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -282,43 +280,6 @@ pub struct Traffic {
     /// Lanes that start or end where others do (derived from the lane graph).
     #[serde(skip)]
     pub siblings: Option<Arc<Siblings>>,
-    /// The autopilot on the run makes for the freeway (a police car it cannot shake has been on
-    /// its tail a while: out on the open road a fast car pulls away at one or two stars).
-    #[serde(default)]
-    pub seek_freeway: bool,
-    /// How far each lane is from the freeway along the roads (m; derived from the lane graph).
-    #[serde(skip)]
-    pub to_freeway: Option<Arc<Vec<f32>>>,
-}
-
-/// Each lane's distance along the roads to the freeway (its own length counted from where it
-/// starts), by a search back from the freeway lanes.
-fn freeway_distances(g: &LaneGraph) -> Vec<f32> {
-    use std::cmp::Reverse;
-    use std::collections::BinaryHeap;
-    let mut d = vec![f32::MAX; g.lanes.len()];
-    let mut heap = BinaryHeap::new();
-    for (i, l) in g.lanes.iter().enumerate() {
-        if !l.closed && l.kind == LaneKind::Freeway {
-            d[i] = 0.0;
-            heap.push(Reverse((0u64, i as u32)));
-        }
-    }
-    while let Some(Reverse((k, i))) = heap.pop() {
-        let di = k as f32 / 1000.0;
-        if di > d[i as usize] {
-            continue;
-        }
-        for &p in &g.lanes[i as usize].prev {
-            let lp = &g.lanes[p as usize];
-            let nd = di + lp.length;
-            if !lp.closed && nd < d[p as usize] {
-                d[p as usize] = nd;
-                heap.push(Reverse(((nd * 1000.0) as u64, p)));
-            }
-        }
-    }
-    d
 }
 
 /// Lanes that share their start (turns fanning out of one approach) or their end (connectors and
@@ -550,6 +511,42 @@ fn hash(a: u64, b: u64) -> f32 {
 
 /// The cars on each lane this tick: (along, speed, half length, car).
 type Occupancy = BTreeMap<u32, Vec<(f32, f32, f32, EntityId)>>;
+
+/// Cars on sibling lanes where they overlap a lane: just into a turn that fans out of the same
+/// approach (they are still in front, whichever way they go), and closing on a merge (placed by
+/// their distance to it, so whoever is nearer goes first). Then each lane's cars in order.
+fn share_siblings(occ: &mut Occupancy, sibs: &Siblings, g: &LaneGraph) {
+    let mut seen_from: Vec<(u32, (f32, f32, f32, EntityId))> = Vec::new();
+    for (&l, others) in &sibs.start {
+        for o in others {
+            for &(al, sp, half, id) in occ.get(o).map(|v| v.as_slice()).unwrap_or(&[]) {
+                if al < 8.0 {
+                    seen_from.push((l, (al, sp, half, id)));
+                }
+            }
+        }
+    }
+    for (&l, others) in &sibs.end {
+        let len = g.lanes[l as usize].length;
+        for o in others {
+            let olen = g.lanes[*o as usize].length;
+            for &(al, sp, half, id) in occ.get(o).map(|v| v.as_slice()).unwrap_or(&[]) {
+                if olen - al < 20.0 {
+                    seen_from.push((l, (len - (olen - al), sp, half, id)));
+                }
+            }
+        }
+    }
+    for (l, e) in seen_from {
+        let list = occ.entry(l).or_default();
+        if !list.iter().any(|x| x.3 == e.3) {
+            list.push(e);
+        }
+    }
+    for list in occ.values_mut() {
+        list.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.3.cmp(&b.3)));
+    }
+}
 
 /// The archetypes ambient traffic is drawn from, by weight (no sirens, no buses).
 fn ambient_kinds() -> Vec<(String, f32)> {
@@ -1475,7 +1472,6 @@ impl Traffic {
                 // they lose sight of it; down a long straight they never do).
                 (true, Some(from)) => {
                     let close = a.pilot && g.lanes[last as usize].points.last().is_some_and(|p| p.distance(from) < CLOSE_CHASE);
-                    let seek = a.pilot && self.seek_freeway;
                     g.lanes[last as usize]
                         .next
                         .iter()
@@ -1493,16 +1489,10 @@ impl Traffic {
                                     .first()
                                     .map(|&m| *g.lanes[m as usize].points.last().unwrap())
                                     .unwrap_or(*l.points.last().unwrap());
-                                let corner = close && !seek && matches!(l.turn, Turn::Left | Turn::Right);
+                                let corner = close && matches!(l.turn, Turn::Left | Turn::Right);
                                 let back = a.trail.contains(&n) || l.next.first().is_some_and(|m| a.trail.contains(m));
-                                // (Making for the freeway: the nearer it a way leads, the better.)
-                                let freeway = match (seek, &self.to_freeway) {
-                                    (true, Some(fd)) => FREEWAY_PULL * fd.get(n as usize).copied().unwrap_or(0.0).min(1500.0),
-                                    _ => 0.0,
-                                };
                                 after.distance(from) + if corner { CORNER_BONUS } else { 0.0 }
                                     - if back { TRAIL_COST } else { 0.0 }
-                                    - freeway
                             };
                             reach(x).total_cmp(&reach(y)).then(y.cmp(&x))
                         })
@@ -1547,58 +1537,50 @@ impl Traffic {
         }
         let ours: BTreeSet<EntityId> = self.cars.iter().map(|a| a.car).collect();
         let parked: BTreeSet<EntityId> = self.parked.values().chain(self.lots.values()).copied().collect();
+        // (Its other lanes, apart: see `lone` below.)
+        let mut across: Vec<(u32, (f32, f32, f32, EntityId))> = Vec::new();
         for e in sim.state.entities.iter() {
             if e.vehicle.is_none() || ours.contains(&e.id) || parked.contains(&e.id) || e.pos.distance(m.player) > 200.0 {
                 continue;
             }
             let Some(c) = Car::read(sim, e.id) else { continue };
             let keep = |l: &pav_world::lanes::Lane| !l.closed && drivable(l.kind);
+            // On its lane; and one a mission placed (kept loaded: a roadblock across the road, a
+            // truck left slewed) on any other its ends stand well inside, where it is in the way
+            // too. Wrecks and cars knocked about stay on their own lane: traffic gets round them
+            // rather than queue behind them for good.
             if let Some((lane, along, off)) = g.nearest(c.feet(), keep)
                 && off < 3.0
             {
                 occ.entry(lane).or_default().push((along, c.speed().max(0.0), c.half.z, e.id));
+                let reach = c.forward() * c.half.z * 0.75;
+                let mut on = vec![lane];
+                let placed = e.unload == pav_core::entity::Unload::Keep;
+                for p in [c.feet() + reach, c.feet() - reach].into_iter().filter(|_| placed) {
+                    if let Some((other, along, off)) = g.nearest(p, keep)
+                        && off < 1.5
+                        && !on.contains(&other)
+                    {
+                        on.push(other);
+                        across.push((other, (along, c.speed().max(0.0), c.half.z, e.id)));
+                    }
+                }
             }
             cars.insert(e.id, c);
         }
-        // Cars on sibling lanes where they overlap this one: just into a turn that fans out of the
-        // same approach (they are still in front, whichever way they go), and closing on a merge
-        // (placed by their distance to it, so whoever is nearer goes first).
+        // The player's car on autopilot sees even those on their own lane only: it noses round a
+        // car left across the road as a player would, where traffic stops behind it.
+        let mut lone = self.cars.iter().any(|a| a.pilot).then(|| occ.clone());
+        for (l, x) in across {
+            occ.entry(l).or_default().push(x);
+        }
         if self.siblings.as_ref().is_none_or(|s| s.lanes != g.lanes.len()) {
             self.siblings = Some(Arc::new(Siblings::of(g)));
         }
-        if self.seek_freeway && self.to_freeway.as_ref().is_none_or(|d| d.len() != g.lanes.len()) {
-            self.to_freeway = Some(Arc::new(freeway_distances(g)));
-        }
         let sibs = self.siblings.clone().unwrap_or_default();
-        let mut seen_from: Vec<(u32, (f32, f32, f32, EntityId))> = Vec::new();
-        for (&l, others) in &sibs.start {
-            for o in others {
-                for &(al, sp, half, id) in occ.get(o).map(|v| v.as_slice()).unwrap_or(&[]) {
-                    if al < 8.0 {
-                        seen_from.push((l, (al, sp, half, id)));
-                    }
-                }
-            }
-        }
-        for (&l, others) in &sibs.end {
-            let len = g.lanes[l as usize].length;
-            for o in others {
-                let olen = g.lanes[*o as usize].length;
-                for &(al, sp, half, id) in occ.get(o).map(|v| v.as_slice()).unwrap_or(&[]) {
-                    if olen - al < 20.0 {
-                        seen_from.push((l, (len - (olen - al), sp, half, id)));
-                    }
-                }
-            }
-        }
-        for (l, e) in seen_from {
-            let list = occ.entry(l).or_default();
-            if !list.iter().any(|x| x.3 == e.3) {
-                list.push(e);
-            }
-        }
-        for list in occ.values_mut() {
-            list.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.3.cmp(&b.3)));
+        share_siblings(&mut occ, &sibs, g);
+        if let Some(lone) = lone.as_mut() {
+            share_siblings(lone, &sibs, g);
         }
         // Parked cars too, for drivers on the run to keep clear of.
         if self.cars.iter().any(|a| a.mood == Mood::Flee) {
@@ -1654,6 +1636,7 @@ impl Traffic {
                 self.nan += 1;
                 continue;
             }
+            let occ = if a.pilot { lone.as_ref().unwrap_or(&occ) } else { &occ };
             // On the run from somewhere else now (the map's edge turned it round): the way on is
             // laid again from here rather than driven out.
             if a.pilot && a.goal.is_none() {
@@ -1827,8 +1810,10 @@ impl Traffic {
                 // On the run from the police: well over the limit where the road is open (the
                 // turns still taken at a safe speed, below).
                 (Mood::Flee, true) if a.goal.is_none() => match lane.kind {
-                    LaneKind::Freeway | LaneKind::Ramp => 1.7,
+                    LaneKind::Freeway => 1.7,
                     LaneKind::Boulevard | LaneKind::Avenue => 1.55,
+                    // (Ramps curve: barely over.)
+                    LaneKind::Ramp => 1.3,
                     _ => 1.4,
                 },
                 (Mood::Flee, true) => 1.25,

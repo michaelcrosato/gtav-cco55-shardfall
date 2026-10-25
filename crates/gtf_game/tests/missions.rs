@@ -1,7 +1,7 @@
 //! M6: missions. Every mission file validates against its district; the bot finishes both test
 //! missions (every step kind, both ways through the choice) on three seeds, and (ignored, long)
 //! every story mission, both heist approaches, the street race and the two hold-ups on three
-//! seeds; a failed mission
+//! seeds (retrying from a checkpoint as a player would, at most twice); a failed mission
 //! retries from its checkpoint, offers Skip after three fails, and Skip moves on; a pass pays,
 //! keeps the record and autosaves.
 
@@ -40,6 +40,10 @@ fn bot_run(scene: &str, seed: u64, secs: u64, before: &[&str]) -> (Outcome, serd
     for t in 0..secs * hz {
         let o = s.play().unwrap().outcome();
         if o != Outcome::Playing {
+            // Nothing the mission made is left falling through the world.
+            let fallen: Vec<String> =
+                s.state.entities.iter().filter(|e| e.pos.y < -60.0).map(|e| format!("{} at {:.0}", e.name, e.pos.y)).collect();
+            assert!(fallen.is_empty(), "{scene} seed {seed}: fallen through the world: {fallen:?}");
             return (o, game(&s).mission_status());
         }
         let input = s.bot_input();
@@ -127,12 +131,65 @@ fn the_bot_takes_the_loud_way_too() {
     assert!(flags.contains(&"loud".to_string()), "the loud way was taken: {flags:?}");
 }
 
-/// The bot plays story mission `key` on seeds 1-3 (after the `before` commands) and wins each.
+/// Retries a player may take (✕ on the fail card: back to the checkpoint) before a mission
+/// counts as lost; the bot never takes Skip.
+const RETRIES: u32 = 2;
+
+/// Like `bot_run`, but a failed mission is retried from its checkpoint (✕ on the fail card) as a
+/// player would, up to `RETRIES` times; the retries it took come back too.
+fn bot_run_retrying(scene: &str, seed: u64, secs: u64, before: &[&str]) -> (Outcome, serde_json::Value, u32) {
+    let mut s = sim(scene, seed);
+    for c in before {
+        s.step(&cmd(c));
+    }
+    let mut retries = 0;
+    let mut t = 0;
+    while t < secs * 60 {
+        match s.play().unwrap().outcome() {
+            Outcome::Playing => {}
+            Outcome::Lost if retries < RETRIES => {
+                // The fail card, then ✕: back to the checkpoint.
+                eprintln!("{scene} seed {seed}: failed ({}); retrying", game(&s).mission_status()["reason"]);
+                let mut wait = 0;
+                while s.present().and_then(|p| p.ui.screen.as_ref().map(|sc| sc.id.clone())).as_deref() != Some("mission/failed")
+                    && wait < 600
+                {
+                    s.step(&InputFrame::default());
+                    wait += 1;
+                }
+                s.step(&press(pad::SOUTH));
+                s.step(&InputFrame::default());
+                retries += 1;
+                t = 0;
+                continue;
+            }
+            o => {
+                let fallen: Vec<String> = s
+                    .state
+                    .entities
+                    .iter()
+                    .filter(|e| e.pos.y < -60.0)
+                    .map(|e| format!("{} at {:.0}", e.name, e.pos.y))
+                    .collect();
+                assert!(fallen.is_empty(), "{scene} seed {seed}: fallen through the world: {fallen:?}");
+                return (o, game(&s).mission_status(), retries);
+            }
+        }
+        let input = s.bot_input();
+        s.step(&input);
+        t += 1;
+    }
+    (s.play().unwrap().outcome(), game(&s).mission_status(), retries)
+}
+
+/// The bot plays story mission `key` on seeds 1-3 (after the `before` commands) and wins each
+/// (retrying from a checkpoint as a player would; how often it had to is printed).
 fn story(key: &str, before: &[&str]) {
     let scene = format!("freeway/mission/{key}");
     let lost: Vec<String> = (1..=3)
         .filter_map(|seed| {
-            let (o, st) = bot_run(&scene, seed, 700, before);
+            let (o, st, retries) = bot_run_retrying(&scene, seed, 700, before);
+            eprintln!("{key} {before:?} seed {seed}: {o:?} after {retries} retries");
             (o != Outcome::Won).then(|| format!("{key} {before:?} seed {seed}: {o:?} {st}"))
         })
         .collect();

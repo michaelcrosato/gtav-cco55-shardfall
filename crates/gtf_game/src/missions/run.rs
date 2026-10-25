@@ -2393,6 +2393,20 @@ impl Freeway {
         }
     }
 
+    /// The vehicle the mission under way must not be left far behind (an `abandoned` fail
+    /// condition, the mission's or the step's), if any: the evasion bot keeps to it.
+    pub(crate) fn kept_car(&self, sim: &Sim) -> Option<EntityId> {
+        let run = self.missions.run.as_ref()?;
+        let def = super::get(&run.key).ok()?;
+        let step = def.step.get(run.step);
+        def.fail.iter().chain(step.map(|s| s.fail.iter()).into_iter().flatten()).find_map(|f| match &f.when {
+            When::Abandoned { actor, .. } => {
+                entity(sim, run, actor).filter(|e| sim.state.entities.get(*e).is_some_and(|x| x.vehicle.is_some()))
+            }
+            _ => None,
+        })
+    }
+
     /// The mission for `status` (tests, tools).
     pub fn mission_status(&self) -> serde_json::Value {
         let Some(run) = &self.missions.run else {

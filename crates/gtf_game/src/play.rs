@@ -48,8 +48,6 @@ pub(crate) fn play_clip(sim: &mut Sim, id: EntityId, name: &str, flags: u8) {
 const CRIME_REPEAT: f32 = 3.0;
 /// A police unit this close to the evasion bot while they search is what it runs from (m).
 const CLOSE_UNIT: f32 = 140.0;
-/// Seconds of a police car on its tail before the evasion bot makes for the freeway.
-const GLUED: f32 = 12.0;
 
 impl Freeway {
     /// The Play page's tick: returns the inputs for the characters the game drives.
@@ -464,8 +462,6 @@ impl Freeway {
             }
             from
         });
-        // A tail it cannot shake on the streets: for the freeway, where a fast car pulls away.
-        self.traffic.seek_freeway = self.traffic.escape.is_some() && self.heat.stars <= 2 && self.bot.glued > GLUED;
         let mut inputs = BTreeMap::new();
         self.traffic.tick(sim, &tm, &mut inputs, &mut self.drive.locked);
         // People in front of a fleeing car jump clear (off the road first, then away).
@@ -521,6 +517,7 @@ impl Freeway {
                 officers: &officers,
                 wanted: self.heat.stars > 0,
                 stars: self.heat.stars,
+                keep: self.kept_car(sim),
                 dt,
             };
             self.bot.update(sim, &bm);
@@ -724,9 +721,16 @@ impl Freeway {
         // Busted: an officer at arm's length of a player on foot who is barely moving, at 1–2★ —
         // or of one sat in a car boxed in to a standstill (pulled out of it, a little slower).
         let car_speed = self.drive.vehicle().and_then(|c| drive::Car::read(sim, c)).map(|c| c.vel.length());
+        match self.law_feet {
+            Some(p) if Vec2::new(feet.x - p.x, feet.z - p.z).length() < 1.0 => self.law_still += dt,
+            _ => {
+                self.law_feet = Some(feet);
+                self.law_still = 0.0;
+            }
+        }
         let held = match car_speed {
             Some(v) => v < 0.5,
-            None => vel.length() < 1.5,
+            None => vel.length() < 1.5 || self.law_still > 0.7,
         };
         let cuff_time = if car_speed.is_some() { fate::CUFF_TIME * 2.0 } else { fate::CUFF_TIME };
         // (Getting in or out is not standing still for them: the time starts again after it.)

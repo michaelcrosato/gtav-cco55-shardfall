@@ -31,6 +31,10 @@ fn trial(id: &str, seed: u64, secs: u64) -> (Outcome, String) {
     let g = game(&s);
     let st = &g.activities;
     let line = format!("{id} seed {seed}: vigilante '{}', event '{}'", st.vigilante.last, st.events.last);
+    // Nothing the activity made is left falling through the world (kept after its ground went).
+    let fallen: Vec<String> =
+        s.state.entities.iter().filter(|e| e.pos.y < -60.0).map(|e| format!("{} at {:.0}", e.name, e.pos.y)).collect();
+    assert!(fallen.is_empty(), "{line}: fallen through the world: {fallen:?}");
     (s.play().unwrap().outcome(), line)
 }
 

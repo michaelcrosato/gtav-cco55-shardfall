@@ -182,6 +182,12 @@ pub struct Freeway {
     pub chatters: u32,
     #[serde(default)]
     pub cuffed: f32,
+    /// Where the player's feet were a little while ago and the seconds they have stayed within
+    /// a metre of it (pinned between officers, running on the spot is standing still).
+    #[serde(default)]
+    pub law_feet: Option<Vec3>,
+    #[serde(default)]
+    pub law_still: f32,
     /// The player bot (`autopilot escape`: the heat-evasion bot).
     #[serde(default)]
     pub bot: bot::Bot,
@@ -344,6 +350,8 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         chatter: None,
         chatters: 0,
         cuffed: 0.0,
+        law_feet: None,
+        law_still: 0.0,
         typed_crimes: Vec::new(),
         bot: bot::Bot::default(),
         enemies: enemies::Enemies::default(),

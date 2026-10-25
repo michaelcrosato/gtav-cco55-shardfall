@@ -22,6 +22,8 @@ const STUCK_AFTER: f32 = 8.0;
 /// than this before taking one.
 const LOOK: f32 = 40.0;
 const COPS_NEAR: f32 = 10.0;
+/// With none that near, it makes for one this far off.
+const FAR_LOOK: f32 = 120.0;
 
 /// Where △ is in a tap: held one tick, then let go.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,9 +67,6 @@ pub struct Bot {
     pub blocked: f32,
     pub dodge: f32,
     pub side: f32,
-    /// Seconds the police have been right behind (a unit or officer within 30 m), falling off
-    /// once they are not: a tail it cannot shake on the streets.
-    pub glued: f32,
 }
 
 /// What the bot needs to know this tick.
@@ -85,6 +84,8 @@ pub struct Moment<'a> {
     /// Wanted at all, and how many stars.
     pub wanted: bool,
     pub stars: u8,
+    /// A car a mission says not to leave behind (kept to unless it burns or drowns).
+    pub keep: Option<EntityId>,
     pub dt: f32,
 }
 
@@ -100,8 +101,6 @@ impl Bot {
         if !self.escape || m.busy {
             return;
         }
-        let tail = m.wanted && m.threat.is_some_and(|t| t.distance(m.feet) < 30.0);
-        self.glued = if tail { self.glued + m.dt } else { (self.glued - m.dt * 0.5).max(0.0) };
         match m.car {
             Some(car) => self.in_car(sim, m, car),
             None => self.on_foot(sim, m),
@@ -128,11 +127,13 @@ impl Bot {
         // — or when that has gone nowhere for a long while.
         let close = m.threat.is_some_and(|t| t.distance(c.center) < 25.0);
         let boxed = m.wanted && self.anchor_t > if close { STUCK_AFTER * 4.0 } else { STUCK_AFTER };
-        // At one or two stars an officer at the window arrests a driver who sits still: out and
-        // away on foot before the cuffs go on (from three they shoot, and the car is cover).
-        self.still = if c.vel.length() < 0.5 { self.still + m.dt } else { 0.0 };
-        let window = m.stars <= 2 && self.still > 1.0 && m.officers.iter().any(|o| o.distance(c.center) < 6.0);
-        if (done || boxed || window) && self.tap == Tap::Idle {
+        // At one or two stars an officer at the window arrests a driver who sits still: boxed in
+        // to a crawl with officers on foot coming, out and away before they are at the door
+        // (from three they shoot, and the car is cover).
+        self.still = if c.vel.length() < 1.5 { self.still + m.dt } else { 0.0 };
+        let window = m.stars <= 2 && self.still > 1.0 && m.officers.iter().any(|o| o.distance(c.center) < 8.0);
+        let kept = m.keep == Some(car);
+        if (done || (!kept && (boxed || window))) && self.tap == Tap::Idle {
             self.tap = Tap::Hold;
             self.leave(car);
             self.anchor_t = 0.0;
@@ -152,6 +153,7 @@ impl Bot {
     /// then △ at its door; with none, away from the police.
     fn on_foot(&mut self, sim: &Sim, m: &Moment) {
         self.anchor_t = 0.0;
+        self.still = 0.0;
         // Not getting any nearer (something in the way): another car.
         if let Some(c) = self.target.and_then(|id| Car::read(sim, id)) {
             let d = c.center.distance(m.feet);
@@ -167,14 +169,19 @@ impl Bot {
                 self.path.clear();
             }
         }
-        let fit = |id: EntityId| -> bool {
+        let fit_within = |id: EntityId, look: f32| -> bool {
             !self.left.contains(&id)
                 && !m.police.contains(&id)
-                && sim
-                    .vehicle_status(id)
-                    .is_some_and(|s| !s.wrecked && !s.burning && !s.in_water && !s.flooded && !s.upside_down && s.health > 0.4)
-                && Car::read(sim, id).is_some_and(|c| !c.heli && c.center.distance(m.feet) < LOOK)
+                && sim.vehicle_status(id).is_some_and(|s| {
+                    // (The car a mission says to keep, however knocked about.)
+                    let worn = if m.keep == Some(id) { 0.0 } else { 0.4 };
+                    !s.wrecked && !s.burning && !s.in_water && !s.flooded && !s.upside_down && s.health > worn
+                })
+                && Car::read(sim, id).is_some_and(|c| !c.heli && c.center.distance(m.feet) < look)
         };
+        // (One near if there is; else farther off rather than running nowhere in particular.)
+        let look = if self.target.is_some() { FAR_LOOK } else { LOOK };
+        let fit = |id: EntityId| fit_within(id, look);
         if self.target.is_some_and(|id| !fit(id)) {
             self.target = None;
             self.path.clear();
@@ -190,12 +197,16 @@ impl Bot {
                 });
                 c.center.distance(m.feet) + if near_police { 30.0 } else { 0.0 } + if nosed { 15.0 } else { 0.0 }
             };
-            self.target = cars
-                .iter()
-                .filter(|c| fit(c.id))
-                .map(|c| (c.id, score(c)))
-                .min_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)))
-                .map(|(id, _)| id);
+            let pick = |look: f32| {
+                cars.iter()
+                    .filter(|c| fit_within(c.id, look))
+                    .map(|c| (c.id, score(c)))
+                    .min_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)))
+                    .map(|(id, _)| id)
+            };
+            // (A car the mission says to keep, first: back to it.)
+            let kept = m.keep.filter(|id| !self.left.contains(id) && fit_within(*id, FAR_LOOK));
+            self.target = kept.or_else(|| pick(LOOK)).or_else(|| pick(FAR_LOOK));
             self.replan = 0.0;
             self.best = f32::MAX;
             self.since_best = 0.0;

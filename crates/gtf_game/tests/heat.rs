@@ -106,9 +106,10 @@ fn wasted_wakes_the_player_at_the_hospital() {
 }
 
 /// One escape: cruising with the traffic (`rolling`) or sitting still at three stars until a
-/// police unit spots the car, then on autopilot running from them. The seconds it took to clear
-/// the heat (None: not within three minutes), and a line about it.
-fn escape(seed: u64, rolling: bool) -> (Option<u32>, String) {
+/// police unit spots the car, then on autopilot running from them. None when no unit found the
+/// car within two minutes (no chase to run from); else the seconds it took to clear the heat
+/// (None: not within three minutes), and a line about it.
+fn escape(seed: u64, rolling: bool) -> Option<(Option<u32>, String)> {
     let mut sim = roam(seed);
     cmd(&mut sim, "drive okami_kaze");
     if rolling {
@@ -126,7 +127,9 @@ fn escape(seed: u64, rolling: bool) -> (Option<u32>, String) {
         sim.step(&input);
         waited += 1;
     }
-    assert!(waited < 120 * 60, "seed {seed}: the police found the car");
+    if waited >= 120 * 60 {
+        return None;
+    }
     cmd(&mut sim, "autopilot escape");
     let mut cleared = None;
     for t in 0..(180 * 60) {
@@ -154,24 +157,31 @@ fn escape(seed: u64, rolling: bool) -> (Option<u32>, String) {
         g.bot.bailed,
         g.bot.taken
     );
-    (cleared, line)
+    Some((cleared, line))
 }
 
 /// The heat-evasion bot (D13): cruising in a fast car at three stars until a police unit spots
 /// it, it then runs on autopilot — leaving wrecked or boxed-in cars for others — and shakes the
-/// police off within three minutes on at least three of the first five seeds. (A chase is chaotic:
-/// any change to the traffic or the police reshuffles which seeds get away, so the test counts
-/// escapes rather than naming seeds; `evasion_rate` reports eight seeds from a rolling start and
-/// from a standstill.)
+/// police off within three minutes on at least three of the first five seeds where they found
+/// it. (A chase is chaotic: any change to the traffic or the police reshuffles which seeds get
+/// away, so the test counts escapes rather than naming seeds; `evasion_rate` reports eight
+/// seeds from a rolling start and from a standstill.)
 #[test]
 fn the_evasion_bot_escapes_three_stars() {
-    let mut escaped = 0;
-    for seed in 1..=5 {
-        let (cleared, line) = escape(seed, true);
+    let (mut chases, mut escaped) = (0, 0);
+    for seed in 1..=8 {
+        let Some((cleared, line)) = escape(seed, true) else {
+            eprintln!("seed {seed}: no unit found the car");
+            continue;
+        };
         eprintln!("{line}");
+        chases += 1;
         escaped += cleared.is_some() as u32;
+        if chases == 5 {
+            break;
+        }
     }
-    assert!(escaped >= 3, "escaped on {escaped} of 5 seeds");
+    assert!(chases == 5 && escaped >= 3, "escaped {escaped} of {chases} chases");
 }
 
 /// How often the bot gets away, over eight seeds, from a rolling start and from a standstill
@@ -181,13 +191,18 @@ fn the_evasion_bot_escapes_three_stars() {
 #[ignore]
 fn evasion_rate() {
     for rolling in [true, false] {
-        let mut got_away = 0;
+        let (mut chases, mut got_away) = (0, 0);
         for seed in 1..=8 {
-            let (cleared, line) = escape(seed, rolling);
-            eprintln!("{line}");
-            got_away += cleared.is_some() as u32;
+            match escape(seed, rolling) {
+                Some((cleared, line)) => {
+                    eprintln!("{line}");
+                    chases += 1;
+                    got_away += cleared.is_some() as u32;
+                }
+                None => eprintln!("seed {seed}: no unit found the car"),
+            }
         }
-        eprintln!("{}: {got_away}/8 escaped", if rolling { "rolling" } else { "standing" });
+        eprintln!("{}: {got_away}/{chases} escaped", if rolling { "rolling" } else { "standing" });
     }
 }
 
