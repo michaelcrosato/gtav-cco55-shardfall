@@ -3,9 +3,10 @@
 //! unless they are aimed at, killed or out of range when the call ends. Unreported crimes add no
 //! heat. While an officer sees the player the stars are solid and the last known position
 //! follows the player (sightings are shared by radio); two seconds unseen and the stars flash: a
-//! search zone opens on the last sighting (its radius by level). Leaving the zone and staying unseen for 5 + 5 × stars seconds clears the
-//! heat — staying hidden inside it, twice that. Missions may floor or cap the level and switch
-//! dispatch off.
+//! search zone opens on the last sighting (its radius by level). Leaving the zone and staying
+//! unseen for 5 + 5 × stars seconds clears the heat — staying out of their sight inside it, twice
+//! that (a hide spot, which halves how far they see, helps with that). Missions may floor or cap
+//! the level and switch dispatch off.
 
 use glam::{Vec2, Vec3};
 use pav_core::entity::EntityId;
@@ -181,10 +182,9 @@ impl Heat {
     }
 
     /// One tick: calls in progress, the police's sight of the player, search and evasion. `seen`
-    /// is whether an officer sees the player now; `hidden` (crouched, under the freeway, in an
-    /// alley) halves the time to evade inside the zone. `aimed` is who the player aims at (it
-    /// cancels their call). Returns true when the heat was cleared this tick.
-    pub fn tick(&mut self, sim: &Sim, player: Vec3, seen: bool, hidden: bool, aimed: Option<EntityId>, dt: f32) -> bool {
+    /// is whether an officer sees the player now. `aimed` is who the player aims at (it cancels
+    /// their call). Returns true when the heat was cleared this tick.
+    pub fn tick(&mut self, sim: &Sim, player: Vec3, seen: bool, aimed: Option<EntityId>, dt: f32) -> bool {
         // Calls: cancelled by death, intimidation or wandering off; else the stars rise.
         let mut landed = Vec::new();
         self.reports.retain_mut(|r| {
@@ -234,10 +234,8 @@ impl Heat {
         }
         let r = ZONE[self.stars as usize];
         let outside = Vec2::new(player.x - self.last_known.x, player.z - self.last_known.z).length() > r;
-        // Outside the zone the clock runs at full speed; hidden inside, at half.
-        if outside || hidden {
-            self.evade += if outside { dt } else { dt * 0.5 };
-        }
+        // Outside the zone the clock runs at full speed; out of their sight inside it, at half.
+        self.evade += if outside { dt } else { dt * 0.5 };
         let needed = 5.0 + 5.0 * self.stars as f32;
         if self.evade >= needed && self.floor == 0 {
             self.clear();
@@ -289,18 +287,34 @@ mod tests {
         let sim = Sim::empty(1);
         // Unseen for two seconds: searching; then far outside the zone for 15 s: cleared.
         for _ in 0..130 {
-            h.tick(&sim, Vec3::ZERO, false, false, None, 1.0 / 60.0);
+            h.tick(&sim, Vec3::ZERO, false, None, 1.0 / 60.0);
         }
         assert!(h.searching);
         let far = Vec3::new(500.0, 0.0, 0.0);
         let mut cleared = false;
         for _ in 0..(16 * 60) {
-            cleared |= h.tick(&sim, far, false, false, None, 1.0 / 60.0);
+            cleared |= h.tick(&sim, far, false, None, 1.0 / 60.0);
         }
         assert!(cleared && h.stars == 0, "evaded: {h:?}");
         // A mission's cap.
         h.cap = 2;
         h.raise(4, Vec3::ZERO);
         assert_eq!(h.stars, 2);
+    }
+
+    #[test]
+    fn out_of_sight_inside_the_zone_the_heat_clears_in_twice_the_time() {
+        let mut h = Heat::default();
+        h.raise(2, Vec3::ZERO);
+        let sim = Sim::empty(1);
+        let mut t = 0;
+        let mut cleared = false;
+        while !cleared && t < 120 * 60 {
+            cleared = h.tick(&sim, Vec3::new(20.0, 0.0, 0.0), false, None, 1.0 / 60.0);
+            t += 1;
+        }
+        // Two seconds to start the search, then twice 5 + 5 × 2.
+        let secs = t as f32 / 60.0;
+        assert!(cleared && (secs - (SEARCH_AFTER + 30.0)).abs() < 0.2, "cleared after {secs:.1} s");
     }
 }

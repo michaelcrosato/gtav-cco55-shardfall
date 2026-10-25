@@ -57,6 +57,9 @@ pub struct Car {
     pub radio: bool,
     pub driver: Option<EntityId>,
     pub wrecked: bool,
+    /// The engine drowned (it went into water), and how far under it is (0..1).
+    pub flooded: bool,
+    pub water: f32,
     seat: Vec3,
     door: Option<usize>,
 }
@@ -94,6 +97,8 @@ impl Car {
             radio: v.def.radio,
             driver: v.driver,
             wrecked: v.state.wrecked,
+            flooded: v.state.flooded,
+            water: v.state.water,
             seat,
             door,
         })
@@ -440,6 +445,12 @@ impl Drive {
         if riding != Some(car) {
             self.phase = Phase::Foot;
             self.siren = false;
+            return;
+        }
+        // Gone under with the engine drowned: out of it, to swim up.
+        if c.flooded && c.water > 0.9 && matches!(self.phase, Phase::In { .. }) {
+            self.hold = 0.0;
+            self.phase = Phase::Exit { car, stage: Stage::Open, t: 0.0 };
             return;
         }
         let p = &input.pad;

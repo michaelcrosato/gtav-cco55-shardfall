@@ -46,6 +46,10 @@ pub(crate) fn play_clip(sim: &mut Sim, id: EntityId, name: &str, flags: u8) {
 
 /// How often the same kind of crime is counted again (s): a burst of fire is one shooting.
 const CRIME_REPEAT: f32 = 3.0;
+/// A police unit this close to the evasion bot while they search is what it runs from (m).
+const CLOSE_UNIT: f32 = 140.0;
+/// Seconds of a police car on its tail before the evasion bot makes for the freeway.
+const GLUED: f32 = 12.0;
 
 impl Freeway {
     /// The Play page's tick: returns the inputs for the characters the game drives.
@@ -433,15 +437,18 @@ impl Freeway {
         // the end of the world with the police behind.
         let (lo, hi) = (city.grid.origin, city.grid.origin + Vec2::new(city.grid.w as f32, city.grid.h as f32) * city.grid.cell);
         self.traffic.escape = (self.bot.escape && self.heat.stars > 0).then(|| {
-            let mut from = match self.heat.zone() {
-                Some((centre, _)) => centre,
-                None => self
-                    .police
-                    .units
-                    .iter()
-                    .filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos))
-                    .min_by(|a, b| a.distance(player).total_cmp(&b.distance(player)))
-                    .unwrap_or(self.heat.last_known),
+            let nearest = self
+                .police
+                .units
+                .iter()
+                .filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos))
+                .min_by(|a, b| a.distance(player).total_cmp(&b.distance(player)));
+            // (Searching: away from where they last saw it — unless a unit is close, which it
+            // keeps clear of rather than running into.)
+            let mut from = match (self.heat.zone(), nearest) {
+                (Some(_), Some(n)) if n.distance(player) < CLOSE_UNIT => n,
+                (Some((centre, _)), _) => centre,
+                (None, n) => n.unwrap_or(self.heat.last_known),
             };
             // (A quarter of the map at most: a small district has a middle too.)
             let edge = ((hi - lo) * 0.25).min(Vec2::splat(250.0));
@@ -457,6 +464,8 @@ impl Freeway {
             }
             from
         });
+        // A tail it cannot shake on the streets: for the freeway, where a fast car pulls away.
+        self.traffic.seek_freeway = self.traffic.escape.is_some() && self.heat.stars <= 2 && self.bot.glued > GLUED;
         let mut inputs = BTreeMap::new();
         self.traffic.tick(sim, &tm, &mut inputs, &mut self.drive.locked);
         // People in front of a fleeing car jump clear (off the road first, then away).
@@ -511,6 +520,7 @@ impl Freeway {
                 police: &police,
                 officers: &officers,
                 wanted: self.heat.stars > 0,
+                stars: self.heat.stars,
                 dt,
             };
             self.bot.update(sim, &bm);
@@ -652,7 +662,7 @@ impl Freeway {
             self.heat.seen_car = self.drive.vehicle();
         }
         let before = self.heat.stars;
-        let cleared = self.heat.tick(sim, feet, rep.sees, hidden, None, dt);
+        let cleared = self.heat.tick(sim, feet, rep.sees, None, dt);
         // Callers in the last seconds of their call stop and talk on the phone.
         let callers: Vec<EntityId> = self.heat.reports.iter().filter(|r| r.left < CALL_SHOWS).map(|r| r.reporter).collect();
         self.peds.phoning(sim, &callers);
@@ -719,7 +729,8 @@ impl Freeway {
             None => vel.length() < 1.5,
         };
         let cuff_time = if car_speed.is_some() { fate::CUFF_TIME * 2.0 } else { fate::CUFF_TIME };
-        if rep.cuffing && self.heat.stars <= 2 && held && self.fate.alive() {
+        // (Getting in or out is not standing still for them: the time starts again after it.)
+        if rep.cuffing && self.heat.stars <= 2 && held && self.fate.alive() && !self.drive.busy() {
             self.cuffed += dt;
             if self.cuffed >= cuff_time {
                 self.go(sim, Fate::Busted { t: 0.0 }, events);

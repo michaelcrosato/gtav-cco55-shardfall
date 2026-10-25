@@ -290,10 +290,9 @@ enum Ending {
 impl Freeway {
     /// Whether `car` is one of the police cars vigilante starts from (not a wreck).
     fn vigilante_car(&self, sim: &Sim, vd: &VigilanteDef, car: EntityId) -> bool {
-        sim.state
-            .entities
-            .get(car)
-            .is_some_and(|e| vd.cars.contains(&e.name) && e.vehicle.as_ref().is_some_and(|v| !v.state.wrecked))
+        sim.state.entities.get(car).is_some_and(|e| {
+            vd.cars.contains(&e.name) && e.vehicle.as_ref().is_some_and(|v| !v.state.wrecked && !v.state.flooded)
+        })
     }
 
     /// The police car the player sits in (one vigilante starts from).
@@ -520,10 +519,13 @@ impl Freeway {
                 run.out = 0.0;
             }
             None => {
-                // The police car wrecked (blown up beside a burning getaway car, shot to bits):
-                // dispatch leaves another at the kerb near by.
+                // The police car wrecked (blown up beside a burning getaway car, shot to bits) or
+                // drowned (into the sea): dispatch leaves another at the kerb near by.
                 let wrecked = run.police.is_some_and(|c| {
-                    sim.state.entities.get(c).is_some_and(|e| e.vehicle.as_ref().is_some_and(|v| v.state.wrecked))
+                    sim.state
+                        .entities
+                        .get(c)
+                        .is_some_and(|e| e.vehicle.as_ref().is_some_and(|v| v.state.wrecked || v.state.flooded))
                 });
                 if wrecked
                     && run.spares < SPARES
@@ -1336,7 +1338,9 @@ impl Freeway {
                     .iter()
                     .filter(|e| {
                         vd.cars.contains(&e.name)
-                            && e.vehicle.as_ref().is_some_and(|v| !v.state.wrecked && !v.state.burning && v.driver.is_none())
+                            && e.vehicle
+                                .as_ref()
+                                .is_some_and(|v| !v.state.wrecked && !v.state.burning && !v.state.flooded && v.driver.is_none())
                     })
                     .map(|e| (e.id, e.pos.distance(me)))
                     .filter(|x| x.1 < 120.0)

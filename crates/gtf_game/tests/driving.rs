@@ -242,3 +242,49 @@ fn a_car_throws_the_person_it_hits() {
     // The car carried on rather than stopping dead.
     assert!(sim.vehicle_status(car).unwrap().kmh > kmh * 0.5, "the car keeps going");
 }
+
+/// A car that goes off the quay floods: the engine drowns, it sinks, and once it is under the
+/// player gets out and swims up; at the quay's edge □ climbs out.
+#[test]
+fn a_car_that_goes_under_lets_the_player_out_to_swim_and_climb_out() {
+    let mut sim = roam();
+    cmd(&mut sim, "drive okami_kaze");
+    let car = newest(&sim, "okami_kaze");
+    // In the harbor water past the end of the avenue (the quay's edge is at z 384).
+    sim.set_position(car, Vec3::new(47.0, 1.0, 392.0));
+    let mut out = None;
+    for t in 0..60 * 20 {
+        sim.step(&InputFrame::default());
+        if riding(&sim).is_none() {
+            out = Some(t);
+            break;
+        }
+    }
+    let state = sim.state.entities.get(car).and_then(|e| e.vehicle.as_ref()).map(|v| (v.state.flooded, v.state.water)).unwrap();
+    eprintln!("out after {:?} ticks; the car flooded {}, under {:.2}", out, state.0, state.1);
+    assert!(state.0, "the engine drowned");
+    assert!(out.is_some(), "the player got out of the sunk car");
+    steps(&mut sim, 120, &InputFrame::default());
+    let ch = sim.player().and_then(|p| p.character.clone()).unwrap();
+    assert!(ch.swimming, "and swims (feet at {:.1})", sim.feet(sim.state.player.unwrap()).unwrap().y);
+    assert!(matches!(game(&sim).drive.phase, Phase::Foot));
+    // To the quay (north) and □ at its edge.
+    let north = InputFrame { move_dir: glam::Vec2::new(0.0, -1.0), ..Default::default() };
+    let mut landed = false;
+    for t in 0..60 * 20 {
+        let mut f = north.clone();
+        if t % 30 == 0 {
+            f.pad.held |= pad::WEST;
+            f.pad.pressed |= pad::WEST;
+        }
+        sim.step(&f);
+        let feet = sim.feet(sim.state.player.unwrap()).unwrap();
+        let grounded = sim.player().and_then(|p| p.character.as_ref()).is_some_and(|c| c.grounded && !c.swimming);
+        if grounded && feet.y > -0.5 {
+            eprintln!("climbed out at ({:.1}, {:.2}, {:.1}) after {:.1} s", feet.x, feet.y, feet.z, t as f32 / 60.0);
+            landed = true;
+            break;
+        }
+    }
+    assert!(landed, "climbed out onto the quay");
+}

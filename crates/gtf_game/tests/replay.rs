@@ -68,9 +68,20 @@ fn two_minutes_of_roam_with_heat_and_traffic_replay_exactly() {
 #[test]
 fn a_snapshot_mid_chase_plays_on_exactly_in_a_fresh_session() {
     let mut s = chase(5);
-    // Until the police have the car and the bot has been running from them for five seconds.
+    // Until a police car is on the hunt near the player, then five seconds more.
+    let hunted = |s: &Sim| {
+        let g = game(s);
+        let me = s.player().map(|e| e.pos).unwrap_or_default();
+        g.heat.stars > 0
+            && g.police.units.iter().any(|u| s.state.entities.get(u.vehicle).is_some_and(|e| e.pos.distance(me) < 150.0))
+    };
     let mut t = 0;
-    while !game(&s).bot.escape && t < 120 * 60 {
+    while !hunted(&s) && t < 120 * 60 {
+        // (Out of their sight long enough, even inside the search zone, the heat goes: two stars
+        // again until a unit is near.)
+        if game(&s).heat.stars == 0 {
+            s.step(&cmd("wanted 2"));
+        }
         bot(&mut s, 1);
         t += 1;
     }
@@ -80,7 +91,7 @@ fn a_snapshot_mid_chase_plays_on_exactly_in_a_fresh_session() {
         "snapshot at tick {}: {} stars, searching {}, {} police units",
         s.state.tick, g.heat.stars, g.heat.searching, g.police.spawned
     );
-    assert!(g.bot.escape && g.heat.stars > 0 && g.police.spawned > 0, "mid-chase");
+    assert!(hunted(&s), "mid-chase: the police are out after the car");
     let path = std::env::temp_dir().join(format!("gtf_replay_mid_chase_{}.state", std::process::id()));
     s.save_state(&path).unwrap();
     let from = s.recording.ticks() as usize;

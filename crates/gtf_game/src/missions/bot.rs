@@ -28,7 +28,7 @@ fn clear_shot(sim: &Sim, eye: Vec3, me: Vec3, at: Vec3, who: EntityId) -> bool {
 }
 
 /// The vehicles within `r` of `at`.
-fn cars_near(sim: &Sim, at: Vec2, r: f32) -> Vec<crate::drive::Car> {
+pub(crate) fn cars_near(sim: &Sim, at: Vec2, r: f32) -> Vec<crate::drive::Car> {
     sim.state
         .entities
         .iter()
@@ -47,7 +47,7 @@ fn under_car(cars: &[crate::drive::Car], p: Vec2) -> bool {
 
 /// Whether a vehicle stands across the straight way from `from` to `to` (people in the way in
 /// front of it do not hide it).
-fn car_across(cars: &[crate::drive::Car], from: Vec2, to: Vec2) -> bool {
+pub(crate) fn car_across(cars: &[crate::drive::Car], from: Vec2, to: Vec2) -> bool {
     let n = (from.distance(to) / 0.5).ceil().max(1.0) as usize;
     (1..=n).any(|k| under_car(cars, from.lerp(to, k as f32 / n as f32)))
 }
@@ -56,7 +56,7 @@ fn car_across(cars: &[crate::drive::Car], from: Vec2, to: Vec2) -> bool {
 /// cells, with vehicles (grown by a body's width) and buildings blocked and roads open. The
 /// points along it, a metre apart, ending at `to` or as near it as there is a way; None when
 /// there is none.
-fn round_cars(sim: &Sim, city: &pav_world::City, from: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
+pub(crate) fn round_cars(sim: &Sim, city: &pav_world::City, from: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
     const CELL: f32 = 0.5;
@@ -840,6 +840,16 @@ impl Freeway {
         let goal = flat(to);
         let dist = here.distance(goal);
         if dist < 0.6 {
+            return;
+        }
+        // In the water: to the nearest shore, and □ to climb out at its edge.
+        let swimming = sim.player().and_then(|e| e.character.as_ref()).is_some_and(|c| c.swimming);
+        if swimming && let Some(t) = city.walk.nearest_walkable(here, 12) {
+            b.frame.move_dir = (t - here).normalize_or_zero();
+            if b.tick.is_multiple_of(20) {
+                b.tap(pad::WEST);
+            }
+            b.path.clear();
             return;
         }
         let new_goal = b.goal.is_none_or(|g| g.distance(goal) > 2.0);

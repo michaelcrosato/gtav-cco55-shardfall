@@ -28,6 +28,12 @@ use crate::drive::Car;
 /// there over straight on when that leads no more than this much (m) less far from them.
 const CLOSE_CHASE: f32 = 110.0;
 const CORNER_BONUS: f32 = 35.0;
+/// Lanes the autopilot remembers driving, and what a way back onto one costs a fleeing choice
+/// (metres of reach): a block's loop is eight lanes.
+const TRAIL: usize = 24;
+const TRAIL_COST: f32 = 150.0;
+/// Making for the freeway, what each metre farther from it costs a choice (in metres of reach).
+const FREEWAY_PULL: f32 = 0.8;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -207,6 +213,10 @@ pub struct Agent {
     pub end: Option<u32>,
     #[serde(default)]
     pub plan_wait: f32,
+    /// The lanes the player's car drove last (most recent last): on the run it takes a way it has
+    /// not just come along, so it does not circle a block with the police behind.
+    #[serde(default)]
+    pub trail: Vec<u32>,
     /// What it is braking for this tick (the `traffic` tool shows it).
     #[serde(skip)]
     pub why: &'static str,
@@ -272,6 +282,43 @@ pub struct Traffic {
     /// Lanes that start or end where others do (derived from the lane graph).
     #[serde(skip)]
     pub siblings: Option<Arc<Siblings>>,
+    /// The autopilot on the run makes for the freeway (a police car it cannot shake has been on
+    /// its tail a while: out on the open road a fast car pulls away at one or two stars).
+    #[serde(default)]
+    pub seek_freeway: bool,
+    /// How far each lane is from the freeway along the roads (m; derived from the lane graph).
+    #[serde(skip)]
+    pub to_freeway: Option<Arc<Vec<f32>>>,
+}
+
+/// Each lane's distance along the roads to the freeway (its own length counted from where it
+/// starts), by a search back from the freeway lanes.
+fn freeway_distances(g: &LaneGraph) -> Vec<f32> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+    let mut d = vec![f32::MAX; g.lanes.len()];
+    let mut heap = BinaryHeap::new();
+    for (i, l) in g.lanes.iter().enumerate() {
+        if !l.closed && l.kind == LaneKind::Freeway {
+            d[i] = 0.0;
+            heap.push(Reverse((0u64, i as u32)));
+        }
+    }
+    while let Some(Reverse((k, i))) = heap.pop() {
+        let di = k as f32 / 1000.0;
+        if di > d[i as usize] {
+            continue;
+        }
+        for &p in &g.lanes[i as usize].prev {
+            let lp = &g.lanes[p as usize];
+            let nd = di + lp.length;
+            if !lp.closed && nd < d[p as usize] {
+                d[p as usize] = nd;
+                heap.push(Reverse(((nd * 1000.0) as u64, p)));
+            }
+        }
+    }
+    d
 }
 
 /// Lanes that share their start (turns fanning out of one approach) or their end (connectors and
@@ -611,6 +658,7 @@ impl Traffic {
             why: "",
             end: None,
             plan_wait: 0.0,
+            trail: Vec::new(),
         };
         self.extend(&mut a, g, &mut sim.state.rng);
         self.cars.push(a);
@@ -710,6 +758,7 @@ impl Traffic {
             why: "",
             end: None,
             plan_wait: 0.0,
+            trail: Vec::new(),
         };
         if c.speed().abs() < 0.1 {
             sim.set_vehicle_kinematic(car, false);
@@ -1251,6 +1300,7 @@ impl Traffic {
                 why: "",
                 end: None,
                 plan_wait: 0.0,
+                trail: Vec::new(),
             };
             self.extend(&mut agent, g, &mut sim.state.rng);
             if pos.distance(player) > d.density.full || !crate::world::ground_loaded(sim, pos) {
@@ -1331,6 +1381,7 @@ impl Traffic {
                 why: "",
                 end: None,
                 plan_wait: 0.0,
+                trail: Vec::new(),
             };
             if dist > d.density.full || !crate::world::ground_loaded(sim, pos) {
                 sim.set_vehicle_kinematic(car, true);
@@ -1424,6 +1475,7 @@ impl Traffic {
                 // they lose sight of it; down a long straight they never do).
                 (true, Some(from)) => {
                     let close = a.pilot && g.lanes[last as usize].points.last().is_some_and(|p| p.distance(from) < CLOSE_CHASE);
+                    let seek = a.pilot && self.seek_freeway;
                     g.lanes[last as usize]
                         .next
                         .iter()
@@ -1441,8 +1493,16 @@ impl Traffic {
                                     .first()
                                     .map(|&m| *g.lanes[m as usize].points.last().unwrap())
                                     .unwrap_or(*l.points.last().unwrap());
-                                let corner = close && matches!(l.turn, Turn::Left | Turn::Right);
+                                let corner = close && !seek && matches!(l.turn, Turn::Left | Turn::Right);
+                                let back = a.trail.contains(&n) || l.next.first().is_some_and(|m| a.trail.contains(m));
+                                // (Making for the freeway: the nearer it a way leads, the better.)
+                                let freeway = match (seek, &self.to_freeway) {
+                                    (true, Some(fd)) => FREEWAY_PULL * fd.get(n as usize).copied().unwrap_or(0.0).min(1500.0),
+                                    _ => 0.0,
+                                };
                                 after.distance(from) + if corner { CORNER_BONUS } else { 0.0 }
+                                    - if back { TRAIL_COST } else { 0.0 }
+                                    - freeway
                             };
                             reach(x).total_cmp(&reach(y)).then(y.cmp(&x))
                         })
@@ -1505,6 +1565,9 @@ impl Traffic {
         // (placed by their distance to it, so whoever is nearer goes first).
         if self.siblings.as_ref().is_none_or(|s| s.lanes != g.lanes.len()) {
             self.siblings = Some(Arc::new(Siblings::of(g)));
+        }
+        if self.seek_freeway && self.to_freeway.as_ref().is_none_or(|d| d.len() != g.lanes.len()) {
+            self.to_freeway = Some(Arc::new(freeway_distances(g)));
         }
         let sibs = self.siblings.clone().unwrap_or_default();
         let mut seen_from: Vec<(u32, (f32, f32, f32, EntityId))> = Vec::new();
@@ -1654,6 +1717,12 @@ impl Traffic {
             while a.along >= g.lanes[a.lane as usize].length - 0.3 && !a.route.is_empty() {
                 a.along -= g.lanes[a.lane as usize].length;
                 a.lane = a.route.remove(0);
+                if a.pilot {
+                    a.trail.push(a.lane);
+                    if a.trail.len() > TRAIL {
+                        a.trail.remove(0);
+                    }
+                }
                 a.along = a.along.max(0.0);
                 if a.tier == Tier::Full {
                     a.along = g.lanes[a.lane as usize].project(c.feet()).0;
@@ -1755,6 +1824,13 @@ impl Traffic {
             let haste = match (a.mood, a.pilot) {
                 // (A race's gates, gate to gate: a little less flat out, the car has to last.)
                 (Mood::Flee, true) if a.through.is_some() => 1.3,
+                // On the run from the police: well over the limit where the road is open (the
+                // turns still taken at a safe speed, below).
+                (Mood::Flee, true) if a.goal.is_none() => match lane.kind {
+                    LaneKind::Freeway | LaneKind::Ramp => 1.7,
+                    LaneKind::Boulevard | LaneKind::Avenue => 1.55,
+                    _ => 1.4,
+                },
                 (Mood::Flee, true) => 1.25,
                 (Mood::Flee, false) => 1.25,
                 _ => 1.0,
@@ -2010,7 +2086,8 @@ impl Traffic {
                 && a.bus.is_none()
                 && a.change_t <= 0.0
                 && lane.length - a.along > room
-                && obstacle.is_some_and(|(gap, sp)| gap < 25.0 && sp < 0.7 * v0)
+                // (Racing, anything holding it back is worth getting past.)
+                && obstacle.is_some_and(|(gap, sp)| gap < if racing { 40.0 } else { 25.0 } && sp < if racing { 0.92 } else { 0.7 } * v0)
                 && (!held || hurry)
             {
                 // (Not into a lane that ends short of where this one goes on.)
@@ -2028,12 +2105,24 @@ impl Traffic {
                     }
                 }
             }
-            // Fleeing: out past a slower car ahead rather than queueing behind it — racing, mid-
-            // block only (a pass carried into a junction loses the lane its route goes on from).
+            // Fleeing: out past a slower car ahead rather than queueing behind it — racing, up to
+            // where its route turns (a pass carried into a turn loses the lane its route goes on
+            // from; straight over a junction it keeps it).
             let room = match (racing, lane.kind) {
                 (false, _) => f32::MAX,
-                (true, LaneKind::Connector) => 0.0,
-                (true, _) => lane.length - a.along,
+                (true, LaneKind::Connector) if lane.turn != Turn::Straight => 0.0,
+                (true, _) => {
+                    let mut room = lane.length - a.along;
+                    for &n in &a.route {
+                        let l = &g.lanes[n as usize];
+                        if room > 160.0 || (l.kind == LaneKind::Connector && l.turn != Turn::Straight) || l.kind == LaneKind::Ramp
+                        {
+                            break;
+                        }
+                        room += l.length;
+                    }
+                    room
+                }
             };
             a.passing -= dt;
             if room < 15.0 {
@@ -2043,7 +2132,11 @@ impl Traffic {
                 && a.tier == Tier::Full
                 && room > 45.0
                 && car_ahead
-                && obstacle.is_some_and(|(gap, sp)| gap < 22.0 && sp < a.speed.max(4.0))
+                && obstacle.is_some_and(|(gap, sp)| {
+                    // (Racing, past one going slower than it would, from the gap it follows at —
+                    // sat behind it, it goes no faster than that one.)
+                    if racing { gap < 40.0 && sp < (v0 * 0.92).max(4.0) } else { gap < 22.0 && sp < a.speed.max(4.0) }
+                })
             {
                 // Only when the oncoming lane beside it is clear for a good way ahead.
                 let fwd = c.forward();

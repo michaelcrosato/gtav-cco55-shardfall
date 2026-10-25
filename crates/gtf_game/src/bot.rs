@@ -58,6 +58,16 @@ pub struct Bot {
     /// Counts for tests and the attract mode: cars left behind and cars taken.
     pub bailed: u32,
     pub taken: u32,
+    /// In a car: seconds it has stood still.
+    pub still: f32,
+    /// On foot: seconds it has pushed on without going anywhere (something in the way), and a
+    /// sidestep under way (seconds left; the side, the other one each time).
+    pub blocked: f32,
+    pub dodge: f32,
+    pub side: f32,
+    /// Seconds the police have been right behind (a unit or officer within 30 m), falling off
+    /// once they are not: a tail it cannot shake on the streets.
+    pub glued: f32,
 }
 
 /// What the bot needs to know this tick.
@@ -72,8 +82,9 @@ pub struct Moment<'a> {
     pub threat: Option<Vec3>,
     pub police: &'a [EntityId],
     pub officers: &'a [Vec3],
-    /// Wanted at all.
+    /// Wanted at all, and how many stars.
     pub wanted: bool,
+    pub stars: u8,
     pub dt: f32,
 }
 
@@ -89,6 +100,8 @@ impl Bot {
         if !self.escape || m.busy {
             return;
         }
+        let tail = m.wanted && m.threat.is_some_and(|t| t.distance(m.feet) < 30.0);
+        self.glued = if tail { self.glued + m.dt } else { (self.glued - m.dt * 0.5).max(0.0) };
         match m.car {
             Some(car) => self.in_car(sim, m, car),
             None => self.on_foot(sim, m),
@@ -115,7 +128,11 @@ impl Bot {
         // — or when that has gone nowhere for a long while.
         let close = m.threat.is_some_and(|t| t.distance(c.center) < 25.0);
         let boxed = m.wanted && self.anchor_t > if close { STUCK_AFTER * 4.0 } else { STUCK_AFTER };
-        if (done || boxed) && self.tap == Tap::Idle {
+        // At one or two stars an officer at the window arrests a driver who sits still: out and
+        // away on foot before the cuffs go on (from three they shoot, and the car is cover).
+        self.still = if c.vel.length() < 0.5 { self.still + m.dt } else { 0.0 };
+        let window = m.stars <= 2 && self.still > 1.0 && m.officers.iter().any(|o| o.distance(c.center) < 6.0);
+        if (done || boxed || window) && self.tap == Tap::Idle {
             self.tap = Tap::Hold;
             self.leave(car);
             self.anchor_t = 0.0;
@@ -183,13 +200,14 @@ impl Bot {
             self.best = f32::MAX;
             self.since_best = 0.0;
         }
-        // An officer on foot close by: run first (they would have the cuffs on before a car was
-        // taken from under their noses).
+        // An officer on foot close by at three stars and up: run first (they shoot; a car is not
+        // taken under their guns). At one or two they only come for the cuffs, which getting in
+        // outruns.
         let cop = m
             .officers
             .iter()
             .copied()
-            .filter(|o| o.distance(m.feet) < COPS_NEAR)
+            .filter(|o| m.stars >= 3 && o.distance(m.feet) < COPS_NEAR)
             .min_by(|a, b| a.distance(m.feet).total_cmp(&b.distance(m.feet)));
         // Within reach of a car worth taking (the drive walks to its door and gets in): △.
         if cop.is_none() && drive::Drive::nearest(sim, m.feet).is_some_and(|(id, _)| fit(id)) {
@@ -223,12 +241,37 @@ impl Bot {
                 }
                 _ => vec![goal],
             };
+            // A car across the first leg (the one just left, cars at the kerb): round it.
+            if let Some(first) = self.path.first().copied() {
+                use crate::missions::bot::{car_across, cars_near, round_cars};
+                let leg = first - feet;
+                let to = feet + leg.normalize_or_zero() * leg.length().min(14.0);
+                if leg.length() > 1.0
+                    && car_across(&cars_near(sim, feet, 24.0), feet, to)
+                    && let Some(mut way) = round_cars(sim, m.city, feet, to)
+                {
+                    way.append(&mut self.path);
+                    self.path = way;
+                }
+            }
         }
         while self.path.len() > 1 && self.path[0].distance(feet) < 1.2 {
             self.path.remove(0);
         }
         let next = self.path.first().copied().unwrap_or(goal);
         self.walk = (next - feet).normalize_or(Vec2::ZERO);
+        // Pushing on without going anywhere (a car door, an officer in the way): a step aside.
+        let speed = sim.player().and_then(|e| e.character.as_ref()).map_or(0.0, |c| Vec2::new(c.vel.x, c.vel.z).length());
+        self.blocked = if speed < 0.8 && self.dodge <= 0.0 { self.blocked + m.dt } else { 0.0 };
+        if self.blocked > 0.3 {
+            self.blocked = 0.0;
+            self.dodge = 0.5;
+            self.side = if self.side > 0.0 { -1.0 } else { 1.0 };
+        }
+        if self.dodge > 0.0 {
+            self.dodge -= m.dt;
+            self.walk = (Vec2::new(-self.walk.y, self.walk.x) * self.side + self.walk * 0.3).normalize_or(self.walk);
+        }
     }
 
     /// The controller frame: △ taps, the walk (world space, sprinting), △ at a door. The

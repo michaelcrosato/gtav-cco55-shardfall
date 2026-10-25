@@ -116,7 +116,12 @@ fn escape(seed: u64, rolling: bool) -> (Option<u32>, String) {
     }
     cmd(&mut sim, "wanted 3");
     let mut waited = 0;
-    while waited < 120 * 60 && (game(&sim).heat.unseen > 0.0 || game(&sim).heat.searching) {
+    while waited < 120 * 60 && (game(&sim).heat.unseen > 0.0 || game(&sim).heat.searching || game(&sim).heat.stars == 0) {
+        // (Out of their sight long enough, even inside the search zone, the heat goes: three
+        // stars again until a unit has the car.)
+        if game(&sim).heat.stars == 0 {
+            cmd(&mut sim, "wanted 3");
+        }
         let input = sim.bot_input();
         sim.step(&input);
         waited += 1;
