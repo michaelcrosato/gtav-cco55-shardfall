@@ -21,6 +21,9 @@ pub struct Gfx {
     pub egui: egui_wgpu::Renderer,
     pub vsync: bool,
     pub adapter_name: String,
+    /// The adapter is a software renderer (SwiftShader, lavapipe, WARP): the CPU draws every
+    /// pixel, so Auto quality draws less (`quality.rs`).
+    pub software: bool,
     pub gpu_errors: Arc<std::sync::atomic::AtomicU32>,
 }
 
@@ -100,7 +103,8 @@ impl Gfx {
             Ok((egui_wgpu::Renderer::new(&device, config.format, egui_wgpu::RendererOptions::default()), String::new()))
         })?;
         let adapter_name = gpu::describe(&adapter.get_info());
-        Ok(Self { window, surface, adapter, device, queue, config, renderer, egui, vsync, adapter_name, gpu_errors })
+        let software = adapter.get_info().device_type == wgpu::DeviceType::Cpu;
+        Ok(Self { window, surface, adapter, device, queue, config, renderer, egui, vsync, adapter_name, software, gpu_errors })
     }
 
     pub fn resize(&mut self, w: u32, h: u32) {

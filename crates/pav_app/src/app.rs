@@ -117,6 +117,8 @@ struct Fps {
     since: Instant,
     fps: f32,
     frame_ms: f32,
+    /// When the last performance line was logged (`Settings::perf_log`).
+    logged: Instant,
 }
 
 pub struct App {
@@ -243,7 +245,7 @@ impl App {
             boot_done_at: None,
             started: Instant::now(),
             last: Instant::now(),
-            fps: Fps { frames: 0, since: Instant::now(), fps: 0.0, frame_ms: 0.0 },
+            fps: Fps { frames: 0, since: Instant::now(), fps: 0.0, frame_ms: 0.0, logged: Instant::now() },
             mouse: Mouse::default(),
             screenshot_requested: false,
             scene_name,
@@ -1371,7 +1373,8 @@ impl App {
         // The look layer (Look & Filters) over the scene's own settings.
         let mut view = self.view.clone();
         self.look_ui.apply(&mut view);
-        self.prefs.quality.trim(self.touch_screen, &mut view);
+        let software = self.gfx.as_ref().is_some_and(|g| g.software);
+        self.prefs.quality.trim(self.touch_screen, software, &mut view);
         let mut scene = self.builder.build(&prev, &curr, alpha, &self.rig, w as f32 / h.max(1) as f32, &view, focus);
         // Arriving somewhere new: the screen opens with the chosen transition, on the player.
         if let Some(t0) = self.arrival {
@@ -1437,13 +1440,31 @@ impl App {
 
         // UI.
         let stats = *host.shared.stats.lock().unwrap();
+        if self.settings.perf_log && self.fps.logged.elapsed().as_secs_f32() >= 5.0 {
+            self.fps.logged = Instant::now();
+            log::info!(
+                "perf: {:.1} fps, frame {:.1} ms, sim {:.2} ms/tick at {:.0} ticks/s, {} entities, render scale {:.2}",
+                self.fps.fps,
+                self.fps.frame_ms,
+                stats.tick_ms,
+                stats.tps,
+                stats.entities,
+                self.scaler.scale
+            );
+        }
         let mut ctl = host.control();
         let ctl_before = ctl;
         let crash = host.shared.crashed.lock().unwrap().clone();
         self.panel.record_timing(dt * 1000.0, stats.tick_ms);
         let gfx = self.gfx.as_mut().unwrap();
-        let (render_scale, lights) =
-            self.scaler.update(self.prefs.quality, self.touch_screen, dt * 1000.0, gfx.size(), gfx.window.scale_factor() as f32);
+        let (render_scale, lights) = self.scaler.update(
+            self.prefs.quality,
+            self.touch_screen,
+            gfx.software,
+            dt * 1000.0,
+            gfx.size(),
+            gfx.window.scale_factor() as f32,
+        );
         gfx.renderer.render_scale = render_scale;
         gfx.renderer.max_shadow_lights = lights;
         let info = ui::OverlayInfo {

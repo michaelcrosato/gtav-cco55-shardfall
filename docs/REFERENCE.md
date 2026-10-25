@@ -327,7 +327,14 @@ contract. This is an authoring/preview stage; gameplay spawning of these rigs is
 ## Browser and phones
 Headless Chromium can run the browser build (WebGPU on SwiftShader): launch with
 `--enable-unsafe-webgpu --enable-features=Vulkan --use-vulkan=swiftshader --use-angle=swiftshader`
-(other flag sets show a blank canvas). `?room=NAME&seed=N` picks the start room.
+(other flag sets show a blank canvas). `?room=NAME&seed=N` picks the start room, `?scene=NAME`
+the start scene; `?perf=1` (native: `--perf`) logs a line every 5 s — frame rate, frame time,
+the sim's ms per tick, ticks per second, entities and the render scale — for checks that read the
+console. On a software adapter (wgpu `DeviceType::Cpu`: SwiftShader, lavapipe, WARP) Auto
+quality is Low with a quarter-megapixel target and dynamic resolution; SwiftShader still takes
+seconds a frame for a city, so browser checks poll log lines (`scripts/web-check.mjs until:`).
+`scripts/pack_single_html.py --header FILE` puts a text block at the top of the single page as
+an HTML comment (a game's source information).
 Phones: emulate one in headless Chromium with Playwright (`viewport 844x390, isMobile, hasTouch,
 deviceScaleFactor: 1`; Chrome's DPR emulation leaves the canvas at CSS size) and drive it with
 CDP `Input.dispatchTouchEvent`; SwiftShader frames take about a second, so send a tap's start and

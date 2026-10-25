@@ -30,6 +30,10 @@ pub struct Settings {
     /// A scripted gamepad to play (command line only: --pad-script FILE).
     #[serde(skip)]
     pub pad_script: String,
+    /// A performance line in the log every 5 s: frame rate, frame time and the sim's time per
+    /// tick (`?perf=1` in the page address, `--perf` on the command line).
+    #[serde(skip)]
+    pub perf_log: bool,
 }
 
 impl Default for Settings {
@@ -50,6 +54,7 @@ impl Default for Settings {
             creature_studio: false,
             creature_name: String::new(),
             pad_script: String::new(),
+            perf_log: false,
         }
     }
 }
@@ -79,6 +84,7 @@ impl Settings {
             s.asset_name = p.get("asset").unwrap_or_default();
             s.creature_studio = p.get("creature_studio").is_some_and(|v| v != "false");
             s.creature_name = p.get("creature").unwrap_or_default();
+            s.perf_log = p.get("perf").is_some_and(|v| v != "0" && v != "false");
         }
         if (s.animation_studio || s.asset_studio || s.creature_studio) && s.scene.is_empty() {
             s.scene = "empty".into();
@@ -151,6 +157,7 @@ impl Settings {
                 "--room" => s.scene = it.next().map(|r| format!("world/{r}")).unwrap_or(s.scene),
                 "--seed" => s.seed = it.next().and_then(|v| v.parse().ok()).unwrap_or(s.seed),
                 "--pad-script" => s.pad_script = it.next().cloned().unwrap_or_default(),
+                "--perf" => s.perf_log = true,
                 "--no-vsync" => s.vsync = false,
                 "--vsync" => s.vsync = true,
                 "--fullscreen" => s.fullscreen = true,

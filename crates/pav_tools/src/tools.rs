@@ -1285,7 +1285,8 @@ pub fn render_stats(s: &mut Session) -> Result<Value> {
     let heaviest: Vec<Value> = st.heaviest.iter().filter(|h| h.2 > 0).map(|h| json!([h.0, h.1, h.2])).collect();
     Ok(json!({
         "triangles": st.triangles, "batches": st.batches, "mesh_instances": st.mesh_instances,
-        "sdf": st.sdf_instances, "lights": st.lights, "materials": st.materials,
+        "sdf": st.sdf_instances, "lights": st.lights, "shadow_lights": st.shadow_lights, "particles": st.particles,
+        "materials": st.materials,
         "custom_meshes": st.custom_meshes, "mesh_kb": st.mesh_bytes.div_ceil(1024), "draw_calls": st.draw_calls,
         "regions": st.regions, "regions_drawn": st.regions_drawn, "regions_shadow": st.regions_shadow,
         "shadow_instances": st.shadow_instances, "view_ms": (gpu.view_ms * 100.0).round() / 100.0,
