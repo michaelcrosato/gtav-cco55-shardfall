@@ -292,7 +292,8 @@ pub(super) fn tick(
         b.set_angvel(rot * l, true);
     }
 
-    // On its side or roof for three seconds (not burning): it turns back onto its wheels.
+    // On its side or roof for three seconds (not burning): it turns back onto its wheels. (Wheels
+    // touching something on its side are on a wall or a car it leans on: they count for nothing.)
     let speed = b.linvel().length();
     if s.righting {
         if up.y > 0.85 || s.wrecked {
@@ -304,7 +305,7 @@ pub(super) fn tick(
             let axis = up.cross(Vec3::Y).normalize_or(fwd);
             b.set_angvel(axis * RIGHT_SPEED, true);
         }
-    } else if up.y < 0.35 && down < 2 && speed < 3.0 {
+    } else if up.y < 0.35 && speed < 3.0 {
         s.upside += dt;
         if s.upside >= RIGHT_AFTER && !s.burning && !s.wrecked {
             s.righting = true;
