@@ -5,17 +5,21 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase (2026-10-24, session 4):** M0-M6 done; **M7 is under way.**
-  - **Done this session:** D1 (wasm clippy clean); the story missions m1-m3, s1-s3, h0 and
-    h1 (Loud and Smart); the radio (D10's radio part, merged from a helper branch); the
-    landmarks and interiors (D2, merged from a helper branch).
-  - **Next:** the activities, then completion and stats, bodies and looks, and the §7.8 suites.
+- **Phase (2026-10-25, session 5):** M0-M6 done; **M7 is under way.**
+  - **Done in sessions 4-5:** D1 (wasm clippy clean); the story missions m1-m3, s1-s3, h0 and
+    h1 (Loud and Smart); the radio; the landmarks and interiors; **every activity** (the
+    Pretzel Run, 5 stunt jumps, 2 hold-ups, vigilante, 2 random events, 15 Lost Shields and
+    the gold Kaze); completion and the STATS cards.
+  - **Next:** bodies and looks, the §7.8 suites, landmark captures, wasm clippy and the M7
+    acceptance run; then M8.
   - Read `HANDOFF.md` first, then this file. **Remaining work** (below the milestones) is the
     checklist.
-- **Missions:** the bot wins every story mission on seeds 1-3 (release `gtf`, `play bot=true
-  seeds=3`): m1, m2, m3, s1, s2 quiet and loud, s3, h0, h1 Loud and h1 Smart. It also still
-  wins `dev_test` and `dev_test2`. `tests/missions.rs` has an ignored `story_*` test per
-  mission (`cargo test --release -p gtf_game --test missions -- --ignored story_`).
+- **Missions and activities (2026-10-25):** the bot wins every story mission, the race and both
+  hold-ups on seeds 1-3 (release `gtf`, `play bot=true seeds=3`; ignored `story_*` and
+  `activity_*` tests in `tests/missions.rs`), every stunt jump from its run-up on three seeds
+  (`tests/activities.rs`), and vigilante, the Purse Snatcher and Getaway Needed on seeds 1-3
+  (ignored tests in `tests/activities_street.rs`). It also still wins `dev_test` and
+  `dev_test2`.
 - **Session 2:** M3-M5 (driving, traffic, `LIB/gtf_vehicles`, heat and the police, cover,
   grenades, armed opponents, WORKSHOP clips, guns in hand, drive-bys, the respray and car swap,
   the evasion bot, the map's edge) and M6: the mission DSL with its validator, runtime and bot
@@ -32,7 +36,8 @@ resumed or compacted session reads first.
   - pav_core, pav_audio, pav_ui, pav_tools, pav_world, gtf_game and gtf_app: green.
   - gtf_game: 114 passed, 8 ignored, plus the new `story_*` ones.
   - clippy `-D warnings` clean on the touched crates.
-- **Helpers:** none running.
+- **Helpers:** none running. (The vigilante and random-events helper was stopped by a container
+  restart; its work was merged and finished in session 5.)
 - **Branch / PR:** `claude/keen-cerf-g5vksy`, draft PR #2 (description current to the radio
   and landmark merges).
 
@@ -154,11 +159,29 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 - [ ] **Bodies and looks.** The two helicopters have no authored body (`pav_view` draws a
       procedural one). People vary only by colour, height and build; add hair, headwear,
       accessories and outfits.
-- [ ] **Activities.** None exist yet, and there is no `activities.toml`. Needed: the Pretzel Run
-      race, 5 stunt jumps (with slow-mo and the bonus), hold-ups at the Gas-N-Grab and the Grind
-      House, vigilante, the Purse Snatcher and Getaway Needed random events, and 15 Lost
-      Shields. Parts to build on: the `race` and `holdup` step kinds, `BannerKind::Stunt`,
-      `BlipIcon::Jump` and the `[[jump]]` wedges.
+- [x] **Activities** (2026-10-24/25, `content/freeway/activities.toml`, `activities/`).
+      - **The Pretzel Run** (`act_pretzel_run`): three laps round east Paloma Bay against three
+        racers, a bet through `choose` costs; the race DSL drives racers gate to gate
+        (`Agent.through`) with a rubber band and shows the lap and the place.
+      - **Five stunt jumps** (the Ditch, the Freeway Gap, the Pier Ramp, the Hills, the Harbor
+        Container Ramp): through the gate fast enough, slow motion and a stunt camera in the
+        air, the bonus for landing inside the zone; the container yard is district `[[prop]]`s.
+      - **Two hold-ups** (`act_holdup_gas`, `act_holdup_grind`): aim at the clerk, a seeded
+        `loot`, out to the Kaze at the door, lose a capped two stars.
+      - **Vigilante:** five levels from a police car (D-pad right / E, or the Jobs app); see
+        Decisions for its rules.
+      - **Random events:** the Purse Snatcher and Getaway Needed, outside missions, on a
+        cooldown, where they fit.
+      - **Fifteen Lost Shields** with trivia cards; all fifteen pay $10,000 and leave a gold
+        Okami Kaze outside Dez's place.
+      - **Evidence (release `gtf`, seeds 1-3 unless noted):** race 3/3, gas 3/3, grind 3/3
+        (`play bot=true seeds=3`; `activity_*` tests); jumps 15/15
+        (`every_stunt_jump_is_landed_from_its_runup_on_three_seeds`); vigilante seeds 1-8 7/8
+        (6 ran out level 3's clock); the Purse Snatcher 6/6 and Getaway Needed 6/6 (seeds 1-6;
+        `tests/activities_street.rs`); shields
+        (`every_lost_shield_is_taken_by_walking_up_to_it_and_all_fifteen_pay`). Captures looked
+        at: the stunt camera over each jump, the race's lap/place HUD, the vigilante HUD and
+        the stuck moments the bot was fixed from (`out/act/`).
 - [x] **Radio** (2026-10-24). Five genres with their own kits and feel
       (`pav_audio/src/music/`: synthwave, boom-bap, surf, cumbia, smooth jazz), song sections
       and a per-station ident; SPNN 1040 AM runs a program from `radio.toml` [talk.spnn]
@@ -172,10 +195,13 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
       radio` (6), captures `out/radio/*.wav` with `radio seek` (in-band tempo 107/92/161/95/73
       BPM as the songs; centroids 1272/819/2065/639/1045 Hz; SPNN 83% speech band, 4.8
       syllables/s; no clipping).
-- [ ] **Completion and stats.** `progress.rs` `completion()` counts story passes and gold medals
-      only, and reads 0% because no story missions exist yet. Track and save activities and
-      collectibles, and add the completion and collectibles cards to the STATS tab. Add a test
-      that drives completion to 100%.
+- [x] **Completion and stats** (2026-10-24/25). Completion is 50% story, 30% activities, 10%
+      Lost Shields and 10% gold medals (PLAN's shares); activities and shields are saved. STATS
+      shows a completion card (with the four bars) and an activities card (done of 26: the
+      shields, the jumps, the street jobs, the random events) beside the crew. Test:
+      `completion_reaches_100_with_everything_done`. Capture looked at:
+      `out/act/stats_tab.png` (the activities card's title was cut off and two of its six lines
+      never showed; fixed to four lines and a done/total title).
 - [ ] **Checks.** Capture every landmark at its best time of day. Add the PLAN §7.8 suites that
       do not exist yet: `content.rs` (every file and reference validates), `district.rs`,
       `player.rs`, `save.rs`, `replay.rs` and `ui.rs`. Each may fold into an existing file if
@@ -243,7 +269,7 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 | D3 Player | ◐ | M3: feel ranges for all 13 road archetypes, driving/carjack/bail-out/helicopter tests, on-foot camera with wall handling; M6: three protagonists with their own cash, weapons and places, the switch wheel and sky-cam, abilities (`tests/protagonists.rs`); final looks and animation polish wait for M7/M9 |
 | D4 Living city | ◐ | M4: traffic and pedestrian soaks within limits, buses, parked cars, struck people, witnesses; roam soak open issue (one stuck car in 2,700 s) |
 | D5 Heat | ◐ | M5: `tests/heat.rs` (reporting, arrest, Wasted, respray, car swap, evasion), police never spawn in view, 3★ night captures |
-| D6 Missions and activities | ◐ | M6: the mission system end to end (`tests/missions.rs`, `docs/gtf/MISSIONS.md`). 2026-10-24: the eight story missions with the heist both ways; the bot wins each on seeds 1-3 (`play bot=true seeds=3`; ignored `story_*` tests). Activities are next |
+| D6 Missions and activities | ◐ | M6: the mission system end to end (`tests/missions.rs`, `docs/gtf/MISSIONS.md`). 2026-10-24: the eight story missions with the heist both ways; the bot wins each on seeds 1-3 (`play bot=true seeds=3`; ignored `story_*` tests). 2026-10-25: every activity (race, 5 jumps, 2 hold-ups, vigilante, 2 random events, 15 Lost Shields), each won by the bot on seeds 1-3 (`activity_*`, `activities.rs`, `activities_street.rs`); completion and STATS cards. Economy and saves from M6. To do: the M7 acceptance run |
 | D7 UI | ◐ | M1 kit + M6 screens: intro card, objectives, subtitles, fail card, results, switch wheel, phone (9 apps), shop menus, save slots, captured with HUD (`out/m6/`); the 10-foot review is M9 |
 | D8 Frontend | ☐ | |
 | D9 Attract mode | ☐ | |
@@ -457,11 +483,50 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 - 2026-10-24 — **The store's test counts materials as a floor** (`>= 40`), as it does props and
   clips: the landmarks' chain-link was the 41st.
 
+- 2026-10-25 — **Activities and escapes (session 5):**
+  - **Bets** are `choose` options with a `cost`; the race pays double the stake. Activities
+    may leave `protagonist` empty (whoever is played) and take a blip icon instead of a letter.
+  - **Race:** racers drive through each gate toward the next (no stop at gates); a rubber band
+    (lead over 0.75 of a gate: 0.66 of the pace; behind: 1.0; else 0.82); racing pilots pass
+    mid-block only and keep their lane within 120 m of a turn or ramp; traffic thinned to 0.1.
+  - **Hold-ups** cap the heat at two stars (`heat_cap`), and the getaway Kaze waits at the
+    door (a Stallion was slower than the police).
+  - **The h1 jump** leaves one unit (heat 1 after it): the broken ramp shakes off the rest.
+  - **Busted in a car:** an officer at arm's length of a car held under 0.5 m/s for 4 s at
+    ≤ 2★ (GTA's "boxed in"); the Mods counter serves during a mission's play steps.
+  - **Police pursuit is paced by the stars:** one star +2.5 m/s over the player (31 m/s at
+    most), two +4.5 (36), three and up +7 (42) as before; PITs stay at 3★+. At +7 everywhere
+    no car could pull away at one star. A close pursuer that is not ramming takes the
+    player's tail (the lead point from alongside steered it into the player's side).
+  - **The escape autopilot** drives at 1.25 times the limits (1.6 crashed more, 1.4 lost the
+    hold-ups), counts its jams with no goal too (it shoves a stopped or creeping queue aside
+    after 2 s), and prefers a turn at a junction with the police within 110 m (35 m of reach
+    bonus). The evasion bot keeps a damaged car with the police within 15 m (getting out was
+    the arrest) and runs from officers on foot within 10 m before taking a car.
+  - **The player's car pushed into people at under 3 m/s shoves them aside** (no injury, no
+    crime): officers standing at a bumper made a car immovable.
+  - **Vigilante:** five levels (1-2 cars, 1-2 suspects, armed from level 4, 300-420 s each);
+    $250 a takedown, $1,000 for the last level and completion. On duty a civilian killed docks
+    $250 instead of a report (the police do not come after one of their own; arrests had
+    ended runs over collateral). A getaway car `escape` m off lies low instead of ending the
+    run; the level's clock is the pressure. 60 s out of a police car (300 s between levels);
+    a wrecked police car is replaced by a spare at the kerb (3 a run); out of it, its blip and
+    the GPS point back to it. No mission is picked up while vigilante or an event is on.
+  - **The bots:** on foot they route round vehicles to the first waypoint clear of them (the
+    walk map runs under parked cars), jump every third time they are pinned, leave cover and
+    a crouch before walking off, and go round a car's bumper only when close to it; off-road
+    hand driving is for slow cars, held until back within 5 m of a lane; a burning or wrecked
+    car is left.
+
 ## Open issues
 - Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround (limit 0);
   roam AI crashes 0-3 per 900 s with buses turning at junctions the most common. M9 polish.
 - Evasion bot from a standstill: 2/8 seeds (Wasted after being pinned by a PIT; it will not drive
   through the officers who get out). M9: fast-road routing, not stopping for armed officers.
+  (Session 5's escape changes — paced pursuit, the shove, keeping a damaged car — were not
+  re-measured at 3★ from a standstill; the 3★ rolling test passes.)
+- Vigilante seed 6 runs out level 3's clock (two cars that keep slipping away); seeds 1-5 and
+  7-8 win. A long chase is the activity's difficulty, but the bot could ram sooner.
 - DualSense button mapping through gilrs on the user's Windows machine (a user check).
 - Dense traffic can lock a junction box into a queue that never clears (why missions thin
   traffic). M7/M9: give way by arrival order inside the box, or let the tail re-route.

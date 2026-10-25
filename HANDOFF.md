@@ -1,4 +1,4 @@
-# HANDOFF — Grand Theft Freeway-BX, end of session 2 (2026-10-18; environment checked in sessions 3 and 4, 2026-10-19 and 2026-10-24)
+# HANDOFF — Grand Theft Freeway-BX, session 5 (2026-10-25; M7 mostly done)
 
 For the next implementing session (or this one after a compaction). Read `CLAUDE.md` (it imports
 `docs/DOCTRINE.md`), then this page, then `PROGRESS.md` → "Now", then `PLAN.md` §0–§4 and §10
@@ -16,11 +16,13 @@ truth; this page says where things stand and what to do next.
 - **Health:** pav_core 305, pav_view 44, pav_world 11, gtf_game 98 (+8 ignored reports) green;
   clippy `-D warnings` clean on the touched crates; `gtf perf view=all` (release) within every budget
   with traffic and crowds; soaks as in `PROGRESS.md` → Now.
-- **Sessions 3 and 4 (2026-10-19, 2026-10-24)** only checked the environment and took stock
-  (no game code changed). Everything is installed. Wasm clippy is still not clean (below). On
-  the session 4 container every reference view is within budget again, but downtown's margin is
-  thin. The shardfall MCP server timed out at startup; `.mcp.json` now runs `gtf mcp`. The
-  gap inventory of everything M7–M10 still needs is in `PROGRESS.md` → Remaining work.
+- **Sessions 4-5 (2026-10-24/25), under the `/goal` below:** D1 fixed (wasm clippy clean);
+  M7's story missions (m1-m3, s1-s3, h0, h1 Loud and Smart), the radio, 21 landmarks with
+  interiors, and every activity (the Pretzel Run, 5 stunt jumps, 2 hold-ups, vigilante, the
+  Purse Snatcher and Getaway Needed, 15 Lost Shields and the gold Kaze), completion and the
+  STATS cards. The bot wins every mission and activity on seeds 1-3. Left in M7: bodies and
+  looks, the §7.8 suites, landmark captures, the M7 acceptance run (`PROGRESS.md` → Remaining
+  work).
 
 ## The M6 systems (where to look)
 - **Missions** — `crates/gtf_game/src/missions/`: `mod.rs` (the DSL types, the validator with
@@ -46,19 +48,27 @@ truth; this page says where things stand and what to do next.
   `load <slot>`, `pilot_goal x z [desire]|off`, `phone <app>|home|close`, `menu
   gun|mods|store|save|load|replay`.
 
+## The M7 systems (where to look)
+- **Activities** — `crates/gtf_game/src/activities/` with `content/freeway/activities.toml`:
+  `jumps.rs` (gates, slow motion, the stunt camera, the bonus), `shields.rs` (the Lost Shields,
+  their cards, the gold Kaze), `vigilante.rs` (levels, suspects, takedowns, spares, its bot),
+  `events.rs` (the random events, their triggers and bots). `mod.rs` holds the saved state,
+  `activity_done(id)` and the units completion counts. The race and the hold-ups are missions
+  (`act_*.toml`): bets are `choose` costs, `loot` pays a seeded amount.
+- **Trials:** `activity <id>` (`vigilante`, `purse_snatcher`, `getaway_needed`) sets one up and
+  plays it as a trial (won when done): `play bot=true cmd="activity vigilante"` in the REPL,
+  `tests/activities_street.rs` in tests.
+- **Driving AI:** `traffic.rs` (lanes, the IDM, flee routes and the escape autopilot, racing
+  `through`), `police.rs` (pursuit paced by the stars), `bot.rs` (the evasion bot),
+  `missions/bot.rs` (the mission bot; the activity bots reuse its walking, entering and
+  driving). `status` shows `traffic.pilot`, `evade` and `mbot` for debugging bots.
+
 ## Next, in value order (PLAN §2)
 `PROGRESS.md` → **Remaining work** is the full checklist (a gap inventory of the code against
 PLAN, 2026-10-24). In short:
-0. **D1:** fix the four wasm-clippy lints (one `engine:` commit, below).
-1. **M7 content, heist path first:** missions `m1`–`m3`, `s1`–`s3`, the `h0` board and `h1`
-   Loud and Smart (§5.7) in the DSL. Add each to `FILES` in `missions/mod.rs` and validate it
-   (`cargo test -p gtf_game --test missions every_mission_validates`). Then give it a bot test on
-   3 seeds like `the_bot_finishes_both_test_missions_on_three_seeds` in `tests/missions.rs` (both
-   heist approaches; the `choose` step takes `mission choose <id>`). The `choose` step already
-   shows a `mission/board` Cards screen; `h0` adds the cut. Then the activities (none exist yet),
-   the radio (per-genre patches, SPNN talk), completion and the stats screen, then the
-   landmarks that are still placeholders or missing (the Big Wheel among them) and the interiors
-   (none yet).
+1. **Finish M7:** helicopter bodies and people's looks (hair, headwear, outfits); the §7.8
+   suites (`content.rs`, `district.rs`, `player.rs`, `save.rs`, `replay.rs`, `ui.rs`); landmark
+   captures at their best hour; wasm clippy and the full workspace tests (the acceptance run).
 2. **M8 frontend and attract:** the hills title, intro and loading cards, the missing settings
    and the toggles nothing reads, About with the full Source Information, and the attract
    director (7 vignettes, 10 s idle, any input returns, a 30-minute soak). Today a 10 s idle
@@ -80,11 +90,9 @@ PLAN, 2026-10-24). In short:
 - Sun through thin cloud: the patch is saved at `docs/gtf/patches/cloud_through.patch`.
 - `citymap`, `lanes`, `soak`, `traffic`, `peds` live in `gtf_app/src/tools.rs` (they read the
   game's city).
-- **Wasm clippy (D1) fails** on four wasm-only lints in vendored engine code: `drop_non_drop` in
-  `pav_tools` (`animation_tools.rs:287`, `asset_tools.rs:95`, `creature_tools.rs:662`) and
-  `default_constructed_unit_structs` in `pav_app/src/asset_watch.rs:48`. Session 4 got the same
-  three `pav_tools` errors. Fix them in one `engine:` commit (details in `PROGRESS.md` → Open
-  issues).
+- **Bot escapes are chaotic:** any change to traffic, the police or the bots reshuffles which
+  seeds get away. Re-run every mission and activity (`allmissions`-style: `play bot=true
+  seeds=3` per mission, `activity <id>` per street activity) after touching them.
 - **Perf depends on the container:** downtown built a frame in 2.8-3.2 ms in session 2,
   4.7-5.4 ms in session 3 (budget 4) and 3.6-3.9 ms in session 4. Ticks took 1.4-2.2,
   2.8-3.6 and 2.0-2.1 ms (budget 3). Judge changes by A/B against a baseline build on the
