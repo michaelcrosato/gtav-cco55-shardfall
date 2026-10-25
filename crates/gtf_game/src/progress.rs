@@ -117,6 +117,11 @@ impl Freeway {
         let events = crate::activities::def().ok().map_or((0, 0), |d| {
             (d.event.iter().filter(|e| self.activities.done.contains(&format!("event:{}", e.id))).count(), d.event.len())
         });
+        let jobs = (
+            ["act_pretzel_run", "act_holdup_gas", "act_holdup_grind"].iter().filter(|k| passed(k)).count()
+                + self.activities.done.contains("vigilante") as usize,
+            4,
+        );
         vec![
             Card {
                 id: "completion".into(),
@@ -133,16 +138,19 @@ impl Freeway {
                 icon: Some("trophy".into()),
                 enabled: true,
             },
+            // (A card shows four lines: the street jobs are the race, the hold-ups and vigilante.)
             Card {
                 id: "activities".into(),
-                title: "ACTIVITIES".into(),
-                subtitle: Some("Side jobs and finds".into()),
+                title: format!(
+                    "{}/{}",
+                    p.shield_count.0 + p.jump_count.0 + jobs.0 + events.0,
+                    p.shield_count.1 + p.jump_count.1 + jobs.1 + events.1
+                ),
+                subtitle: Some("Activities".into()),
                 lines: vec![
                     format!("Lost Shields {}", n(p.shield_count)),
                     format!("Stunt jumps {}", n(p.jump_count)),
-                    format!("Pretzel Run {}", if passed("act_pretzel_run") { "won" } else { "-" }),
-                    format!("Hold-ups {}/2", ["act_holdup_gas", "act_holdup_grind"].iter().filter(|k| passed(k)).count()),
-                    format!("Vigilante {}", if self.activities.done.contains("vigilante") { "done" } else { "-" }),
+                    format!("Street jobs {}", n(jobs)),
                     format!("Random events {}", n(events)),
                 ],
                 bars: Vec::new(),
