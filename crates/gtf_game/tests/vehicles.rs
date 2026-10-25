@@ -41,6 +41,14 @@ fn every_archetype_loads() {
             for name in [&a.def.body_asset, &a.def.wheel_asset] {
                 assert!(pav_core::props::store::shipped(name), "{}: '{name}' is not a shipped asset", a.key);
             }
+        } else {
+            // A helicopter's body ships too, with the rotor groups the view spins.
+            let name = &a.def.body_asset;
+            assert!(pav_core::props::store::shipped(name), "{}: '{name}' is not a shipped asset", a.key);
+            let body = pav_core::props::get(name).unwrap_or_else(|| panic!("{}: '{name}' does not load", a.key));
+            for group in ["rotor.", "tail_rotor."] {
+                assert!(body.compiled.parts.iter().any(|p| p.id.starts_with(group)), "{}: no {group}* parts", a.key);
+            }
         }
     }
     assert_eq!(all.iter().filter(|a| a.helicopter()).count(), 2);

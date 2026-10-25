@@ -91,7 +91,8 @@ pub fn vehicle_loops(
         if s.slip > 1.5 && s.wheels_down > 0 {
             push(out, 1, "tyre", if mine { 0.8 } else { 0.5 }, 1.0, ((s.slip - 1.5) / 6.0).clamp(0.0, 1.0));
         }
-        if s.siren_on {
+        // (A helicopter's light bar flashes without a wail.)
+        if s.siren_on && v.def.kind != VehicleKind::Helicopter {
             push(out, 2, "siren.wail", 0.9, 1.0, 1.0);
         }
         if s.horn {

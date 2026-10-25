@@ -198,7 +198,7 @@ fn chain_specs(def: &PuppetDef, crouch: f32) -> Vec<(ChainKind, Vec3, Vec3, f32,
         BodyPlan::Biped => {
             let s = 1.0 - 0.35 * crouch;
             let pelvis = lay.body_h * s;
-            let head = pelvis + (def.torso_length + def.head_radius * 1.5) * k * s;
+            let head = pelvis + (def.torso_length + def.neck_length() + def.head_radius * 0.95) * k * s;
             (
                 Vec3::new(0.0, pelvis, -rb * 0.9),
                 Vec3::new(0.0, head + def.head_radius * k * 0.8, def.head_radius * k * 0.2),

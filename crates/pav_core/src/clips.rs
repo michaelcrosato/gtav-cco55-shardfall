@@ -606,7 +606,7 @@ pub fn skel(def: &PuppetDef, k: &Key, travel: bool) -> Skel {
     // The spine bends between the pelvis and the chest; one segment stands in for it.
     let torso_dir = (qp.slerp(qc, 0.6) * Vec3::Y).normalize_or(Vec3::Y);
     let chest = pelvis + torso_dir * def.torso_length * sc;
-    let neck = chest + (qc * Vec3::Y) * hr * 0.55;
+    let neck = chest + (qc * Vec3::Y) * def.neck_length() * sc;
     let head = neck + (qh * Vec3::Y) * hr * 0.95;
     let mut sk = Skel {
         pelvis,

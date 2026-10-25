@@ -37,6 +37,7 @@ pub mod glass;
 pub mod gps;
 pub mod heat;
 pub mod hud;
+pub mod looks;
 pub mod missions;
 pub mod pad;
 pub mod peds;
@@ -205,6 +206,10 @@ pub struct Freeway {
     /// Crimes typed as commands (`crime assault`: tests, bots), judged next tick.
     #[serde(default)]
     pub typed_crimes: Vec<heat::Crime>,
+    /// A still camera placed for a look (`photo ex ey ez tx ty tz [fov]`; `photo off`): eye,
+    /// target and vertical field of view, over every other camera but a reference view's.
+    #[serde(default)]
+    pub photo: Option<[f32; 7]>,
     /// This tick's inputs for traffic and the police (worked out in `pre`, handed over in
     /// `Game::vehicles`).
     #[serde(skip)]
@@ -353,6 +358,7 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         law_feet: None,
         law_still: 0.0,
         typed_crimes: Vec::new(),
+        photo: None,
         bot: bot::Bot::default(),
         enemies: enemies::Enemies::default(),
         resprays: 0,
@@ -637,6 +643,20 @@ impl Freeway {
                     self.car_cmd(sim, key, paint, verb == "drive");
                 }
                 (Some("target"), Some(m)) => self.target_cmd(sim, m.parse().unwrap_or(8.0)),
+                (Some("photo"), Some("off")) => self.photo = None,
+                // `photo ex ey ez tx ty tz [fov]`: a still camera at eye looking at target.
+                (Some("photo"), Some(first)) => {
+                    let nums: Vec<f32> = std::iter::once(first).chain(w.by_ref()).filter_map(|s| s.parse().ok()).collect();
+                    match nums.as_slice() {
+                        [e @ .., fov] if e.len() == 6 => self.photo = Some([e[0], e[1], e[2], e[3], e[4], e[5], *fov]),
+                        e if e.len() == 6 => self.photo = Some([e[0], e[1], e[2], e[3], e[4], e[5], 50.0]),
+                        _ => log::warn!("photo: ex ey ez tx ty tz [fov], or off"),
+                    }
+                }
+                (Some("lineup"), Some(arg)) => {
+                    let count = w.next().and_then(|n| n.parse().ok()).unwrap_or(8);
+                    self.lineup_cmd(sim, arg, count);
+                }
                 // `weapon <id or icon>`: in hand (given first if not owned).
                 (Some("weapon"), Some(arg)) => {
                     match combat::def().ok().and_then(|d| d.weapon.iter().position(|w| w.id == arg || w.icon == arg)) {
@@ -657,6 +677,43 @@ impl Freeway {
                 }
                 _ => {}
             }
+        }
+    }
+
+    /// `lineup <who> [n]`: `n` people (8; at most 24) standing in a row across the camera's
+    /// view 7 m ahead of the player, facing the camera, for looking at looks. `<who>` is a
+    /// peds.toml archetype, `all` (each archetype in turn), `police`, an enemies.toml side or
+    /// `crew` (the protagonists).
+    fn lineup_cmd(&mut self, sim: &mut Sim, who: &str, count: usize) {
+        let (Some(id), cam) = (sim.state.player, self.camera(sim)) else { return };
+        let Some(feet) = sim.feet(id) else { return };
+        let f = (cam.target - cam.eye).normalize_or(Vec3::NEG_Z);
+        let flat = Vec3::new(f.x, 0.0, f.z).normalize_or(Vec3::NEG_Z);
+        let across = Vec3::new(-flat.z, 0.0, flat.x);
+        let n = count.clamp(1, 24);
+        let peds = peds::def().ok();
+        let sides = enemies::def().ok();
+        let crew = protagonists::def().ok();
+        for i in 0..n {
+            let look = match who {
+                "police" => Some(police::uniform(sim)),
+                "crew" => crew.as_ref().and_then(|c| c.protagonist.get(i % c.protagonist.len().max(1))).map(|p| p.puppet()),
+                _ if sides.as_ref().is_some_and(|d| d.side.contains_key(who)) => enemies::side_look(sim, who),
+                _ => peds.as_ref().and_then(|d| {
+                    let a = if who == "all" {
+                        d.archetype.get(i % d.archetype.len())
+                    } else {
+                        d.archetype.iter().find(|a| a.id == who)
+                    }?;
+                    Some(peds::look(a, &mut sim.state.rng))
+                }),
+            };
+            let Some(look) = look else {
+                log::warn!("lineup: no archetype, side or group '{who}'");
+                return;
+            };
+            let at = feet + flat * 7.0 + across * ((i as f32 - (n - 1) as f32 * 0.5) * 1.1);
+            sim.spawn_npc("lineup", at, (-flat.x).atan2(-flat.z), look, None, None);
         }
     }
 
@@ -943,6 +1000,18 @@ impl Freeway {
     pub fn camera(&self, sim: &Sim) -> CameraIntent {
         if let Some(v) = &self.view {
             return v.camera();
+        }
+        if let Some([ex, ey, ez, tx, ty, tz, fov]) = self.photo {
+            return CameraIntent {
+                eye: Vec3::new(ex, ey, ez),
+                target: Vec3::new(tx, ty, tz),
+                up: Vec3::Y,
+                fov,
+                near: 0.1,
+                far: 1500.0,
+                cut: false,
+                shake: 0.0,
+            };
         }
         if let Some(t) = &self.tour {
             return t.camera(self.time * tour::SPEED);

@@ -6,7 +6,9 @@
 # `life` spots are mission anchors (`spot:<name>` from the district file): where the protagonist
 # is found when the player switches to them, busy with something (`clip`, `text` on the switch
 # card) in the hours given. `bed` is where they save (D-pad right; home without one). `voice`
-# pitches their babble.
+# pitches their babble. `look`: the clothes' colours, a baseball cap's (`cap`), `hair` and
+# `beard` styles (as peds.toml's wear names them) and `hair_color`, sunglasses' colour
+# (`glasses`), a `bag` (backpack or shoulder) and `bag_color`, height (`scale`) and `build`.
 
 [[protagonist]]
 key = "dez"
@@ -22,7 +24,7 @@ vehicle = "bravura_stallion"
 voice = 1.12
 home = "spot:dez_home"
 bed = "spot:dez_bed"
-look = { skin = "#c68a62", shirt = "#f2f2ee", pants = "#3b5a8c", shoes = "#ededed", cap = "#1f2a44", scale = 0.98, build = 0.9 }
+look = { skin = "#c68a62", shirt = "#f2f2ee", pants = "#3b5a8c", shoes = "#ededed", cap = "#1f2a44", hair = "short", hair_color = "#1c1714", beard = "goatee", scale = 0.98, build = 0.9 }
 
 [[protagonist.life]]
 at = "spot:dez_home"
@@ -56,7 +58,7 @@ vehicle = "daimon_titan"
 voice = 0.82
 home = "spot:mack_home"
 bed = "spot:mack_bed"
-look = { skin = "#e0ac83", shirt = "#1f2d4d", pants = "#5a5f66", shoes = "#2a1d14", scale = 1.04, build = 1.25 }
+look = { skin = "#e0ac83", shirt = "#1f2d4d", pants = "#5a5f66", shoes = "#2a1d14", hair = "short", hair_color = "#6e655c", beard = "stubble", glasses = "#1b1d22", scale = 1.04, build = 1.25 }
 
 [[protagonist.life]]
 at = "spot:mack_home"
@@ -90,7 +92,7 @@ vehicle = "marlin_bay"
 voice = 1.28
 home = "spot:roxy_home"
 bed = "spot:roxy_bed"
-look = { skin = "#f1c9a5", shirt = "#c8242c", pants = "#1d1d22", shoes = "#111111", eyes = "#0d0d0d", scale = 0.97, build = 1.0 }
+look = { skin = "#f1c9a5", shirt = "#c8242c", pants = "#1d1d22", shoes = "#111111", eyes = "#0d0d0d", hair = "ponytail", hair_color = "#e8467c", scale = 0.97, build = 1.0 }
 
 [[protagonist.life]]
 at = "spot:roxy_home"

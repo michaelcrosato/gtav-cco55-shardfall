@@ -13,7 +13,7 @@ use glam::{Vec2, Vec3};
 use pav_core::InputFrame;
 use pav_core::entity::EntityId;
 use pav_core::input::buttons;
-use pav_core::puppet::{BodyPlan, PuppetDef};
+use pav_core::puppet::PuppetDef;
 use pav_core::sim::Sim;
 use pav_world::City;
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,9 @@ pub struct SideDef {
     pub shoes: Vec<String>,
     pub height: [f32; 2],
     pub build: [f32; 2],
+    /// Hair, beards, headwear and accessories (`crate::looks::Wear`).
+    #[serde(default)]
+    pub wear: crate::looks::Wear,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -55,6 +58,9 @@ pub fn def() -> Result<Arc<EnemiesDef>> {
     let d: EnemiesDef = toml::from_str(&text).map_err(|e| anyhow!("content/freeway/enemies.toml: {e}"))?;
     if d.side.is_empty() {
         return Err(anyhow!("content/freeway/enemies.toml: no sides"));
+    }
+    for (key, s) in &d.side {
+        s.wear.check().map_err(|e| anyhow!("content/freeway/enemies.toml: [side.{key}] wear: {e}"))?;
     }
     let d = Arc::new(d);
     *cache = Some((text.into_owned(), d.clone()));
@@ -187,21 +193,28 @@ fn pick<'a>(v: &'a [String], sim: &mut Sim) -> &'a str {
     &v[sim.state.rng.below(v.len().max(1) as u32) as usize]
 }
 
-/// A side's look.
+/// A side's look: the clothes' colours, height and build from the sim's rng, what they wear
+/// from a fork of it (`crate::looks`).
 fn look(side: &SideDef, sim: &mut Sim) -> PuppetDef {
-    let mut p = PuppetDef::preset(BodyPlan::Biped);
+    let body = crate::looks::body();
+    let mut p = body.biped();
     p.skin = pick(&side.skin, sim).into();
     p.shirt = pick(&side.shirt, sim).into();
     p.pants = pick(&side.pants, sim).into();
     p.shoes = pick(&side.shoes, sim).into();
-    p.scale *= sim.state.rng.range(side.height[0], side.height[1]) / 1.75;
+    let height = sim.state.rng.range(side.height[0], side.height[1]);
     let build = sim.state.rng.range(side.build[0], side.build[1]);
-    p.torso_radius *= build;
-    p.hip_width *= build;
-    p.shoulder_width *= build.sqrt();
-    p.limb_radius *= build.sqrt();
+    crate::peds::shape(&mut p, &body, height, build);
     p.idle_clip = "MESH2MOTION/Idle_A".into();
+    side.wear.dress(&mut p, &sim.state.rng);
     p
+}
+
+/// A look for one of side `side` (None: no such side), as `Enemies::spawn` dresses them before
+/// the gun.
+pub fn side_look(sim: &mut Sim, side: &str) -> Option<PuppetDef> {
+    let d = def().ok()?;
+    Some(look(d.side.get(side)?, sim))
 }
 
 fn flat(v: Vec3) -> Vec2 {

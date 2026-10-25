@@ -18,7 +18,7 @@ use pav_core::entity::EntityId;
 use pav_core::frame::SimEvent;
 use pav_core::input::pad;
 use pav_core::present::{CameraIntent, Card, CardRow, Wheel, WheelSlot};
-use pav_core::puppet::{BodyPlan, HelmKind, PuppetDef};
+use pav_core::puppet::{BagKind, BeardStyle, HairStyle, HelmKind, PuppetDef};
 use pav_core::sim::Sim;
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +44,9 @@ pub struct Stats {
     pub stealth: f32,
 }
 
+/// A protagonist's look: the clothes' colours, a baseball cap's colour (`cap`), hair and beard
+/// (styles as `pav_core::puppet::HairStyle` and `BeardStyle` name them), sunglasses' and a
+/// bag's colours (`bag` is `backpack` or `shoulder`), height (`scale`) and build.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LookDef {
@@ -55,10 +58,36 @@ pub struct LookDef {
     pub cap: Option<String>,
     #[serde(default)]
     pub eyes: Option<String>,
+    #[serde(default)]
+    pub hair: Option<String>,
+    #[serde(default)]
+    pub hair_color: Option<String>,
+    #[serde(default)]
+    pub beard: Option<String>,
+    #[serde(default)]
+    pub glasses: Option<String>,
+    #[serde(default)]
+    pub bag: Option<String>,
+    #[serde(default)]
+    pub bag_color: Option<String>,
     #[serde(default = "one")]
     pub scale: f32,
     #[serde(default = "one")]
     pub build: f32,
+}
+
+impl LookDef {
+    /// What is wrong with it: unknown styles or bags, colours that are not `#rrggbb`.
+    pub fn check(&self) -> Result<(), String> {
+        crate::looks::named::<HairStyle>("hair", self.hair.as_deref())?;
+        crate::looks::named::<BeardStyle>("beard", self.beard.as_deref())?;
+        crate::looks::named::<BagKind>("bag", self.bag.as_deref())?;
+        let colours = [&self.cap, &self.eyes, &self.hair_color, &self.glasses, &self.bag_color];
+        if let Some(c) = colours.into_iter().flatten().find(|c| pav_core::Color::try_hex(c).is_none()) {
+            return Err(format!("colour '{c}' is not #rrggbb"));
+        }
+        Ok(())
+    }
 }
 
 /// Somewhere a protagonist passes the time when not played.
@@ -96,26 +125,30 @@ pub struct ProtagonistDef {
 }
 
 impl ProtagonistDef {
-    /// Their look as a puppet.
+    /// Their look as a puppet (the game's biped, `crate::looks`).
     pub fn puppet(&self) -> PuppetDef {
         let l = &self.look;
-        let mut p = PuppetDef::preset(BodyPlan::Biped);
+        let body = crate::looks::body();
+        let mut p = body.biped();
         p.skin = l.skin.clone();
         p.shirt = l.shirt.clone();
         p.pants = l.pants.clone();
         p.shoes = l.shoes.clone();
-        p.scale *= l.scale;
-        p.torso_radius *= l.build;
-        p.hip_width *= l.build;
-        p.shoulder_width *= l.build.sqrt();
-        p.limb_radius *= l.build.sqrt();
+        crate::peds::shape(&mut p, &body, body.height() * l.scale, l.build);
         if let Some(cap) = &l.cap {
-            p.gear.helm = HelmKind::Cap;
+            p.gear.helm = HelmKind::Ballcap;
             p.gear.helm_color = cap.clone();
         }
         if let Some(eyes) = &l.eyes {
             p.eyes = eyes.clone();
         }
+        // (Checked when the file is read.)
+        p.hair = crate::looks::named("hair", l.hair.as_deref()).ok().flatten().unwrap_or_default();
+        p.beard = crate::looks::named("beard", l.beard.as_deref()).ok().flatten().unwrap_or_default();
+        p.hair_color = l.hair_color.clone().unwrap_or_default();
+        p.gear.glasses = l.glasses.clone().unwrap_or_default();
+        p.gear.bag = crate::looks::named("bag", l.bag.as_deref()).ok().flatten().unwrap_or_default();
+        p.gear.bag_color = l.bag_color.clone().unwrap_or_default();
         p.idle_clip = "MESH2MOTION/Idle_A".into();
         p
     }
@@ -187,6 +220,7 @@ pub fn def() -> Result<Arc<CrewDef>> {
         if !d.ability.contains_key(&p.ability) {
             return Err(anyhow!("content/freeway/protagonists.toml: {}: no ability '{}'", p.key, p.ability));
         }
+        p.look.check().map_err(|e| anyhow!("content/freeway/protagonists.toml: {}: look: {e}", p.key))?;
     }
     let d = Arc::new(d);
     *cache = Some((text.into_owned(), d.clone()));

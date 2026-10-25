@@ -242,14 +242,31 @@ fn wrap(a: f32) -> f32 {
     (a + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
 }
 
-/// An officer's look: the SPPD's navy uniform.
-fn uniform(sim: &mut Sim) -> pav_core::puppet::PuppetDef {
-    let mut p = pav_core::puppet::PuppetDef::preset(pav_core::puppet::BodyPlan::Biped);
-    let skins = ["#f1c9a5", "#e0ac83", "#c68a62", "#8d5a3b", "#6b4428"];
-    p.skin = skins[sim.state.rng.below(skins.len() as u32) as usize].into();
-    p.shirt = "#1d2b4f".into();
-    p.pants = "#141a2b".into();
-    p.shoes = "#0d0d0f".into();
+/// An officer's look: the SPPD's navy uniform (peds.toml `[police]`: a cap, a badge, maybe
+/// sunglasses). The skin comes from the sim's rng, the rest from a fork of it.
+pub fn uniform(sim: &mut Sim) -> pav_core::puppet::PuppetDef {
+    let peds = crate::peds::def().ok();
+    let body = peds.as_ref().map(|d| d.body.clone()).unwrap_or_default();
+    let mut p = body.biped();
+    match peds.as_ref().and_then(|d| d.police.as_ref()) {
+        Some(o) => {
+            p.skin = o.skin[sim.state.rng.below(o.skin.len() as u32) as usize].clone();
+            p.shirt = o.shirt.clone();
+            p.pants = o.pants.clone();
+            p.shoes = o.shoes.clone();
+            let mut r = sim.state.rng.fork(0x0ff1_ce55);
+            let (height, build) = (r.range(o.height[0], o.height[1]), r.range(o.build[0], o.build[1]));
+            crate::peds::shape(&mut p, &body, height, build);
+            o.wear.dress(&mut p, &sim.state.rng);
+        }
+        None => {
+            let skins = ["#f1c9a5", "#e0ac83", "#c68a62", "#8d5a3b", "#6b4428"];
+            p.skin = skins[sim.state.rng.below(skins.len() as u32) as usize].into();
+            p.shirt = "#1d2b4f".into();
+            p.pants = "#141a2b".into();
+            p.shoes = "#0d0d0f".into();
+        }
+    }
     p.idle_clip = "MESH2MOTION/Idle_A".into();
     // The service pistol.
     p.weapon.asset = crate::combat::asset_of("p9");
@@ -777,8 +794,11 @@ impl Police {
         // The searchlight swings onto the player (or sweeps the zone).
         let aim = if u.unseen < 3.0 { m.player } else { m.zone.map(|z| z.0).unwrap_or(m.last_known) };
         u.light += (aim - u.light) * (1.0 - (-1.5 * dt).exp());
-        let _ = sim;
-        VehicleInput { throttle: up.max(0.0), brake: (-up).max(0.0), steer, pitch, siren: false, ..Default::default() }
+        // After dark its lamps are lit (the searchlight's lens glows while `draw` casts its beam).
+        sim.set_vehicle_lights(u.vehicle, m.night);
+        // Its light bar flashes while it hunts, as the cars' sirens do.
+        let siren = u.mode != Mode::Leave;
+        VehicleInput { throttle: up.max(0.0), brake: (-up).max(0.0), steer, pitch, siren, ..Default::default() }
     }
 
     /// Officers on foot: close in, arrest, shoot, run back to the car.
@@ -1089,7 +1109,10 @@ impl Police {
         }
         for u in self.units.iter().filter(|u| u.kind == Kind::Air) {
             let Some(e) = sim.state.entities.get(u.vehicle) else { continue };
-            let from = e.pos - Vec3::Y * 1.2;
+            // From the searchlight under its nose (the body prop's `head_search` lens, on its
+            // right: 0.74 m out, 0.3 m up and 1.38 m ahead of the ground under its centre).
+            let base = e.vehicle.as_ref().map_or(0.85, |v| v.base);
+            let from = e.pos + e.rot * Vec3::new(-0.74, 0.3 - base, 1.38);
             let dir = (u.light - from).normalize_or(Vec3::NEG_Y);
             draw.spots.push(SpotDraw { pos: from, dir, angle: 0.13, range: 140.0, color: Color::hex("#fff4d6"), intensity: 3.0 });
         }
