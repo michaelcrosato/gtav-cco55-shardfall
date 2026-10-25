@@ -788,6 +788,33 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
     High on SwiftShader.
   - **The FPS readout** reads each frame's true length, smoothed over about a third of a second
     (it was capped at 0.1 s, so a slow device read 10 FPS).
+  - **Wedged cars are rescued, not removed:** a traffic car blocked 12 s where the camera does
+    not see it (a long truck in the Ditch stub's turning circle, in the bug bash's traffic soak
+    on seed 1) goes on rails for 8 s through the rest of its way, as distant traffic drives,
+    then back on its wheels; `give_up` (30 s) stays as the last resort. The soak now reports
+    `rescued` (seed 1: 2, stuck 0).
+  - **A retry takes the player out of the car first** (the bug bash, h1 Smart on seed 1): a
+    checkpoint's restore despawned the actors but skipped the car the player sat in, so a
+    retry of the tail left the mission's own van standing in the road the truck drives, and
+    the truck stopped behind it for good. The player now gets out, every actor goes, and the
+    checkpoint puts them back.
+  - **The mission bot tailing a car stops well back** when it stops (a light, a junction): the
+    brakes, then the handbrake, 4-7 m behind it. The autopilot sent to where the car stood
+    crept up to its bumper, and the follow step failed ("They spotted you.").
+  - **One star is a patrol car at the road's pace** (the bug bash, h1 Loud on seed 2): a lone
+    1★ unit paced the player's own speed plus 1.5 m/s, up to 29 m/s, so once on the bumper it
+    held 5-27 m through every corner — the bot's getaway was tailed for 300 s and never got
+    away. At one star a unit now chases at its road's limit and a quarter over (16-31 m/s:
+    streets 16, avenues 20, the freeway 31), so a driver who puts their foot down gets away;
+    two stars and up drive to catch, as before (PLAN's table: 1★ "try to arrest", 2★ "lethal
+    force; block the car"). The escape autopilot at one star, rolling, seeds 1-8 (the four
+    seeds where a unit found the car): cleared in 15-58 s, at most 34 s on its tail; before,
+    15-152 s and 136 s. Driving the open road harder with a unit on the tail, and preferring
+    fast roads, were tried and measured as well; they changed little (3★ from a standstill
+    stayed 4 of 8) and were left out.
+  - **The heist's jump loses the police** (`{ search = true }`, a new mission action): after
+    the broken-ramp jump the one remaining star flashes and the search starts at the landing,
+    as the mission says ("the jump shook off all but one unit").
   - **PLAN §7.1's commands** work as written: `teleport <anchor>` (`landmark:bank`, `spot:`,
     `at:x,z`), `heat N` (= `wanted N`), `give weapon <id>` (= `give <id>`) and `validate` (every
     content file and mission checked, the same function `tests/content.rs` asserts on).
@@ -813,10 +840,9 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 - **VFX not done:** heat haze on the freeway at noon (PLAN §5.11's list; exhaust, dust trails,
   rim sparks and water splashes came in M9's second batch). There are no money pickups to
   sparkle (cash goes straight to the wallet), and broken glass throws dust, not shards.
-- Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround (limit 0);
-  roam AI crashes 0-3 per 900 s with buses turning at junctions the most common. M9 polish.
-  (Since session 5 the avenue's quay end is closed off like the map's edge; re-check in M9's
-  soaks.)
+- ~~Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround~~ fixed in
+  M9: cars wedged out of view are put on rails through it (Decisions → M9). The bug bash's
+  roam soaks on seeds 1-3 pass with no stuck car; AI crashes 0-2 per 900 s.
 - Evasion bot at 3★ (`evasion_rate`, session 5): rolling 8/8, from a standstill 4/8 (pinned by
   a PIT, or caught getting going). The 3★ test passes. M9: fast-road routing from a standstill.
 - Vigilante: getaway cars take turns at 1.375 times the safe speed (only the autopilot and cars

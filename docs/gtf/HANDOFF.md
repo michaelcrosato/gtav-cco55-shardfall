@@ -1,6 +1,6 @@
 # Grand Theft Freeway-BX — handoff for the next agent
 
-This is the map for growing the vertical slice toward the full game: how the code is laid out,
+This is the map for growing the game (the stretch list is at the end): how the code is laid out,
 how data flows through a tick, and how to add each kind of thing with the command that checks
 it. The plan is [`PLAN.md`](../../PLAN.md); where things stand is [`PROGRESS.md`](../../PROGRESS.md)
 (Decisions and Open issues); the mission language is [`MISSIONS.md`](MISSIONS.md); the engine's
@@ -83,7 +83,8 @@ Content is TOML under `content/freeway/`, embedded at build time; the `gtf` CLI 
 copy when run from the repository root, so a content edit shows without rebuilding `gtf` (tests
 use the embedded copy: rebuild them). Every file starts with a comment that documents its
 format. After any content change run `cargo test -p gtf_game --test content` (every file loads
-and validates; every prop, material, clip, sound cue, spot and landmark named exists).
+and validates; every prop, material, clip, sound cue, spot and landmark named exists), or
+`gtf play cmd=validate` for the file and mission checks alone.
 
 ### A district
 `district.toml` is the model: the macro map (64 × 72 cells of 16 m, one character per cell for
@@ -106,8 +107,9 @@ doors). Rooms are `Walk::Indoor` tiles: people walk there, crowds don't spawn th
 A file in `content/freeway/missions/` and its key in `missions::FILES`. The language — anchors,
 actors, the 26 step kinds, actions, fail conditions, checkpoints, branches and `parallel` — is
 documented in [`MISSIONS.md`](MISSIONS.md), with the rules that keep it finishable by the bot.
-Check: `gtf play scene=freeway/mission/<key> bot=true seeds=3` (release `gtf`), and add a
-`story_<key>` test to `tests/missions.rs` (ignored: long).
+Check: `printf 'load scene=freeway/mission/<key>\nplay bot=true seeds=3 ticks=42000\n' | gtf
+repl` (release `gtf`; `play` gives the bot 3,600 ticks unless told), and add a `story_<key>` test
+to `tests/missions.rs` (ignored: long; `GTF_SEEDS=5` plays more seeds).
 
 ### A vehicle
 A table in `vehicles.toml`: the engine's `VehicleDef` (mass, power, grip, suspension, wheel
@@ -157,7 +159,7 @@ A `[[view]]` in `views.toml`: eye, target, hour and weather. Check: `gtf perf vi
 export CARGO_BUILD_JOBS=4
 cargo build --release -p gtf_app --bin gtf && alias gtf=./target/release/gtf
 cargo test -p gtf_game                      # the game's suites (long bot runs are #[ignore])
-cargo test -p gtf_game --test missions -- --ignored   # every story mission on 3 seeds
+cargo test -p gtf_game --test missions -- --ignored   # every story mission on 3 seeds (GTF_SEEDS=5: five)
 gtf perf view=all                           # budgets at the reference views
 gtf soak mode=traffic|peds|roam|attract seconds=...
 printf 'load scene=freeway/roam\ncapture hud=true out=out/a.png\n' | gtf repl

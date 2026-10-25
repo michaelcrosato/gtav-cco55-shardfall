@@ -127,7 +127,8 @@ Parallel sub-steps may be `goto`, `interact`, `kill`, `wait`, `drive_to`, `colle
 
 `{ spawn = "id" }`, `{ despawn = "id" }`, `{ behaviour = { actor = "id", act = "flee" } }`,
 `{ blip = { actor = "id", kind = "enemy" } }`, `{ unblip = "id" }`, `{ heat = 2 }` (0 clears),
-`{ heat_floor = 1 }`, `{ heat_cap = 0 }`, `{ dispatch = false }`, `{ traffic = 0.4 }` (the share of
+`{ heat_floor = 1 }`, `{ heat_cap = 0 }`, `{ dispatch = false }`, `{ search = true }` (the police
+lose sight: the stars flash and the search starts where the player is), `{ traffic = 0.4 }` (the share of
 moving traffic until the mission ends), `{ flag = "x" }`, `{ unflag = "x" }`, `{ story = "x" }`
 (kept after the mission), `{ give = { weapon = "p9", ammo = 24 } }`, `{ armor = 100 }` (body
 armour on the player), `{ cash = 500 }`,
