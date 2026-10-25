@@ -125,7 +125,8 @@ impl Freeway {
         }
     }
 
-    /// Puts the player on foot at `feet`, facing `yaw`, the camera behind.
+    /// Puts the player on foot at `feet`, facing `yaw`, the camera behind; the ground there is
+    /// loaded at once (a deck or a roof is there to stand on, not streaming in under them).
     pub(crate) fn put_player(&mut self, sim: &mut Sim, feet: Vec3, yaw: f32) {
         let Some(pid) = sim.state.player else { return };
         if let Some(car) = self.drive.vehicle() {
@@ -134,6 +135,7 @@ impl Freeway {
         self.drive.phase = crate::drive::Phase::Foot;
         self.cover = Default::default();
         sim.set_position(pid, feet + Vec3::Y * 0.05);
+        sim.stream_now();
         if let Some(c) = sim.state.entities.get_mut(pid).and_then(|e| e.character.as_mut()) {
             c.facing = yaw;
             c.anim.facing = yaw;
@@ -357,10 +359,15 @@ impl Freeway {
         }
         actor.entity = Some(id);
         run.actors.insert(s.id.clone(), actor);
-        // The driver at the wheel (a checkpoint puts its own people back in their seats).
+        // The driver at the wheel (a checkpoint puts its own people back in their seats). One
+        // still waiting for the ground with the vehicle is made now, in its seat: woken apart,
+        // it would stand beside a vehicle no one drives.
         if let Some(dr) = &s.driver
             && saved.is_none()
         {
+            if run.actors.get(dr).is_some_and(|d| d.waiting) {
+                run.actors.remove(dr);
+            }
             if let Some(j) = def.spawn.iter().position(|x| &x.id == dr) {
                 self.spawn_actor(sim, def, run, j, None);
             }
@@ -380,6 +387,10 @@ impl Freeway {
             .map(|(k, _)| k.clone())
             .collect();
         for id in ready {
+            // (A driver its vehicle woke already sits at the wheel.)
+            if !run.actors.get(&id).is_some_and(|a| a.waiting) {
+                continue;
+            }
             let Some(a) = run.actors.remove(&id) else { continue };
             self.spawn_actor(sim, def, run, a.spawn, None);
             if let Some(x) = run.actors.get_mut(&id) {

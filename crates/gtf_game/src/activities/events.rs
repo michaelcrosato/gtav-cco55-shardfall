@@ -604,6 +604,8 @@ impl Freeway {
                         }
                         let ok = self.event_start(sim, e, true, events);
                         self.activities.events.trial = if ok { Trial::Playing } else { Trial::Lost };
+                        // (This trial's outcome is the one asked about now, not an earlier one's.)
+                        self.activities.vigilante.trial = Trial::No;
                     }
                 }
                 (Some("event"), Some("start"), Some(id)) => match d.event.iter().find(|e| e.id == id) {

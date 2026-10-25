@@ -417,6 +417,8 @@ impl Freeway {
                         log::warn!("activity vigilante: not ready (a mission, the police, a menu?)");
                         self.activities.vigilante.trial = Trial::Lost;
                     }
+                    // (This trial's outcome is the one asked about now, not an earlier event's.)
+                    self.activities.events.trial = Trial::No;
                 }
                 (Some("vigilante"), Some("start"), None) => {
                     if self.vigilante_ready(sim, vd) {
