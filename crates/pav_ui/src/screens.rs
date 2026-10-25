@@ -732,7 +732,8 @@ impl Cx<'_> {
     fn title_screen(&self, s: &Screen, t: &TitleCard) {
         let sc = self.screen;
         if t.small_logo {
-            // Attract: logo small in the top-left corner, caption under it.
+            // Attract: logo small in the top-left corner, caption under it, the prompt (no
+            // button glyph: any button will do) breathing at the bottom right.
             let bottom = self.logo(&s.title, pos2(self.safe.left(), self.safe.top()), 0.45, Align::Min);
             if let Some(cap) = &t.caption {
                 self.spaced_text(
@@ -742,6 +743,17 @@ impl Cx<'_> {
                     self.bold(size::LABEL),
                     color::TEXT,
                     0.12,
+                );
+            }
+            if let Some(p) = &t.prompt {
+                let a = 0.55 + 0.45 * (self.time * std::f32::consts::TAU * 0.5).cos().abs();
+                self.faded(a).spaced_text(
+                    pos2(self.safe.right(), self.safe.bottom()),
+                    Align2::RIGHT_BOTTOM,
+                    &p.to_uppercase(),
+                    self.bold(size::LABEL),
+                    color::TEXT,
+                    0.18,
                 );
             }
         } else {

@@ -370,10 +370,10 @@ fn shop_sign(seed: u64, grid: &Grid, lot: &Lot, rules: &ZoneRules, band: &Band, 
         let face = Vec3::new(centre.x, band.y, centre.y) + band.out * 0.29;
         let half_len = len * 0.5 - 0.15;
         for (k, (off, half)) in [
-            (Vec3::Y * 0.47, along3 * half_len + (Vec3::Y + thin) * 0.035),
-            (-Vec3::Y * 0.47, along3 * half_len + (Vec3::Y + thin) * 0.035),
-            (Vec3::new(along.x, 0.0, along.y) * half_len, Vec3::Y * 0.47 + (along3 + thin) * 0.035),
-            (-Vec3::new(along.x, 0.0, along.y) * half_len, Vec3::Y * 0.47 + (along3 + thin) * 0.035),
+            (Vec3::Y * 0.47, along3 * half_len + (Vec3::Y + thin) * 0.055),
+            (-Vec3::Y * 0.47, along3 * half_len + (Vec3::Y + thin) * 0.055),
+            (Vec3::new(along.x, 0.0, along.y) * half_len, Vec3::Y * 0.47 + (along3 + thin) * 0.055),
+            (-Vec3::new(along.x, 0.0, along.y) * half_len, Vec3::Y * 0.47 + (along3 + thin) * 0.055),
         ]
         .into_iter()
         .enumerate()
@@ -384,8 +384,9 @@ fn shop_sign(seed: u64, grid: &Grid, lot: &Lot, rules: &ZoneRules, band: &Band, 
                 rot: Quat::IDENTITY,
                 color: tube,
                 look: Look::Unlit,
-                // One tube lights the wall round it after dark; the rest only glow.
-                emissive: if k == 0 { 0.9 } else { 0.5 },
+                // One tube lights the wall round it after dark; the rest only glow (above 0.5 a
+                // glow is a light too).
+                emissive: if k == 0 { 1.6 } else { 0.5 },
                 solid: false,
                 collider: None,
                 sway: Default::default(),

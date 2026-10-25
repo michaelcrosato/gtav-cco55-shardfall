@@ -554,6 +554,13 @@ What a game's settings page needs from its host, and looks for frontend pictures
   (`progress` < 0) has no spinner either.
 - **Bodies:** `Sim::set_solid(id, false)` makes an entity's body stop colliding and stop rays
   (a fallen character: people walk over it, bullets and sight lines pass it).
+- **Particles from a game:** `SimEvent::Fx { preset, pos, dir, scale }` draws one burst of a
+  `pav_view::fx` preset (`smoke`, `sparks`, `dust`, `splash`...; an unknown name draws `fire`):
+  a dozen particles at scale 1, thrown along `dir` when it is not zero. Push it from `pre` or
+  `post` like a sound.
+- **Attract card:** a `TitleCard` with `small_logo` puts the logo and caption top left and its
+  `prompt` (no button glyph) breathing at the bottom right; set `UiModel.perf = false` while it
+  is up (the FPS readout shares the corner).
 
 ## Urban kit (pav_world)
 `pav_world` turns a district file (TOML) into an immutable `City` (`City::from_toml`, a pure

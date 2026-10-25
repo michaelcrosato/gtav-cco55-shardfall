@@ -953,7 +953,7 @@ fn sign(f: &Frame, s: &SignPart, out: &mut Out) {
     if let Some(neon) = &s.neon {
         let nc = surface(neon, "#ff3ea5").0;
         let (w, h) = (width + 0.25, height + 0.25);
-        let tube = 0.07;
+        let tube = 0.11;
         let c = centre + n * (front + 0.02);
         let r = right.abs();
         let across = r * (w * 0.5) + (Vec3::ONE - r) * (tube * 0.5);
@@ -969,8 +969,9 @@ fn sign(f: &Frame, s: &SignPart, out: &mut Out) {
         {
             let mut d = decor(Shape::Box { half }, c + off, Quat::IDENTITY, nc, false);
             d.look = Look::Unlit;
-            // One tube lights the wall round the sign; the rest only glow.
-            d.emissive = if k == 0 { 0.9 } else { 0.5 };
+            // One tube lights the wall round the sign; the rest only glow (above 0.5 a glow is a
+            // light too).
+            d.emissive = if k == 0 { 1.6 } else { 0.5 };
             d.glow = Glow::Night;
             out.decor.push(d);
         }

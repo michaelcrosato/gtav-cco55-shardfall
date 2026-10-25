@@ -130,7 +130,8 @@ pub fn role(grid: &Grid, c: IVec2) -> Role {
 
 pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut Out) {
     let cs = grid.cell;
-    let white = Color::hex("#e8e5da");
+    // (A worn white: fresh white paint reads as lit under the street lights.)
+    let white = Color::hex("#d2cec2");
     let yellow = Color::hex("#e2b53c");
     for z in 0..grid.h {
         for x in 0..grid.w {
