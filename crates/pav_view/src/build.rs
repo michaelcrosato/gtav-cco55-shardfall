@@ -26,6 +26,10 @@ use crate::materials::{self, MaterialTable};
 use pav_core::material::Library;
 use pav_core::props::doc::MapMode;
 
+/// How far outside the view (m) a vehicle or person is still built: its shadow at a low sun
+/// and a headlight's pool can reach into the picture.
+const UNSEEN_MARGIN: f32 = 8.0;
+
 choice_enum! {
     pub enum StyleOverride { PerObject => "per object", Flat => "flat", Cel => "cel", Lit => "lit" }
 }
@@ -1544,7 +1548,12 @@ impl ViewBuilder {
             self.rain = None;
         }
 
-        // Dynamic objects.
+        // Dynamic objects. Vehicles and people the camera cannot see are not built (the renderer
+        // would cull them, but building them costs the CPU): a game keeps a hundred cars and as
+        // many people round the player, most behind the camera, round a corner or in the fog.
+        // The margin keeps the shadows and headlight pools of those just out of view.
+        let planes = crate::play::frustum(scene.camera.proj * scene.camera.view);
+        let fog = (scene.fog.enabled, scene.fog.center, scene.fog.end);
         let cam_fwd = scene.camera.forward;
         let now = self.now as f32;
         let mut live = Vec::new();
@@ -1574,6 +1583,18 @@ impl ViewBuilder {
             if let Some(s) = &o.soft {
                 emit_soft(&mut scene, &o, s, settings.style);
                 continue;
+            }
+            let reach = match (&o.vehicle, &o.puppet) {
+                (Some(v), _) => v.half.length(),
+                (None, Some(_)) if Some(o.id) != curr.player => 1.2,
+                _ => 0.0,
+            };
+            if reach > 0.0 {
+                let d = o.pos - fog.1;
+                let fogged = fog.0 && Vec3::new(d.x, 0.0, d.z).length() > fog.2 + reach + 10.0;
+                if fogged || !crate::play::sphere_visible(&planes, o.pos, reach + UNSEEN_MARGIN) {
+                    continue;
+                }
             }
             match &o.puppet {
                 Some(p) => {
