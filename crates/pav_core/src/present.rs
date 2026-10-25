@@ -137,6 +137,10 @@ pub struct UiModel {
     /// on each side).
     pub scale: f32,
     pub safe_margin: f32,
+    /// Subtitles' size against the reference (1), and a high-contrast HUD: darker, opaque
+    /// backplates with an outline, a plate behind subtitles (accessibility settings).
+    pub subtitle_scale: f32,
+    pub high_contrast: bool,
     /// Seconds of UI time (game time, also while the world is paused): animations key off it so
     /// captures are reproducible.
     pub time: f32,
@@ -160,6 +164,8 @@ impl Default for UiModel {
             glyphs: GlyphStyle::Auto,
             scale: 1.0,
             safe_margin: 0.05,
+            subtitle_scale: 1.0,
+            high_contrast: false,
             time: 0.0,
         }
     }
@@ -546,12 +552,18 @@ pub struct TextCard {
     pub lines: Vec<String>,
 }
 
+/// A loading card: a big heading, a tip and a bar. On a solid backdrop the UI kit draws its own
+/// art behind them; on a clear one the world shows through (a picture the game makes in the
+/// engine, e.g. a character posed under `ViewIntent::stylize`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LoadingCard {
     pub heading: String,
     pub tip: String,
-    /// 0..1, or negative for no bar.
+    /// 0..1, or negative for no bar (and no spinner: a card that waits on nothing).
     pub progress: f32,
+    /// The word before the tip: None says "TIP", an empty one says nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -937,6 +949,31 @@ pub struct ViewIntent {
     /// Screen-space bounce light and ambient occlusion (0 = off).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gi: Option<f32>,
+    /// A painterly or print look over the whole picture (a loading card, an intro).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stylize: Option<StylizeIntent>,
+}
+
+/// A painterly or print look for `ViewIntent::stylize`: which, the size of its strokes, dots
+/// or hatching in pixels, how much of it shows (0..1) and how much of the scene's colour it
+/// keeps (0 = ink only, 1 = full colour).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StylizeIntent {
+    pub kind: StylizeKind,
+    pub size: f32,
+    pub mix: f32,
+    pub color: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StylizeKind {
+    /// Oil paint (flat strokes that keep their edges).
+    Paint,
+    /// Print: dot screens.
+    Halftone,
+    /// Pencil hatching and contours.
+    Sketch,
 }
 
 /// A surface style for `ViewIntent::style`: every surface flat, cel-shaded or lit, or each as
@@ -994,6 +1031,7 @@ impl Default for ViewIntent {
             bloom_threshold: None,
             haze_height: None,
             gi: None,
+            stylize: None,
         }
     }
 }
@@ -1043,14 +1081,23 @@ pub struct AudioScene {
     pub ducking: f32,
     /// 0..1: reverb amount (tunnels, interiors).
     pub reverb: f32,
-    /// The player's volumes (0..1): everything, and sound effects (one-shots and loops).
+    /// The player's volumes (0..1): everything, sound effects (one-shots and loops) and voices
+    /// (the one-shots whose cue starts `voice.`: dialogue, the scanner's babble).
     pub master: f32,
     pub effects: f32,
+    pub voice: f32,
 }
 
 impl Default for AudioScene {
     fn default() -> Self {
-        Self { listener: None, loops: Vec::new(), music: None, ducking: 0.0, reverb: 0.0, master: 1.0, effects: 1.0 }
+        Self { listener: None, loops: Vec::new(), music: None, ducking: 0.0, reverb: 0.0, master: 1.0, effects: 1.0, voice: 1.0 }
+    }
+}
+
+impl AudioScene {
+    /// The volume a one-shot with this cue plays at: `voice` for voices, else `effects`.
+    pub fn gain_for(&self, cue: &str) -> f32 {
+        if cue.starts_with("voice.") { self.voice } else { self.effects }
     }
 }
 
@@ -1128,6 +1175,32 @@ pub struct AppRequests {
     pub keys: Option<Arc<KeyMap>>,
     /// Mouse look: hide and hold the pointer while playing (released in menus).
     pub mouse_look: bool,
+    /// The player's display settings (a new `serial` means new ones): apply them.
+    pub display: Option<DisplayRequest>,
+}
+
+/// Display settings a game asks its host for (PLAN §5.9's Display page). Full screen and v-sync
+/// are the window's (a browser page leaves them to the browser); the quality is one of the host's
+/// presets; the render scale multiplies what the preset draws; `dynamic` lets the resolution follow
+/// the frame rate on any device.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DisplayRequest {
+    pub serial: u64,
+    pub fullscreen: bool,
+    pub vsync: bool,
+    pub quality: DisplayQuality,
+    pub render_scale: f32,
+    pub dynamic: bool,
+}
+
+/// The host's quality presets a game can ask for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DisplayQuality {
+    Low,
+    Medium,
+    #[default]
+    High,
 }
 
 /// How the keyboard and mouse stand in for the controller while this map is up; a game swaps

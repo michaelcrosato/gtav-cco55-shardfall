@@ -99,7 +99,8 @@ pub fn with_look(settings: &ViewSettings, v: &ViewIntent) -> Option<ViewSettings
         || v.tonemap.is_some()
         || v.bloom_threshold.is_some()
         || v.haze_height.is_some()
-        || v.gi.is_some();
+        || v.gi.is_some()
+        || v.stylize.is_some();
     if !looks {
         return None;
     }
@@ -131,6 +132,18 @@ pub fn with_look(settings: &ViewSettings, v: &ViewIntent) -> Option<ViewSettings
     }
     if let Some(gi) = v.gi {
         s.gi = gi.max(0.0);
+    }
+    if let Some(st) = v.stylize {
+        use pav_core::present::StylizeKind;
+        s.filter.stylize = match st.kind {
+            StylizeKind::Paint => crate::build::StylizeChoice::Paint,
+            StylizeKind::Halftone => crate::build::StylizeChoice::Halftone,
+            StylizeKind::Sketch => crate::build::StylizeChoice::Sketch,
+        };
+        s.filter.stylize_on = crate::build::PartChoice::All;
+        s.filter.stylize_size = st.size.max(1.0);
+        s.filter.stylize_mix = st.mix.clamp(0.0, 1.0);
+        s.filter.stylize_color = st.color.clamp(0.0, 1.0);
     }
     Some(s)
 }

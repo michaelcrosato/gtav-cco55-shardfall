@@ -68,11 +68,15 @@ pub struct Scaler {
     /// Seconds of smooth frames in a row (raising the resolution waits for a while of them).
     calm: f32,
     pub scale: f32,
+    /// A game's display settings: the render scale it multiplies by, and dynamic resolution on
+    /// any device (`AppRequests::display`).
+    pub user_scale: f32,
+    pub user_dynamic: bool,
 }
 
 impl Default for Scaler {
     fn default() -> Self {
-        Self { dynamic: 1.0, ms: 0.0, frames: 0, calm: 0.0, scale: 1.0 }
+        Self { dynamic: 1.0, ms: 0.0, frames: 0, calm: 0.0, scale: 1.0, user_scale: 1.0, user_dynamic: false }
     }
 }
 
@@ -90,7 +94,7 @@ impl Scaler {
             _ if touch => (2.0 / dpr.max(1.0), pav_render::shadows::MAX_SHADOW_LIGHTS),
             _ => (1.0, pav_render::shadows::MAX_SHADOW_LIGHTS),
         };
-        if q == Quality::Auto && touch {
+        if (q == Quality::Auto && touch) || self.user_dynamic {
             // A second at a time: slower than 50 fps drops a step, a few smooth seconds raise one.
             self.ms += frame_ms;
             self.frames += 1;
@@ -114,7 +118,7 @@ impl Scaler {
         } else {
             self.dynamic = 1.0;
         }
-        self.scale = (base.min(1.0) * self.dynamic).clamp(0.25, 1.0);
+        self.scale = (base.min(1.0) * self.user_scale.clamp(0.25, 1.0) * self.dynamic).clamp(0.25, 1.0);
         (self.scale, lights)
     }
 }

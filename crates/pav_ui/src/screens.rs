@@ -41,7 +41,7 @@ impl Cx<'_> {
                 let top = self.header(s);
                 self.text_card(t, top);
             }
-            ScreenBody::Loading(l) => self.loading(l),
+            ScreenBody::Loading(l) => self.loading(l, s.backdrop),
             ScreenBody::Results(r) => self.results(r),
         }
         if !s.hints.is_empty() {
@@ -492,41 +492,51 @@ impl Cx<'_> {
         }
     }
 
-    fn loading(&self, l: &LoadingCard) {
-        self.sunset_art();
+    fn loading(&self, l: &LoadingCard, backdrop: Backdrop) {
+        if matches!(backdrop, Backdrop::Clear) {
+            // Over the world (a picture the game made in the engine): only a scrim under the
+            // words.
+            let s = self.screen;
+            let fade = Rect::from_min_max(pos2(s.left(), s.top() + s.height() * 0.5), s.max);
+            self.scrim(fade, Color32::TRANSPARENT, Color32::from_black_alpha(215));
+        } else {
+            self.sunset_art();
+        }
         let x = self.safe.left();
         let tip_w = self.px(980.0).min(self.safe.width() * 0.7);
         let pad = self.px(24.0);
-        let tip =
-            (!l.tip.is_empty()).then(|| self.rich(&l.tip, self.ui(30.0), color::TEXT, Some(tip_w - pad * 2.0 - self.px(80.0))));
+        // The word before the tip ("TIP" unless the card names another; none when empty).
+        let label = l.tag.as_deref().unwrap_or("TIP");
+        let tag_w = if label.is_empty() { 0.0 } else { self.px(80.0) };
+        let tip = (!l.tip.is_empty()).then(|| self.rich(&l.tip, self.ui(30.0), color::TEXT, Some(tip_w - pad * 2.0 - tag_w)));
         let tip_h = tip.as_ref().map_or(0.0, |t| t.size.y + pad * 1.7);
         let bar_y = self.safe.bottom() - self.px(10.0);
         let mut y = bar_y - self.px(40.0);
         if let Some(t) = &tip {
             let rect = Rect::from_min_size(pos2(x, y - tip_h), vec2(tip_w, tip_h));
             self.backplate(rect, 14.0);
-            let tag = self.text(
-                pos2(rect.left() + pad, rect.top() + pad * 0.85),
-                Align2::LEFT_TOP,
-                "TIP",
-                self.bold(size::BODY),
-                color::ACCENT,
-                Fx::None,
-            );
+            let at = pos2(rect.left() + pad, rect.top() + pad * 0.85);
+            let tag = if label.is_empty() {
+                Rect::from_min_size(at - vec2(self.px(22.0), 0.0), vec2(0.0, 0.0))
+            } else {
+                self.text(at, Align2::LEFT_TOP, label, self.bold(size::BODY), color::ACCENT, Fx::None)
+            };
             self.paint_rich(
                 t,
                 pos2(tag.right() + self.px(22.0), rect.top() + pad * 0.85 - t.cap.0 + tag.top() - rect.top() - pad * 0.85),
-                tip_w - pad * 2.0 - self.px(80.0),
+                tip_w - pad * 2.0 - tag_w,
                 Align::Min,
                 Fx::None,
             );
             y = rect.top() - self.px(34.0);
         }
         self.text(pos2(x, y), Align2::LEFT_BOTTOM, l.heading.to_uppercase(), self.display(96.0), color::TEXT, Fx::Shadow);
-        if l.progress >= 0.0 {
-            let bar = Rect::from_min_size(pos2(x, bar_y - self.px(8.0)), vec2(self.safe.width(), self.px(8.0)));
-            self.accent_bar(bar, l.progress);
+        if l.progress < 0.0 {
+            // (No bar: a card that is not waiting on anything, so no spinner either.)
+            return;
         }
+        let bar = Rect::from_min_size(pos2(x, bar_y - self.px(8.0)), vec2(self.safe.width(), self.px(8.0)));
+        self.accent_bar(bar, l.progress);
         // Spinner, bottom right: an arc turning with UI time.
         let c = pos2(self.safe.right() - self.px(30.0), bar_y - self.px(70.0));
         let a = self.time * 4.0;

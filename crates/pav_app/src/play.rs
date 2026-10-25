@@ -25,6 +25,7 @@ pub struct PlayShell {
     save_serial: u64,
     settings_serial: u64,
     rumble_serial: u64,
+    display_serial: u64,
     started: bool,
     /// The pointer is held for mouse look.
     pub grabbed: bool,
@@ -51,6 +52,7 @@ impl Default for PlayShell {
             save_serial: 0,
             settings_serial: 0,
             rumble_serial: 0,
+            display_serial: 0,
             started: false,
             grabbed: false,
             clicked: false,
@@ -120,6 +122,13 @@ impl PlayShell {
         let r = app.vibrate.filter(|r| r.serial != self.rumble_serial)?;
         self.rumble_serial = r.serial;
         Some((r.low, r.high, r.secs))
+    }
+
+    /// New display settings the game asks for.
+    pub fn display(&mut self, app: &AppRequests) -> Option<pav_core::present::DisplayRequest> {
+        let d = app.display.as_ref().filter(|d| d.serial != self.display_serial)?;
+        self.display_serial = d.serial;
+        Some(d.clone())
     }
 
     /// Keeps new saves and settings. Returns true when the game asks to quit.

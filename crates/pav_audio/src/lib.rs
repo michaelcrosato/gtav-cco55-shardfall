@@ -780,9 +780,13 @@ pub fn render_run_with(
     let mut out = Vec::with_capacity((ticks.len() * per + (tail * sample_rate) as usize) * 2);
     let mut buf = vec![0.0f32; per * 2];
     for (events, scene) in ticks {
-        let sfx = scene.as_ref().map_or(1.0, |s| s.effects);
         for e in events {
-            play_event(&mut mixer, e, l, sfx);
+            let gain = match (e, scene.as_ref()) {
+                (SimEvent::Sound { cue, .. }, Some(s)) => s.gain_for(cue),
+                (_, Some(s)) => s.effects,
+                (_, None) => 1.0,
+            };
+            play_event(&mut mixer, e, l, gain);
         }
         if let Some(scene) = scene {
             let mut loops = loop_targets(scene, l);

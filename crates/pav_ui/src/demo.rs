@@ -428,6 +428,7 @@ pub fn loading() -> UiModel {
                 heading: "Paloma Bay".into(),
                 tip: "Hold ~btn:l1~ to slow time and pick a weapon from the wheel.".into(),
                 progress: 0.62,
+                tag: None,
             }),
             backdrop: Backdrop::Solid,
         }),

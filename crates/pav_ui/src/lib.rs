@@ -187,6 +187,8 @@ impl Ui {
             keys: host.keys.unwrap_or(&self.standard_keys),
             fam: Families::new(ready),
             hits: &hits,
+            subtitle_scale: if model.subtitle_scale.is_finite() { model.subtitle_scale.clamp(0.6, 2.0) } else { 1.0 },
+            contrast: model.high_contrast,
         };
         let tex = self.map.texture(ctx, map);
         draw_frame(&cx, model, host, tex);

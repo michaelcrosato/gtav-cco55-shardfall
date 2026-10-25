@@ -520,10 +520,33 @@ offset, volume, muffle, `segments`) in its `AudioScene`; `pav_audio::music` rend
   `radio` band-limits and drives it like a two-way set). As a loop: cues `voice` and
   `voice.radio` (`pitch` 1 = 120 Hz, `param` liveliness), e.g. a police scanner.
 - **Mix:** `AudioScene.ducking` is the decibels the radio and the ambience beds duck by
-  (dialogue, menus); the mixer glides to it.
+  (dialogue, menus); the mixer glides to it. `AudioScene.voice` is the voices' volume: a
+  one-shot whose cue starts `voice.` plays at it, everything else at `effects`
+  (`AudioScene::gain_for`; the app and the offline render alike).
 - **Listening:** `audio_capture` renders a run's mix (events, loops, the radio and its talk) to
   .wav; a game's CLI calls `pav_tools::tools::register_sounds(its cue file)` so its own cues
   are in it. `music::render` and `voice::render` render a song or a line alone.
+
+## Player settings and looks (present)
+What a game's settings page needs from its host, and looks for frontend pictures:
+- **Display:** `AppRequests.display: Option<DisplayRequest>` — `serial` (a new one is applied),
+  `fullscreen` and `vsync` (the window's; a browser page leaves them to the browser), `quality`
+  (`low`, `medium`, `high`: the app's presets), `render_scale` (0.25-1, multiplies what the
+  preset draws) and `dynamic` (resolution follows the frame rate on any device, not only touch).
+  `pav_app` applies it to its quality preset, its scaler and the window.
+- **Subtitles and contrast:** `UiModel.subtitle_scale` (0.6-2) sizes subtitles;
+  `UiModel.high_contrast` draws backplates nearly opaque with a light outline and puts subtitles
+  on a plate of their own.
+- **Painterly and print looks:** `ViewIntent.stylize: Option<StylizeIntent { kind, size, mix,
+  color }>` (`paint`, `halftone`, `sketch`; stroke, dot or hatch size in px; how much shows;
+  how much colour stays) runs the view's stylize filter over the whole picture (a loading card,
+  an intro).
+- **Loading cards over the world:** `LoadingCard` on a `clear` backdrop draws no art of its own
+  (the world shows: e.g. a character posed under `stylize`), only a scrim under the words;
+  `tag` names the word before the tip (None: "TIP", empty: none); a card with no bar
+  (`progress` < 0) has no spinner either.
+- **Bodies:** `Sim::set_solid(id, false)` makes an entity's body stop colliding and stop rays
+  (a fallen character: people walk over it, bullets and sight lines pass it).
 
 ## Urban kit (pav_world)
 `pav_world` turns a district file (TOML) into an immutable `City` (`City::from_toml`, a pure

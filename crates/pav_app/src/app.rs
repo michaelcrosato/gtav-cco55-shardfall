@@ -1346,7 +1346,12 @@ impl App {
                 if matches!(e, pav_core::SimEvent::Step { .. }) && !self.audio_settings.footsteps {
                     continue;
                 }
-                a.play_event(e, &l, sfx);
+                // (A voice plays at the game's voice volume, everything else at its effects'.)
+                let gain = match (e, scene) {
+                    (pav_core::SimEvent::Sound { cue, .. }, Some(s)) => self.audio_settings.sfx * s.gain_for(cue),
+                    _ => sfx,
+                };
+                a.play_event(e, &l, gain);
             }
             if let Some(scene) = scene {
                 let mut loops = pav_audio::loop_targets(scene, &l);
@@ -1738,6 +1743,23 @@ impl App {
             }
             if let Some((low, high, secs)) = self.play.rumble(&play.app) {
                 self.input.vibrate(low, high, secs);
+            }
+            // The game's display settings: the quality preset, the render scale and dynamic
+            // resolution, v-sync (applied with the panel's below) and full screen (a browser
+            // page leaves that to the browser).
+            if let Some(d) = self.play.display(&play.app) {
+                use pav_core::present::DisplayQuality;
+                self.prefs.quality = match d.quality {
+                    DisplayQuality::Low => crate::quality::Quality::Low,
+                    DisplayQuality::Medium => crate::quality::Quality::Medium,
+                    DisplayQuality::High => crate::quality::Quality::High,
+                };
+                self.scaler.user_scale = d.render_scale;
+                self.scaler.user_dynamic = d.dynamic;
+                self.app_settings.vsync = d.vsync;
+                if !cfg!(target_arch = "wasm32") && gfx.window.fullscreen().is_some() != d.fullscreen {
+                    gfx.window.set_fullscreen(d.fullscreen.then_some(winit::window::Fullscreen::Borderless(None)));
+                }
             }
             let want = play.app.mouse_look && !self.menu_open && game_input;
             // A browser locks the pointer only for a page the player just clicked (asking without
