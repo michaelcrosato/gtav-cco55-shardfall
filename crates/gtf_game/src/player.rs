@@ -14,6 +14,8 @@ use crate::camera::OrbitCam;
 pub const RUN: f32 = 4.6;
 pub const SPRINT: f32 = 7.0;
 pub const WALK: f32 = 1.6;
+/// The stick tilted less than this walks.
+pub const WALK_TILT: f32 = 0.55;
 
 /// Sprint taps closer together than this keep the sprint going (s).
 const TAP_WINDOW: f32 = 0.4;
@@ -100,9 +102,12 @@ impl Foot {
         if self.crouched {
             held |= buttons::CROUCH;
         }
-        // Barely tilting the stick walks.
-        if stick.length() > 0.05 && stick.length() < 0.55 && !self.sprinting {
+        // Barely tilting the stick walks: the walk band's edge is the full walk (the controller
+        // goes as fast as the stick is pushed), a lighter tilt a slower one.
+        let mut move_dir = move_dir;
+        if stick.length() > 0.05 && stick.length() < WALK_TILT && !self.sprinting {
             held |= buttons::FOCUS;
+            move_dir = (move_dir / WALK_TILT).clamp_length_max(1.0);
         }
         let haste = if self.sprinting { SPRINT / RUN - 1.0 } else { 0.0 };
         (InputFrame { move_dir, held: held | pressed, pressed, ..Default::default() }, haste)

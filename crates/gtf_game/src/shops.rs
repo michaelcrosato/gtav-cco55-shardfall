@@ -464,7 +464,10 @@ impl Freeway {
                 if let Some(json) = self.saves.get(id).cloned() {
                     match self.load_game(sim, &json) {
                         Ok(()) => self.note("save", "Game loaded", ""),
-                        Err(e) => log::warn!("load {id}: {e:#}"),
+                        Err(e) => {
+                            log::warn!("load {id}: {e:#}");
+                            self.note("save", "Can't load this save", "It is damaged or from a newer version");
+                        }
                     }
                 }
                 true

@@ -490,6 +490,7 @@ impl Freeway {
                         && let Err(e) = self.load_game(sim, &json)
                     {
                         log::warn!("load {slot}: {e:#}");
+                        self.note("save", "Can't load this save", "It is damaged or from a newer version");
                     }
                 }
                 // `phone <app>|home|close` (captures, tools); `menu gun|mods|store|save|load|replay`.
