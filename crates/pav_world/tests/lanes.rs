@@ -236,6 +236,8 @@ fn the_freeway_runs_both_ways_and_turns_round_short_of_its_closed_north_end() {
     }
 }
 
+/// (And a U-turn stays well clear of the water: a road that ends at a quay turns round short of
+/// its barriers, as at the map's edge.)
 #[test]
 fn dead_ends_turn_round_on_the_road_and_roads_stop_short_of_the_map_edge() {
     let c = city();
@@ -255,6 +257,10 @@ fn dead_ends_turn_round_on_the_road_and_roads_stop_short_of_the_map_edge() {
             );
             if l.turn == Turn::UTurn {
                 assert!(c.road_at(at).is_some() && !c.in_building(at, 0.0), "U-turn {i} leaves the road at {at}");
+                for d in [glam::Vec2::X, glam::Vec2::NEG_X, glam::Vec2::Y, glam::Vec2::NEG_Y] {
+                    let near = at + d * 6.0;
+                    assert!(c.grid.zone(c.grid.cell_of(near)) != Some("water"), "U-turn {i} at {at} is by the water");
+                }
             }
         }
     }

@@ -257,8 +257,8 @@ struct Segment {
     b: i32,
 }
 
-/// How far short of the map's edge a road that runs off it ends (m): its turnaround and the
-/// barriers beyond it fit in between.
+/// How far short of the map's edge a road that runs off it ends (m), or of the water's edge a road
+/// ends at: its turnaround and the barriers beyond it fit in between.
 const EDGE_PULL: f32 = 16.0;
 
 /// How far short of a dead end (a lot, a building) a road's lanes end (m), so the U-turn there
@@ -383,19 +383,26 @@ impl LaneGraph {
             };
             let (ja, jb) = (beyond(seg.a - 1), beyond(seg.b + 1));
             // A road that runs off the map stops short of its edge (where it is closed off), so
-            // its turnaround lies on the map.
+            // its turnaround lies on the map; so does one that ends at the water's edge (a quay,
+            // closed off the same way: `edge::build`).
             let last = if seg.ew { grid.w } else { grid.h };
             let ramp = |end: Vec2| ramp_feet.iter().any(|r| r.distance(end) < cs);
+            let water = |cell: i32| {
+                (0..seg.k).all(|i| {
+                    let c = if seg.ew { IVec2::new(cell, seg.across0 + i) } else { IVec2::new(seg.across0 + i, cell) };
+                    grid.zone(c) == Some("water")
+                })
+            };
             let pull_a = if ja.is_some() || ramp(p) {
                 0.0
-            } else if seg.a == 0 {
+            } else if seg.a == 0 || water(seg.a - 1) {
                 EDGE_PULL
             } else {
                 DEAD_PULL
             };
             let pull_b = if jb.is_some() || ramp(q) {
                 0.0
-            } else if seg.b + 1 == last {
+            } else if seg.b + 1 == last || water(seg.b + 1) {
                 EDGE_PULL
             } else {
                 DEAD_PULL
