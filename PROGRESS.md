@@ -320,14 +320,24 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
       getting out (calm free roam); scenario points as data (benches, stalls, umbrellas, the
       net, tables); the siren's yelp; the sky-cam at 300 m in 3 s with its grid; first-time
       tips; the helicopter's and the police car's control help; "Lose the cops." while wanted.
-- [ ] **Audio.** Reverb by place is in (`AudioScene.reverb`: indoors, under decks, the Ditch,
-      downtown). Mix pass (levels, no clipping) to check with `audio_capture`.
-- [ ] **Visuals.** Camera shake (honouring `reduce_shake`), rain splashes and brighter neon are
-      in; the art pass at every time of day and weather with captures remains.
-- [ ] **Performance.** The browser's `?perf=1` line (sim 0.1-4.5 ms a tick in SwiftShader), the
-      quality presets Low-Ultra with population scaling and desktop dynamic resolution (M8),
-      Low on software adapters, and `gtf perf`'s shadowed lights, particles and entities are
-      in; downtown well under budget remains to be measured.
+- [x] **Audio** (2026-10-25): reverb by place (`AudioScene.reverb`: indoors, under decks, the
+      Ditch, downtown); the siren's yelp. The mix checked with `audio_capture` in six scenes
+      (`out/m9/audio/`): on foot peak 0.11, driving with the radio 0.31, the 3★ chase (sirens,
+      the helicopter, crashes, the radio) 0.63, SMG fire with screams 0.26, a stormy night
+      (rain, thunder) 0.25, the pause menu 0.035 — no clipping, the loudest scene 4 dB under
+      full scale.
+- [x] **Visuals** (2026-10-25): camera shake (honouring `reduce_shake`), rain splashes,
+      brighter neon, darker palm fronds, worn crosswalk paint, traffic headlights; exhaust, dust
+      trails, rim sparks and water splashes (`out/m9/vfx/`). The art pass: four views at dawn,
+      noon, golden hour, dusk and night plus rain, storm, fog, haze and overcast, About, the
+      attract card and a rainy night in roam, all looked at (`out/m9/art/`, contact sheets
+      `sheet_*.png`). Fixed after looking: the noon sun was 1.5 and bleached the beach's sand
+      white (now 1.35); the dust first matched the sand (a darker, rising `trail` preset).
+- [x] **Performance** (2026-10-25): the browser's `?perf=1` line, the quality presets
+      (Auto, Low-Ultra) with population scaling, dynamic resolution, Low on software adapters,
+      and `gtf perf`'s shadowed lights, particles and entities. Culling unseen vehicles and
+      people took downtown's frame build from 5.26 ms to 1.7 ms: every view now builds a frame
+      in at most 2.15 ms (budget 4) and ticks in at most 2.33 ms (budget 3) (`out/m9/perf/`).
 - [ ] **Bug bash.** Clear the Open issues. Run the bots on 5 seeds. Edge cases: water (swim;
       `driving.rs` sinks a car), falling (fall damage), interiors (`landmarks.rs`), switching
       mid-chase (refused: `protagonists.rs`), saving during heat (refused: `economy.rs`).
@@ -339,8 +349,8 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 - [ ] **Docs.** Write `docs/gtf/ENGINE_ANALYSIS.md` (with the D16 systems table),
       `docs/gtf/HANDOFF.md` and the final `README.md` (how to play, controls, credits). Add a game
       entry to `docs/FEEDBACK.md` → Games, and engine docs for every extension.
-- [ ] **D16.** Add a view and capture for every Proving Grounds station, plus combat/weapons and
-      radio signs.
+- [x] **D16** (2026-10-25): combat/weapons and audio/radio stations added; every sign in two
+      lines with a working command; all twelve stations captured (`out/d16/`).
 - [ ] **Delivery.** Final verification of D1-D13 and D16 with fresh captures, then the PR
       description. Send the HTML and the zipped `.exe`, then the final report (§12.4).
 
@@ -356,13 +366,13 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 | D7 UI | ◐ | M1 kit + M6 screens: intro card, objectives, subtitles, fail card, results, switch wheel, phone (9 apps), shop menus, save slots, captured with HUD (`out/m6/`); the 10-foot review is M9 |
 | D8 Frontend | ✔ | 2026-10-25 (M8): boot splash → title (a live shot of the Mirador Hills) → main menu (Continue, New Game, Free Roam, Settings, About, Quit) → intro and loading cards (painterly and halftone looks); settings on five pages (audio, display and quality, HUD, controls, accessibility), each read by the game or the host; About on five pages with the §1 Source Information block and the fonts' and motion libraries' credits. `tests/frontend.rs` (16); every screen captured with the HUD and looked at (`out/m8/front/`) |
 | D9 Attract mode | ✔ | 2026-10-25 (M8): 10 s without input on the title or a menu page starts the loop; the seven §5.8 vignettes (`attract.toml`: golden cruise with the radio, the 3★ pursuit with the SPPD helicopter, the dock gunfight in cover, the switch, big air, city life, the job's getaway), shuffled per loop, cut through black with a caption card; any device's input returns to the title at once; touch screens play it only, with the gear the only thing over the world. `tests/attract.rs` (8); 30-minute soaks on seeds 1 and 2 with no stall, fall or NaN and flat entities and memory (`out/soak/attract_s1.json`, `attract_s2.json`); the browser flows on desktop and phone (`out/m8/web_*`); captures `out/m8/attract/` looked at |
-| D10 Audio | ☐ | Radio part done 2026-10-24: 5 music stations + SPNN talk, DJ cards, scanner chatter, the radio −6 dB under the effects and ducked 8 dB (dialogue) / 12 dB (menus); `cargo test -p pav_audio`, `-p gtf_game --test radio`; captures `out/radio/`. SFX, loops and the mix pass remain (M9). |
-| D11 Visuals (incl. FPS readout) | ☐ | |
-| D12 Performance | ◐ | `gtf perf view=all` (release) within every budget with the population, 2026-10-18 |
+| D10 Audio | ✔ | Synthesized cues for every action (`content/freeway/sounds.toml` over the engine's bank: guns, melee, impacts, crashes, the phone, wheels, menus, weather); loops with live parameters — engines by revs and load per archetype, tyre squeal by slide, sirens (wail, yelp), horns, rotors, car alarms (`audio.rs`) — and ambience beds (city, crowd, surf, harbour, wind, rain: `ambience.rs`); reverb by place (M9). The radio (2026-10-24): 5 music stations + SPNN talk, DJ cards, scanner chatter, −6 dB under the effects, ducked 8 dB under dialogue and 12 dB in menus (`cargo test -p pav_audio`, `-p gtf_game --test radio`). The mix (2026-10-25, `out/m9/audio/`): six scenes' peaks 0.035-0.63, no clipping |
+| D11 Visuals (incl. FPS readout) | ✔ | 2026-10-25 (M9): time-of-day presets (late night, dawn, morning, noon, golden and magic hour, night) and six weathers with a sky dome, lit materials, neon and lit windows at night, wet roads; VFX — muzzle flashes, tracers, impact sparks and dust, tyre smoke, skid marks, exhaust, dust trails, rim sparks, water and rain splashes, rain streaks, explosions with a shockwave, burning cars, the searchlight, lightning; camera shake (reducible), FOV kick when sprinting and with speed, slow motion on stunts and abilities, letterboxed cutscenes. The art pass `out/m9/art/` and `out/m9/vfx/` looked at. The FPS and frame-time readout is on by default and hidden in Settings → HUD (`settings.rs`'s tests; touch screens hide it: `tests/frontend.rs`; the true frame time since M9). Heat haze is not done (Open issues) |
+| D12 Performance | ◐ | 2026-10-25 (M9, release `gtf perf view=all split=true`, `out/m9/perf/all_2.json`): all 37 views within every budget with the population — the slowest frame build 2.15 ms (civic_garage; budget 4), the slowest tick 2.33 ms (downtown_street; budget 3, 1.3-1.6 in other runs), at most 851 draw calls, 8,271 instances, 441k triangles, 24 SDF primitives, 64 lights with 0 shadowed, 1,568 particles and 212 entities. Before culling unseen vehicles and people, downtown_street built a frame in 5.26 ms (`all_1.json`). Quality presets Low-Ultra and Auto, dynamic resolution (M8, M9). The browser's sim time: M10's final run |
 | D13 Verification | ◐ | 2026-10-25: bots complete every mission (both heist approaches) on 3 seeds (M7 acceptance, release); the evasion bot escapes 3★ (`the_evasion_bot_escapes_three_stars`; `evasion_rate` rolling 8/8, standing 5/8); snapshot/replay exact with the full city and population (`tests/replay.rs`); UI model captures of the HUD, pause tabs, wheels, phone and banners (`tests/ui.rs`). Soaks, the attract soak and every §5.9 screen captured: M8-M10 |
 | D14 Docs | ☐ | |
 | D15 Delivery | ☐ | |
-| D16 Developer demo level | ☐ | |
+| D16 Developer demo level | ◐ | 2026-10-25 (M9): `freeway/dev` has a station per engine system the game relies on, each with a two-line sign naming the system and the `gtf` command that checks it — streets and streaming, signals and traffic, pedestrians and crosswalks, parking, the vehicle feel pad, the stunt jump, cover, combat and weapons, heat dispatch, missions, the UI gallery, audio and radio; all twelve captured and looked at (`out/d16/`, `sheet1.png`, `sheet2.png`). `docs/gtf/ENGINE_ANALYSIS.md` §7 has the table of systems used, extended and unused, matching the signs. Re-checked in M10's final run |
 
 ## Decisions
 - 2026-10-17 — Vehicles (E9): okami_kaze is AWD (the plan's example said RWD; RWD could not make
@@ -755,14 +765,42 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
   - Neon tubes are thicker (11 cm on landmarks, 5.5 cm half-depth on shop bands) and the tube
     that lights the wall glows 1.6 (others stay at 0.5: above it a glow becomes a light). Road
     paint is a worn white (#d2cec2); palm fronds a deeper green.
-  - **Fall damage:** landing faster than 12 m/s (a drop of about 2.3 m: characters fall at
-    32 m/s²) costs 12 health per m/s beyond — a 5 m drop about 70, the fastest fall (26 m/s,
-    from 10.6 m up) 168 of 200; not into water, onto a ledge or a ladder, or in a seat.
+  - **Fall damage:** landing faster than 12 m/s (a drop of about 3.3 m: people fall at the
+    game's 22 m/s²) costs 15 health per m/s beyond — a 5 m drop about 40, a 10 m drop about
+    135, and one of about 15 m is fatal from full health with no armour (GTA's rule of thumb:
+    a few storeys kill); not into water, onto a ledge or a ladder, or in a seat. (Batch 1 had
+    12 per m/s, fatal from about 18 m.)
   - **First-time tips** (`tips.rs`): the first time the player is wanted, swims, holds a gun,
     has a full ability meter or stands unarmed a while, the help box says what to do, once a
     game (the save keeps which were shown).
   - **The HTML's header comment** carries the Source Information block
     (`scripts/gtf-source-information.txt`, `pack_single_html.py --header`).
+- 2026-10-25 — **M9, second batch:**
+  - **Vehicle effects** (the game's `Fx` events, PLAN §5.11), for cars within 60 m of the
+    player: exhaust puffs (a new `exhaust` preset) every 0.1 s while a car pulls away (throttle
+    over 0.4 under 8 m/s); dust (a `trail` preset) behind the rear wheels over 5 m/s on sand, dirt, brush and dirt
+    paths (on the ground itself, not on a deck above it); sparks from a burst tyre's rim; spray
+    and rings (`SimEvent::Splash`) where a car ploughs into the water. A fall into the water
+    (not wading in) splashes too.
+  - **Auto graphics quality** is the game's default: the host picks Medium on a touch screen,
+    Low on a software renderer, else High (`DisplayQuality::Auto`, engine). Before it the game
+    always asked for High, so the engine's choice never reached it and the browser checks drew
+    High on SwiftShader.
+  - **The FPS readout** reads each frame's true length, smoothed over about a third of a second
+    (it was capped at 0.1 s, so a slow device read 10 FPS).
+  - **PLAN §7.1's commands** work as written: `teleport <anchor>` (`landmark:bank`, `spot:`,
+    `at:x,z`), `heat N` (= `wanted N`), `give weapon <id>` (= `give <id>`) and `validate` (every
+    content file and mission checked, the same function `tests/content.rs` asserts on).
+  - **The Proving Grounds' signs** read in two lines (the system, then the `gtf` command that
+    checks it) in dark letters against the sky (a `color` for district signs, engine); the
+    streets and pedestrians signs stand 9 m up, over the facades and the trees. Two commands
+    were wrong (`heat 3` was not a command, `vehicle_feel` takes no `test=`) and are fixed.
+  - **Unseen vehicles and people are not built** (engine, `pav_view` build): outside the
+    camera's frustum by more than 8 m (a low sun's shadow, a headlight's pool) or past the fog's
+    end. The renderer culled them anyway, so the picture is the same — four views captured with
+    and without it differ in 0 pixels (`out/m9/cull/`) — but building them cost the CPU about
+    30 µs a car: downtown_street went from 5.26 ms a frame (over its 4 ms budget on this
+    container) to 1.7 ms.
 
 ## Open issues
 - **The evasion bot is sensitive to the order of events:** one extra random draw elsewhere
@@ -772,8 +810,9 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 - **SwiftShader draws the browser build at 0.1 frames a second** (frame 9-16 s at 960x540, even
   at Low on the software adapter); the sim keeps to 0.1-4.5 ms a tick. The browser checks
   wait on log lines with long timeouts; a real GPU is unaffected.
-- **VFX not done:** exhaust puffs, dust trails on dirt, heat haze on the freeway at noon
-  (PLAN §5.11's list; the rest are in).
+- **VFX not done:** heat haze on the freeway at noon (PLAN §5.11's list; exhaust, dust trails,
+  rim sparks and water splashes came in M9's second batch). There are no money pickups to
+  sparkle (cash goes straight to the wallet), and broken glass throws dust, not shards.
 - Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround (limit 0);
   roam AI crashes 0-3 per 900 s with buses turning at junctions the most common. M9 polish.
   (Since session 5 the avenue's quay end is closed off like the map's edge; re-check in M9's
@@ -786,9 +825,14 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
   clock in session 5's first measure). M9: hold runners to the turn speed too, or ram sooner.
 - ~~**Free roam's tip while wanted**~~ fixed in M9: free roam's objective reads "Lose the
   cops." while wanted, and the first time the police are after you a tip says how.
-- **Art notes from the landmark captures (M9 art pass):** at night the palms' fronds glow
-  lime green as if lit, the crosswalk paint reads near white, and the shop signs' neon barely
-  shows; traffic drives without headlights (Remaining work).
+- ~~**Art notes from the landmark captures**~~ fixed in M9: the palms' fronds are a deeper green
+  (no lime glow at night), the crosswalk paint a worn white, the neon tubes thicker and the
+  wall-lighting tube brighter, and traffic drives with its lights on after dark
+  (`out/m9/art/sheet_sunset_row_neon.png`).
+- **Captures in one `gtf repl` session keep the renderer's particles across `load`s:** rain
+  streaks from a storm capture showed in a later overcast one (each capture advances the
+  particles by one frame). Capture rain-free scenes in a fresh session; the game itself is
+  unaffected.
 - **Helicopters (the looks helper):** the canopy is opaque, so its crew cannot be seen; the
   searchlight's spot on the ground was not identified in a capture (only its origin moved to
   the body's lamp). (Fixed in M9: the helicopter's own control help replaces a car's.)
@@ -799,13 +843,11 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 - `dev_test` takes the bot about 395 s of game time (long drive legs at a safe pace); the whole
   missions suite runs in about a minute in the dev build. M7's missions should keep drive legs
   short or use `traffic` thinning.
-- **Perf depends on the container.** `gtf perf view=downtown_street` (release) builds a frame
-  in 4.7-5.4 ms (budget 4; outliers to 7) and runs a tick in 2.8-3.6 ms (budget 3) on session
-  3's container. A release build of the last commit before M6 (`fbe56bf`) gave the same numbers
-  there, so the cause was the machine, not a regression. On session 4's container, `perf
-  view=all` passes every view: downtown builds a frame in 3.6-3.9 ms and ticks in 2.0-2.1 ms.
-  Judge perf changes by A/B against a baseline build on the same machine. D12 needs margin:
-  M9's performance pass should bring downtown well under 4 ms on any of these containers.
+- ~~**Perf depends on the container.**~~ Margin in M9: on session 5's container downtown built a
+  frame in 5.26 ms (budget 4) until the view stopped building the vehicles and people the camera
+  cannot see; now every view builds a frame in at most 2.15 ms and ticks in at most 2.33 ms.
+  (Sessions 2-4 measured downtown at 2.8-5.4 ms a frame on different containers: judge perf
+  changes by A/B on one machine.)
 - **Earlier evidence is not on disk.** `out/` is ignored by Git and containers reset, so the
   M0-M6 captures, filmstrips and soak JSON cited above are gone. M10's final verification
   re-runs the D1-D13/D16 commands and looks at fresh captures.
@@ -981,3 +1023,11 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
   `-D warnings` clean on every touched crate; fmt clean. The scenario points' first version
   drew one more random number per arrival and the 3★ evasion test fell to 0 of 5: the clip
   now goes by who sits there.
+- 2026-10-25 — **M9, second batch** (the commits after `3346f6f`; Decisions → M9): vehicle
+  effects and water splashes, Auto quality, the FPS readout's true frame time, high falls that
+  kill, the view no longer building what the camera cannot see (downtown 5.26 → 1.7 ms a
+  frame), PLAN §7.1's commands, the Proving Grounds' signs, and the art, audio and performance
+  passes with their captures. Checks before the push (release): gtf_game 173 passed, 0
+  failed, 26 ignored; pav_core 313 (its lib and 33 suites, one at a time); pav_app and pav_view
+  73; pav_world 13; clippy `-D warnings` on pav_core, pav_app, pav_view, pav_world, gtf_game
+  and gtf_app, wasm clippy and fmt clean.

@@ -102,16 +102,16 @@ sign naming the system and the `gtf` command that checks it.
 
 | System | Status | Station (its sign) and check |
 |---|---|---|
-| Streaming and regions | extended (E14) | STREETS & STREAMING: `gtf status`, `freeway/view/hills_vista` |
+| Streaming and regions | extended (E14) | STREETS & STREAMING: `gtf perf view=hills_vista` (and `freeway/tour`) |
 | Lanes, signals and traffic | new (`pav_world`) | SIGNALS & TRAFFIC: `gtf citymap layers=lanes,signals` |
 | Pedestrians and the walk map | new (`pav_world`) | PEDESTRIANS & CROSSWALKS: `gtf citymap layers=walk` |
 | Parking | new (`pav_world`) | PARKING: `gtf citymap layers=parking` |
-| Vehicles and the feel pad | extended (E9) | VEHICLE FEEL PAD: `gtf vehicle_feel`; STUNT JUMP: `gtf vehicle_feel test=jump` |
-| Combat and weapons | game code on engine raycasts and clips | COMBAT & WEAPONS: `gtf input hold=l2 press=r2` |
+| Vehicles and the feel pad | extended (E9) | VEHICLE FEEL PAD: `gtf vehicle_feel`; STUNT JUMP: `gtf vehicle_feel key=okami_kaze` (the kicker jump) |
+| Combat and weapons | game code on engine raycasts and clips | COMBAT & WEAPONS: `gtf input cmd="give p9 60" hold=l2 press=r2` |
 | Cover | new cover points (`pav_world`) | COVER RANGE: `gtf citymap layers=cover` |
-| Heat dispatch | game code on the lanes | HEAT DISPATCH: `gtf play cmd=heat 3` |
-| Mission DSL | game code | MISSIONS: `gtf play cmd=mission start dev_test` |
-| 10-foot UI (`pav_ui`) | new (E5) | UI GALLERY: `load scene=freeway/gallery`, `capture hud=true` |
+| Heat dispatch | game code on the lanes | HEAT DISPATCH: `gtf play cmd="wanted 3"` |
+| Mission DSL | game code | MISSIONS: `gtf play cmd="mission start dev_test"` |
+| 10-foot UI (`pav_ui`) | new (E5) | UI GALLERY: `gtf capture scene=freeway/gallery hud=true` |
 | Audio and radio | extended (E8) | AUDIO & RADIO: `gtf audio_capture` |
 | Characters, puppets and clips | used, extended (LOD, clip control, bodies) | `cargo test -p gtf_game --test player` |
 | Rendering: sky, weather, culling | extended (E7) | `gtf perf view=all` |
