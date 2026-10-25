@@ -499,9 +499,25 @@ impl Freeway {
                     .and_then(|e| crate::drive::Car::read(sim, e))
                     .map(|c| (c.vel, c.forward()))
                     .unwrap_or((Vec3::ZERO, Vec3::new(yaw.sin(), 0.0, yaw.cos())));
-                if min > 0.0 && d < min + 7.0 && vel.length() < 3.0 {
-                    // It has stopped (a light, a junction): stop here, well back.
-                    self.bot_drive(b, me, 0.3);
+                if min > 0.0 && (d < min + 4.0 || (d < min + 7.0 && vel.length() < 3.0)) {
+                    // It has stopped (a light, a junction) or we are on its bumper: stop here, well
+                    // back — the brakes, then the handbrake (the autopilot, sent to where the car
+                    // stands, creeps on toward it).
+                    if self.traffic.cars.iter().any(|a| a.pilot) {
+                        b.cmd("autopilot off".into());
+                        b.pilot = None;
+                    }
+                    let rolling = self
+                        .drive
+                        .vehicle()
+                        .and_then(|c| crate::drive::Car::read(sim, c))
+                        .map_or(0.0, |c| c.vel.dot(c.forward()));
+                    if rolling > 0.3 {
+                        b.frame.pad.l2 = 1.0;
+                        b.frame.pad.held |= pad::L2;
+                    } else {
+                        b.frame.pad.held |= pad::R1;
+                    }
                     return;
                 }
                 // Close: a crawl; a few lengths back: easy; falling behind: hurrying (through the

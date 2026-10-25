@@ -245,6 +245,17 @@ impl Heat {
         false
     }
 
+    /// The police lose sight of the player at `at` (a mission's getaway): the search starts
+    /// there, as after two seconds unseen.
+    pub fn lose_sight(&mut self, at: Vec3) {
+        if self.stars > 0 {
+            self.last_known = at;
+            self.unseen = self.unseen.max(SEARCH_AFTER);
+            self.searching = true;
+            self.evade = 0.0;
+        }
+    }
+
     /// Back to no heat (evaded, busted, wasted, a respray).
     pub fn clear(&mut self) {
         self.stars = self.floor;
@@ -300,6 +311,22 @@ mod tests {
         h.cap = 2;
         h.raise(4, Vec3::ZERO);
         assert_eq!(h.stars, 2);
+    }
+
+    #[test]
+    fn a_getaway_the_police_lost_sight_of_starts_the_search_where_the_player_is() {
+        let mut h = Heat::default();
+        let at = Vec3::new(60.0, 0.0, 360.0);
+        h.lose_sight(at);
+        assert!(!h.searching, "no heat, no search");
+        h.raise(1, Vec3::ZERO);
+        h.lose_sight(at);
+        assert!(h.searching && h.last_known == at && h.zone() == Some((at, ZONE[1])));
+        // Out of the zone and unseen for 10 s at one star: cleared.
+        let sim = Sim::empty(1);
+        let far = at + Vec3::new(200.0, 0.0, 0.0);
+        let cleared = (0..(11 * 60)).any(|_| h.tick(&sim, far, false, None, 1.0 / 60.0));
+        assert!(cleared && h.stars == 0, "{h:?}");
     }
 
     #[test]

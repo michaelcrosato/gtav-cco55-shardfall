@@ -398,6 +398,9 @@ pub enum Action {
     HeatFloor(u8),
     HeatCap(u8),
     Dispatch(bool),
+    /// The police lose sight of the player (`true`): the stars flash and the search starts where
+    /// the player is (a getaway they did not see the end of).
+    Search(bool),
     /// The share of the usual moving traffic (1: all of it) until the mission ends.
     Traffic(f32),
     Flag(String),

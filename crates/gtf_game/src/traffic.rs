@@ -64,7 +64,15 @@ pub struct DriveDef {
     pub personality: [f32; 2],
     pub honk_after: f32,
     pub reverse_after: f32,
+    /// Blocked and out of view this long: on rails through the rest of the way (a long truck
+    /// wedged in a cul-de-sac's turning circle), before `give_up` would take it away.
+    #[serde(default = "rescue_after")]
+    pub rescue_after: f32,
     pub give_up: f32,
+}
+
+fn rescue_after() -> f32 {
+    12.0
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -177,6 +185,9 @@ pub struct Agent {
     /// positive, or its left), the horn down.
     #[serde(default)]
     pub swerve: f32,
+    /// Seconds left on rails after it was found wedged out of view (it stays kinematic so long).
+    #[serde(default)]
+    pub rescue: f32,
     #[serde(default)]
     pub bus: Option<BusState>,
     /// The player's own car on autopilot (bots, the attract mode): driven like traffic, never
@@ -263,6 +274,9 @@ pub struct Traffic {
     pub stuck_incident: u32,
     #[serde(default)]
     pub incident_crashes: u32,
+    /// Cars found wedged out of view and put on rails through it (they drive on: not stuck).
+    #[serde(default)]
+    pub rescued: u32,
     /// Pairs of traffic cars that collided lately (ids, tick).
     #[serde(default)]
     pub crashed: Vec<(u32, u32, u64)>,
@@ -657,6 +671,7 @@ impl Traffic {
             held: false,
             crossed: false,
             swerve: 0.0,
+            rescue: 0.0,
             bus: None,
             pilot: true,
             passing: 0.0,
@@ -759,6 +774,7 @@ impl Traffic {
             held: false,
             crossed: false,
             swerve: 0.0,
+            rescue: 0.0,
             bus: None,
             pilot: false,
             passing: 0.0,
@@ -981,6 +997,7 @@ impl Traffic {
             "despawned": self.despawned,
             "stuck_cars": self.stuck,
             "stuck_incident": self.stuck_incident,
+            "rescued": self.rescued,
             "spawn_in_view": self.spawn_in_view,
             "despawn_in_view": self.despawn_in_view,
             "ai_crashes": self.ai_crashes,
@@ -1354,6 +1371,7 @@ impl Traffic {
                 held: false,
                 crossed: false,
                 swerve: 0.0,
+                rescue: 0.0,
                 bus: None,
                 pilot: false,
                 passing: 0.0,
@@ -1437,6 +1455,7 @@ impl Traffic {
                 held: false,
                 crossed: false,
                 swerve: 0.0,
+                rescue: 0.0,
                 bus: Some(BusState { stop, dwell: 0.0 }),
                 pilot: false,
                 passing: 0.0,
@@ -1726,12 +1745,30 @@ impl Traffic {
             // Level of detail by distance to the player and to what the camera looks at.
             let near = c.center.distance(m.player).min(c.center.distance(camera_target));
             let company = |r: f32| free.iter().any(|p| *p != c.center && p.distance(c.center) < r);
+            a.rescue = (a.rescue - m.dt).max(0.0);
             match a.tier {
                 _ if a.pilot => {}
+                // Wedged where nobody sees it (a long truck in a cul-de-sac's turning circle): on
+                // rails through the rest of its way, as traffic far off drives.
+                Tier::Full
+                    if a.blocked > d.drive.rescue_after
+                        && !a.mission
+                        && a.bus.is_none()
+                        && !seen(&m.camera, c.center)
+                        && crate::world::ground_loaded(sim, c.center) =>
+                {
+                    sim.set_vehicle_kinematic(a.car, true);
+                    a.tier = Tier::Rail;
+                    a.rescue = 8.0;
+                    a.blocked = 0.0;
+                    a.reverse = 0.0;
+                    self.rescued += 1;
+                }
                 // Back on its wheels only on loaded ground and clear of houses and other cars (a car
                 // on rails passes through anything; the physics would throw it out).
                 Tier::Rail
-                    if (near < near_full || company(15.0))
+                    if a.rescue <= 0.0
+                        && (near < near_full || company(15.0))
                         && crate::world::ground_loaded(sim, c.center)
                         && !m.city.in_building(Vec2::new(c.center.x, c.center.z), 1.5)
                         && !cars

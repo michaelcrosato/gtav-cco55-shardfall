@@ -197,6 +197,11 @@ pub struct Spike {
     pub half: f32,
 }
 
+/// At one star a patrol car chases at the pace of the road it is on: its limit and this share
+/// over, and no less than 16 m/s. A driver who puts their foot down gets away (a lone car on
+/// the bumper otherwise kept pace through every corner); from two stars they drive to catch.
+const PATROL_HASTE: f32 = 1.25;
+
 /// Seconds between roadblocks, and how far ahead of the player they are set (m).
 const BLOCK_EVERY: f32 = 25.0;
 const BLOCK_AHEAD: [f32; 2] = [110.0, 200.0];
@@ -664,12 +669,18 @@ impl Police {
                 } else {
                     lead
                 };
-                // Closing fast from afar, the harder the more stars (at one or two a fast car
-                // can pull away; from three they drive flat out); a PIT itself is a nudge (a few
-                // m/s faster), not a crash.
+                // Closing fast from afar, the harder the more stars (at one a patrol car keeps
+                // to the road's pace, `PATROL_HASTE`; at two a fast car can pull away; from three
+                // they drive flat out); a PIT itself is a nudge (a few m/s faster), not a crash.
                 let pv = m.player_vel.length();
                 let (gain, top) = match m.stars {
-                    0 | 1 => (2.5, 31.0),
+                    0 | 1 => {
+                        let lanes = &m.city.lanes;
+                        let road = lanes
+                            .nearest_level(c.feet(), 3.0, |l| !l.closed)
+                            .map_or(29.0, |(i, _, _)| lanes.lanes[i as usize].speed);
+                        (2.5, (road * PATROL_HASTE).clamp(16.0, 31.0))
+                    }
                     2 => (4.5, 36.0),
                     _ => (7.0, 42.0),
                 };

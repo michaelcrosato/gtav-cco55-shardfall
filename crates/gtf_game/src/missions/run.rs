@@ -468,6 +468,11 @@ impl Freeway {
             Action::HeatFloor(n) => self.heat.floor = *n,
             Action::HeatCap(n) => self.heat.cap = *n,
             Action::Dispatch(on) => self.heat.dispatch = *on,
+            Action::Search(true) => {
+                let at = Self::feet(sim);
+                self.heat.lose_sight(at);
+            }
+            Action::Search(false) => {}
             Action::Traffic(k) => self.traffic.thin = Some(k.clamp(0.0, 1.0)),
             Action::Flag(f) => {
                 run.flags.insert(f.clone());
@@ -650,14 +655,16 @@ impl Freeway {
         if cp.protagonist != self.crew.current {
             self.force_protagonist(sim, cp.protagonist);
         }
-        let ids: Vec<String> = run.actors.keys().cloned().collect();
-        for id in ids {
-            self.despawn_actor(sim, run, &id);
-        }
+        // Out of the car first: an actor's vehicle the player sat in goes with the other actors
+        // (left behind, it stood in the road the retry drives — a heist truck's way blocked).
         if let (Some(pid), Some(car)) = (sim.state.player, self.drive.vehicle()) {
             sim.exit_vehicle(pid, car);
         }
         self.drive.phase = crate::drive::Phase::Foot;
+        let ids: Vec<String> = run.actors.keys().cloned().collect();
+        for id in ids {
+            self.despawn_actor(sim, run, &id);
+        }
         self.heat.clear();
         self.police.clear(sim);
         self.enemies.camp = 0.0;
