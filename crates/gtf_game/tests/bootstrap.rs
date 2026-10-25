@@ -64,3 +64,27 @@ fn snapshots_rewind_and_replays_are_exact() {
     }
     assert_eq!(again.state_hash(), hash);
 }
+
+#[test]
+fn the_cli_commands_of_plan_7_1_work() {
+    let mut s = sim("freeway/roam", 1);
+    s.run(30, &InputFrame::default());
+    let cmd = |s: &mut Sim, c: &str| s.step(&InputFrame { cmds: vec![c.into()], ..Default::default() });
+    let game = |s: &Sim| s.play().unwrap().get::<gtf_game::Freeway>().unwrap().clone();
+    // `teleport <anchor>`: on foot at the bank's door.
+    let city = gtf_game::world::city().unwrap();
+    let door = gtf_game::anchor::foot(&city, &gtf_game::anchor::Anchor::parse("landmark:bank").unwrap()).unwrap().0;
+    cmd(&mut s, "teleport landmark:bank");
+    s.run(5, &InputFrame::default());
+    let feet = s.feet(s.state.player.unwrap()).unwrap();
+    assert!(feet.distance(door) < 2.0, "at the bank: {feet} vs {door}");
+    // `heat 3` is `wanted 3`; `give weapon p9` is `give p9`.
+    cmd(&mut s, "heat 3");
+    assert_eq!(game(&s).heat.stars, 3);
+    cmd(&mut s, "give weapon p9 30");
+    let d = gtf_game::combat::def().unwrap();
+    let p9 = d.weapon.iter().position(|w| w.id == "p9").unwrap();
+    assert!(game(&s).crew.me().is_some_and(|m| m.owned.get(p9) == Some(&true)), "the pistol is owned");
+    // `validate`: no content errors.
+    assert!(gtf_game::validate_content().is_empty());
+}

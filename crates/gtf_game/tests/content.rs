@@ -69,39 +69,12 @@ fn named(prefix: &str) -> Vec<(String, String)> {
 #[test]
 fn every_content_file_loads_and_validates() {
     gtf_game::register();
-    let city = gtf_game::world::city().expect("district.toml builds");
+    gtf_game::world::city().expect("district.toml builds");
     gtf_game::world::dev_city().expect("dev_district.toml builds");
-    let mut errs: Vec<String> = Vec::new();
-    let mut load = |name: &str, r: anyhow::Result<()>| {
-        if let Err(e) = r {
-            errs.push(format!("{name}: {e:#}"));
-        }
-    };
-    load("weapons.toml", gtf_game::combat::def().map(|_| ()));
-    load("attract.toml", gtf_game::attract::def().and_then(|d| d.check(&city)));
-    load("frontend.toml", gtf_game::cards::def().and_then(|d| d.check()));
-    load("world.toml", gtf_game::daytime::def().map(|_| ()));
-    load("enemies.toml", gtf_game::enemies::def().map(|_| ()));
-    load("peds.toml", gtf_game::peds::def().map(|_| ()));
-    load("protagonists.toml", gtf_game::protagonists::def().map(|_| ()));
-    load("radio.toml", gtf_game::radio::def().map(|_| ()));
-    load("shops.toml", gtf_game::shops::def().map(|_| ()));
-    load("traffic.toml", gtf_game::traffic::def().map(|_| ()));
-    load("views.toml", gtf_game::views::all().map(|_| ()));
-    load("vehicles.toml", gtf_game::vehicles::all().map(|_| ()));
-    match gtf_game::activities::def() {
-        Ok(d) => errs.extend(d.check(&city).into_iter().map(|e| format!("activities.toml: {e}"))),
-        Err(e) => errs.push(format!("activities.toml: {e:#}")),
-    }
-    // Every mission file reads (a broken one is left out of `all`) and validates against its
-    // district.
-    let all = gtf_game::missions::all();
-    assert_eq!(all.len(), gtf_game::missions::FILES.len(), "a mission file does not read");
-    for (key, text) in gtf_game::missions::FILES {
-        let d = gtf_game::missions::get(key).unwrap();
-        let c = gtf_game::world::city_for(if d.district == "dev" { "dev" } else { "" }).unwrap();
-        errs.extend(gtf_game::missions::validate(&d, text, &c).into_iter().map(|e| format!("missions/{key}.toml: {e}")));
-    }
+    // Every file reads and checks, every mission validates against its district (the same as
+    // `play cmd="validate"`); a broken mission file is left out of `all`.
+    let mut errs = gtf_game::validate_content();
+    assert_eq!(gtf_game::missions::all().len(), gtf_game::missions::FILES.len(), "a mission file does not read");
     // And every TOML file under content/freeway is one of these (no stray file goes unread).
     let known = [
         "activities.toml",

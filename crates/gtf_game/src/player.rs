@@ -54,17 +54,29 @@ pub struct Foot {
     /// The fastest the player has fallen since leaving the ground (m/s, downward).
     #[serde(default)]
     pub fall: f32,
+    /// In the water last tick (a fall into it splashes).
+    #[serde(default)]
+    pub wet: bool,
 }
 
-/// Landing faster than this (m/s) hurts: about a 3.3 m drop (the jump's own landing is far
-/// below it). Each m/s beyond costs this much health, so about an 18 m drop is fatal from full
-/// health and no armour.
+/// Landing faster than this (m/s) hurts: about a 3.3 m drop at the game's 22 m/s² (the jump's
+/// own landing is far below it). Each m/s beyond costs this much health, so a 10 m drop costs
+/// about 135 and one of about 15 m is fatal from full health and no armour.
 pub const FALL_SAFE: f32 = 12.0;
-pub const FALL_HURT: f32 = 12.0;
+pub const FALL_HURT: f32 = 15.0;
 
 impl Default for Foot {
     fn default() -> Self {
-        Foot { stamina: 1.0, sprinting: false, crouched: false, rest: 9.0, since_tap: 9.0, sprint_on: false, fall: 0.0 }
+        Foot {
+            stamina: 1.0,
+            sprinting: false,
+            crouched: false,
+            rest: 9.0,
+            since_tap: 9.0,
+            sprint_on: false,
+            fall: 0.0,
+            wet: false,
+        }
     }
 }
 

@@ -306,3 +306,58 @@ fn a_car_that_goes_under_lets_the_player_out_to_swim_and_climb_out() {
     }
     assert!(landed, "climbed out onto the quay");
 }
+
+/// The effect presets the game asked for over `n` ticks of `f`.
+fn effects(sim: &mut Sim, n: usize, f: &InputFrame) -> Vec<String> {
+    let mut seen = Vec::new();
+    for _ in 0..n {
+        sim.step(f);
+        for e in sim.drain_events() {
+            if let pav_core::frame::SimEvent::Fx { preset, .. } = e {
+                seen.push(preset);
+            }
+        }
+    }
+    seen
+}
+
+#[test]
+fn a_car_puffs_exhaust_pulling_away_raises_dust_on_sand_and_a_bare_rim_sparks() {
+    let count = |v: &[String], p: &str| v.iter().filter(|x| *x == p).count();
+    // On the street: exhaust as it pulls away, and no dust from the asphalt.
+    let mut sim = roam();
+    cmd(&mut sim, "drive bravura_stallion");
+    let car = newest(&sim, "bravura_stallion");
+    steps(&mut sim, 30, &InputFrame::default());
+    assert_eq!(riding(&sim), Some(car), "in the car on the street");
+    sim.drain_events();
+    let pulling = effects(&mut sim, 40, &throttle(1.0));
+    let street = effects(&mut sim, 40, &throttle(1.0));
+    eprintln!("street: {} exhaust, then {} dust", count(&pulling, "exhaust"), count(&street, "trail"));
+    assert!(count(&pulling, "exhaust") > 0, "exhaust puffs as it pulls away: {pulling:?}");
+    assert_eq!(count(&street, "trail"), 0, "no dust on asphalt: {street:?}");
+    // On the beach (sand all round for two cells, far from any lane): dust behind the wheels,
+    // and sparks from a burst tyre's rim.
+    let mut sim = roam();
+    let city = gtf_game::world::city().unwrap();
+    let sand = (0..city.grid.h)
+        .flat_map(|z| (0..city.grid.w).map(move |x| glam::IVec2::new(x, z)))
+        .find(|c| (-2..=2).all(|dz| (-2..=2).all(|dx| city.grid.zone(*c + glam::IVec2::new(dx, dz)) == Some("beach"))))
+        .expect("open sand");
+    let at = city.cell_centre(sand);
+    let id = sim.state.player.unwrap();
+    sim.set_position(id, Vec3::new(at.x, city.ground_y(at) + 1.0, at.y));
+    steps(&mut sim, 30, &InputFrame::default());
+    cmd(&mut sim, "drive bravura_stallion");
+    let car = newest(&sim, "bravura_stallion");
+    steps(&mut sim, 30, &InputFrame::default());
+    assert_eq!(riding(&sim), Some(car), "in the car on the sand");
+    sim.drain_events();
+    let sandy = effects(&mut sim, 100, &throttle(1.0));
+    let st = sim.vehicle_status(car).unwrap();
+    eprintln!("sand at ({:.0}, {:.0}), {:.0} km/h: {} dust", at.x, at.y, st.kmh, count(&sandy, "trail"));
+    assert!(count(&sandy, "trail") > 0, "dust behind the wheels on sand: {sandy:?}");
+    sim.state.entities.get_mut(car).unwrap().vehicle.as_mut().unwrap().state.burst[2] = true;
+    let rim = effects(&mut sim, 30, &throttle(0.6));
+    assert!(count(&rim, "sparks") > 0, "a bare rim sparks: {rim:?}");
+}

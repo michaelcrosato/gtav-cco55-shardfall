@@ -76,6 +76,57 @@ pub static ENTRY: Entry = entry::<Freeway>(
 );
 
 /// Makes the game known to this process: call it before building a scene or loading a snapshot.
+/// Every content file read and checked, and every mission validated against its district: the
+/// errors as `file: what` (`play cmd="validate"`; `tests/content.rs` asserts there are none).
+pub fn validate_content() -> Vec<String> {
+    let mut errs: Vec<String> = Vec::new();
+    if let Err(e) = world::dev_city() {
+        errs.push(format!("dev_district.toml: {e:#}"));
+    }
+    let city = match world::city() {
+        Ok(c) => c,
+        Err(e) => {
+            errs.push(format!("district.toml: {e:#}"));
+            return errs;
+        }
+    };
+    let mut load = |name: &str, r: Result<()>| {
+        if let Err(e) = r {
+            errs.push(format!("{name}: {e:#}"));
+        }
+    };
+    load("weapons.toml", combat::def().map(|_| ()));
+    load("attract.toml", attract::def().and_then(|d| d.check(&city)));
+    load("frontend.toml", cards::def().and_then(|d| d.check()));
+    load("world.toml", daytime::def().map(|_| ()));
+    load("enemies.toml", enemies::def().map(|_| ()));
+    load("peds.toml", peds::def().map(|_| ()));
+    load("protagonists.toml", protagonists::def().map(|_| ()));
+    load("radio.toml", radio::def().map(|_| ()));
+    load("shops.toml", shops::def().map(|_| ()));
+    load("traffic.toml", traffic::def().map(|_| ()));
+    load("views.toml", views::all().map(|_| ()));
+    load("vehicles.toml", vehicles::all().map(|_| ()));
+    match activities::def() {
+        Ok(d) => errs.extend(d.check(&city).into_iter().map(|e| format!("activities.toml: {e}"))),
+        Err(e) => errs.push(format!("activities.toml: {e:#}")),
+    }
+    for (key, text) in missions::FILES {
+        let d = match missions::get(key) {
+            Ok(d) => d,
+            Err(e) => {
+                errs.push(format!("missions/{key}.toml: {e:#}"));
+                continue;
+            }
+        };
+        match world::city_for(if d.district == "dev" { "dev" } else { "" }) {
+            Ok(c) => errs.extend(missions::validate(&d, text, &c).into_iter().map(|e| format!("missions/{key}.toml: {e}"))),
+            Err(e) => errs.push(format!("missions/{key}.toml: {e:#}")),
+        }
+    }
+    errs
+}
+
 pub fn register() {
     pav_core::games::register(&ENTRY);
 }
@@ -527,7 +578,30 @@ impl Freeway {
                         m.meter = x.clamp(0.0, 1.0);
                     }
                 }
+                // `give <weapon> [ammo]`, also `give weapon <weapon> [ammo]` (PLAN §7.1).
+                (Some("give"), Some("weapon")) => {
+                    if let Some(id) = w.next() {
+                        self.give_weapon(id, w.next().and_then(|a| a.parse().ok()).unwrap_or(0));
+                    }
+                }
                 (Some("give"), Some(id)) => self.give_weapon(id, w.next().and_then(|a| a.parse().ok()).unwrap_or(0)),
+                // `teleport <anchor>`: the player on foot there (`landmark:bank`, `spot:<name>`,
+                // `at:<x>,<z>`...).
+                (Some("teleport"), Some(a)) => {
+                    let to = anchor::Anchor::parse(a).ok().zip(self.city.clone()).and_then(|(a, c)| anchor::foot(&c, &a));
+                    match to {
+                        Some((feet, yaw)) => self.put_player(sim, feet, yaw),
+                        None => log::warn!("teleport: no place '{a}'"),
+                    }
+                }
+                // `validate`: every content file and mission checked, the errors logged.
+                (Some("validate"), None) => {
+                    let errors = validate_content();
+                    for e in &errors {
+                        log::warn!("validate: {e}");
+                    }
+                    log::info!("validate: {} error(s)", errors.len());
+                }
                 (Some("cash"), Some(n)) => {
                     if let Ok(n) = n.parse::<i64>() {
                         self.pay(n);
@@ -665,7 +739,7 @@ impl Freeway {
                         }
                     }
                 }
-                (Some("wanted"), Some(n)) => match n.parse::<u8>() {
+                (Some("wanted" | "heat"), Some(n)) => match n.parse::<u8>() {
                     Ok(0) => {
                         self.heat.clear();
                         self.police.stand_down();
@@ -1356,6 +1430,7 @@ impl Game for Freeway {
         self.rumble_from(sim, events);
         audio::crash_sounds(events);
         self.rain_splashes(sim, events);
+        self.vehicle_fx(sim, events);
         // Explosions hurt everyone near them; whoever sat in the vehicle that blew up dies.
         let blast = fate::blasts(sim, events, sim.state.player);
         let mut out = combat::Outcome::default();
@@ -1945,6 +2020,7 @@ impl Game for Freeway {
                     fullscreen: self.settings.fullscreen,
                     vsync: self.settings.vsync,
                     quality: match self.settings.quality {
+                        settings::Quality::Auto => pav_core::present::DisplayQuality::Auto,
                         settings::Quality::Low => pav_core::present::DisplayQuality::Low,
                         settings::Quality::Medium => pav_core::present::DisplayQuality::Medium,
                         settings::Quality::High | settings::Quality::Ultra => pav_core::present::DisplayQuality::High,
@@ -2149,6 +2225,74 @@ impl Freeway {
                 dir: Vec3::ZERO,
                 scale: 0.5,
             });
+        }
+    }
+
+    /// Vehicle effects the engine's car view leaves to the game (PLAN §5.11): exhaust puffs as
+    /// a car pulls away, spray where one ploughs into the water, dust behind its wheels on sand,
+    /// dirt, brush and dirt paths, and sparks from a burst tyre's rim. Cosmetic: places from the
+    /// cars, the cadence from the tick.
+    fn vehicle_fx(&self, sim: &Sim, events: &mut Vec<SimEvent>) {
+        if !self.front.page.plays() || self.view.is_some() {
+            return;
+        }
+        let Some(city) = self.city.as_ref() else { return };
+        let centre = Self::feet(sim);
+        let tick = sim.state.tick;
+        let fx = |preset: &str, pos: Vec3, dir: Vec3, scale: f32| SimEvent::Fx { preset: preset.into(), pos, dir, scale };
+        for e in sim.state.entities.iter() {
+            let Some(v) = e.vehicle.as_ref() else { continue };
+            let s = &v.state;
+            if v.def.kind != pav_core::vehicle::VehicleKind::Car
+                || s.kinematic
+                || s.wrecked
+                || e.pos.distance_squared(centre) > 60.0 * 60.0
+            {
+                continue;
+            }
+            let beat = tick + e.id.0 as u64;
+            let (fwd, w) = (e.rot * Vec3::Z, v.def.wheels);
+            // Where wheel `i` meets the road (front left, front right, rear left, rear right).
+            let wheel = |i: usize| {
+                let x = if i.is_multiple_of(2) { w.track } else { -w.track };
+                let z = if i < 2 { w.front_z } else { w.rear_z };
+                e.pos + e.rot * Vec3::new(x, 0.08 - v.base, z)
+            };
+            let back = -fwd * s.speed.signum() + Vec3::Y * 0.4;
+            if s.engine_on && v.throttle > 0.4 && s.speed.abs() < 8.0 && beat.is_multiple_of(6) {
+                let pipe = e.pos + e.rot * Vec3::new(-v.def.size.x * 0.45, 0.3 - v.base, -v.def.size.z - 0.05);
+                events.push(fx("exhaust", pipe, -fwd, 0.25));
+            }
+            // Ploughing into the water: spray and rings where the nose meets it.
+            if s.water > 0.02 && s.water < 0.6 && s.speed.abs() > 3.0 && beat.is_multiple_of(6) {
+                let nose = e.pos + fwd * (v.def.size.z * s.speed.signum());
+                events.push(SimEvent::Splash { pos: Vec3::new(nose.x, pav_world::ground::WATER_Y, nose.z) });
+            }
+            if s.wheels_down < 2 || s.speed.abs() < 4.0 {
+                continue;
+            }
+            let rear = (wheel(2) + wheel(3)) * 0.5;
+            let p = Vec2::new(rear.x, rear.z);
+            let dusty = match city.road_at(p) {
+                Some(class) => class == pav_world::RoadClass::Path,
+                None => city
+                    .zone_at(p)
+                    .and_then(|z| city.def.zones.get(z))
+                    .is_some_and(|z| matches!(z.ground.as_str(), "sand" | "dirt" | "brush" | "dry_grass")),
+            };
+            // (On the ground itself: not on a deck or a bridge over it.)
+            if dusty && s.speed.abs() > 5.0 && beat.is_multiple_of(3) && (rear.y - city.ground_y(p)).abs() < 0.8 {
+                // (Mostly up: a billow the chase camera sees over the car.)
+                let (up, scale) = (Vec3::Y - fwd * s.speed.signum() * 0.5, (s.speed.abs() / 16.0).clamp(0.4, 1.5));
+                for i in [2, 3] {
+                    events.push(fx("trail", wheel(i), up, scale));
+                }
+            }
+            for i in 0..4 {
+                if s.burst[i] && (beat + i as u64).is_multiple_of(2) {
+                    events.push(fx("sparks", wheel(i), back, 0.25));
+                }
+            }
         }
     }
 

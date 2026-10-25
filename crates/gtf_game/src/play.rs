@@ -269,6 +269,11 @@ impl Freeway {
                 };
                 // A long fall hurts when it lands (not into water, onto a ledge or a ladder).
                 if let Some(c) = sim.state.entities.get(id).and_then(|e| e.character.as_ref()) {
+                    // A fall into the water (not wading in) throws up a splash.
+                    if c.swimming && !self.foot.wet && self.foot.fall > 3.0 {
+                        events.push(SimEvent::Splash { pos: feet });
+                    }
+                    self.foot.wet = c.swimming;
                     if c.swimming || c.hang.is_some() || c.climbing.is_some() || c.riding.is_some() {
                         self.foot.fall = 0.0;
                     } else if !c.grounded {

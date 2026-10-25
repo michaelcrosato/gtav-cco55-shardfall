@@ -7,21 +7,25 @@ use pav_core::present::{GlyphStyle, ItemValue, MenuItem};
 use serde::{Deserialize, Serialize};
 
 /// The graphics quality presets (the host's renderer settings, and how many people and cars).
+/// Auto, the default, leaves the renderer to the host: Medium on a phone or tablet, Low on a
+/// software renderer (a browser without a GPU), else High.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Quality {
+    #[default]
+    Auto,
     Low,
     Medium,
-    #[default]
     High,
     Ultra,
 }
 
 impl Quality {
-    pub const ALL: [Quality; 4] = [Quality::Low, Quality::Medium, Quality::High, Quality::Ultra];
+    pub const ALL: [Quality; 5] = [Quality::Auto, Quality::Low, Quality::Medium, Quality::High, Quality::Ultra];
 
     pub fn name(self) -> &'static str {
         match self {
+            Quality::Auto => "Auto",
             Quality::Low => "Low",
             Quality::Medium => "Medium",
             Quality::High => "High",
@@ -34,7 +38,7 @@ impl Quality {
         match self {
             Quality::Low => 0.55,
             Quality::Medium => 0.8,
-            Quality::High | Quality::Ultra => 1.0,
+            Quality::Auto | Quality::High | Quality::Ultra => 1.0,
         }
     }
 }
@@ -88,7 +92,7 @@ impl Default for Settings {
             dialogue: 1.0,
             station: None,
             fullscreen: false,
-            quality: Quality::High,
+            quality: Quality::Auto,
             render_scale: 1.0,
             dynamic_res: true,
             vsync: true,
@@ -305,10 +309,11 @@ mod tests {
         assert!(!s.fps);
         assert!(s.adjust("glyphs", -1));
         assert_eq!(s.glyphs, GlyphStyle::Keyboard, "choices wrap");
+        assert_eq!(s.quality, Quality::Auto, "the host picks unless the player does");
         assert!(s.adjust("quality", 1));
-        assert_eq!(s.quality, Quality::Ultra);
-        assert!(s.adjust("quality", 1));
-        assert_eq!(s.quality, Quality::Low, "the presets wrap");
+        assert_eq!(s.quality, Quality::Low);
+        assert!(s.adjust("quality", -2));
+        assert_eq!(s.quality, Quality::Ultra, "the presets wrap");
         // The default station: the car's own, then each station in turn, then the car's own again.
         let n = crate::radio::def().unwrap().station.len();
         for _ in 0..n {
