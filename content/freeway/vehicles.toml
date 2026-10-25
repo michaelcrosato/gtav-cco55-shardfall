@@ -2,7 +2,8 @@
 # `gtf_game::vehicles` and spawned with `vehicles::spawn(sim, key, feet, yaw, paint)`.
 #
 # Each table is the engine's `pav_core::vehicle::VehicleDef` (docs/REFERENCE.md, "Vehicles"; `body` and
-# `wheel` name the body and wheel props in LIB/gtf_vehicles, `accent` their `$pillar` colour)
+# `wheel` name the body and wheel props in LIB/gtf_vehicles, `accent` their `$pillar` colour; a
+# helicopter's body spins its `rotor` and `tail_rotor` groups)
 # plus the game's own fields: `name`, `colors` (paint picked per copy; the body prop's `$accent`
 # parts), `traffic_weight` (share of ambient traffic) and `sound` (engine cue family).
 #
@@ -392,6 +393,7 @@ health = 5500
 
 [skylark_news]
 name = "Skylark News Helicopter"
+body = "LIB/gtf_vehicles/skylark_news"
 kind = "helicopter"
 class = "helicopter"
 colors = ["#2f6fb0"]
@@ -409,6 +411,7 @@ health = 3000
 
 [sppd_air]
 name = "SPPD Air Unit"
+body = "LIB/gtf_vehicles/sppd_air"
 kind = "helicopter"
 class = "helicopter"
 colors = ["#1a1d24"]
