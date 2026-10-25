@@ -1,0 +1,122 @@
+# The attract loop (PLAN.md §5.8): after 10 s without input on the title or a main-menu page (at
+# once in `freeway/attract` and on touch screens), the game plays itself through these vignettes,
+# in an order the sim's random generator shuffles each loop, with a cut through black and a
+# caption card between them. Any input returns to the title at once.
+#
+# A vignette sets the world up and lets one of the game's own bots play: `at` is an anchor
+# (spot:, landmark:, at:, lane_near:, deck:) where the protagonist starts, in `vehicle` when one
+# is named; `heat` raises the stars; `cmds` are commands typed into the run (the ones tests and
+# bots use: `enemies 4 gang`, `clock 40`, `mission skip`...). `bot` picks who plays:
+#   cruise  — the autopilot (to `goal` when given, or heading `toward` a place, else wherever
+#             the roads go)
+#   escape  — the evasion bot losing the police (it ends a few seconds after it has)
+#   stunt   — a run at the stunt jump `stunt`
+#   switch  — the autopilot, and a switch to the next protagonist every `switch_every` s
+#   stroll  — on foot toward `goal` (a random event in `cmds` takes over while it runs)
+#   fight   — on foot, shooting whoever comes (`enemies` in `cmds`)
+#   mission — the mission bot playing the mission started in `cmds`
+# `shots` is the camera's list, one shot every `shot_secs`: `chase` (as played), `cine` (the
+# chase camera's cinematic cycle, as ○ held in a car gives it), `drone` (a slow orbit over the
+# player). `hud` shows the normal HUD's radar and stars, to show a chase off. A vignette ends
+# early when its `goal` is reached (and a cruise that misses its goal counts as an anomaly), when
+# a stunt run, a fight or a mission is over, or when the protagonist is wasted or busted. One
+# whose bot gets nowhere for `stall` seconds (a vignette may set its own; waiting at a light is
+# not stalling) ends early and counts as an anomaly (`status` → attract, the attract soak).
+
+[attract]
+cut = 1.0
+stall = 6.0
+shot_secs = 7.0
+
+[[vignette]]
+id = "golden_cruise"
+caption = "The open road"
+seconds = 45.0
+time = "18:25"
+weather = "clear"
+protagonist = "dez"
+at = "deck:470,-120"
+vehicle = "okami_kaze"
+radio = "freeway_fm"
+bot = "cruise"
+toward = "spot:pier_wheel"
+shots = ["chase", "cine", "chase", "cine"]
+
+[[vignette]]
+id = "hot_pursuit"
+caption = "A city that reacts"
+seconds = 50.0
+time = "23:30"
+weather = "clear"
+protagonist = "dez"
+at = "lane_near:-150,-104"
+vehicle = "bravura_stallion"
+heat = 3
+bot = "escape"
+# (A chase's tight spots take a while to back out of.)
+stall = 10.0
+hud = true
+shots = ["chase", "cine", "chase"]
+
+[[vignette]]
+id = "dock_fight"
+caption = "Stand your ground"
+seconds = 45.0
+time = "19:40"
+weather = "rain"
+protagonist = "mack"
+at = "at:120,345"
+bot = "fight"
+cmds = ["give buzz 240", "weapon buzz", "enemies 8 gang", "enemies alert", "meter 1"]
+hud = true
+shots = ["chase", "drone", "chase"]
+
+[[vignette]]
+id = "switch"
+caption = "Three criminals. One city."
+seconds = 45.0
+time = "15:30"
+weather = "clear"
+protagonist = "mack"
+# (The hill road under the Lookout: the autopilot drives the roads.)
+at = "lane_near:-190,-582"
+vehicle = "daimon_titan"
+bot = "switch"
+switch_every = 14.0
+shots = ["chase"]
+
+[[vignette]]
+id = "big_air"
+caption = "Send it"
+seconds = 35.0
+time = "18:50"
+weather = "clear"
+protagonist = "dez"
+bot = "stunt"
+stunt = "freeway_gap"
+shots = ["chase"]
+
+[[vignette]]
+id = "city_life"
+caption = "Paloma Bay never sleeps"
+seconds = 50.0
+time = "09:00"
+weather = "clear"
+protagonist = "roxy"
+at = "spot:boardwalk_stalls"
+bot = "stroll"
+goal = "spot:pier_wheel"
+cmds = ["clock 40", "event start purse_snatcher"]
+shots = ["drone", "chase", "drone"]
+
+[[vignette]]
+id = "the_job"
+caption = "Three criminals. One job."
+seconds = 60.0
+time = "22:00"
+weather = "clear"
+protagonist = "dez"
+bot = "mission"
+cmds = ["mission choose loud", "mission start h1_freeway_job", "mission skip 5"]
+hud = true
+shots = ["chase", "cine", "chase"]
