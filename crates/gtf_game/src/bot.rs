@@ -18,8 +18,10 @@ use crate::drive::{self, Car};
 /// A car that has gone no farther than this (m) in [`STUCK_AFTER`] seconds is boxed in.
 const STUCK_MOVE: f32 = 3.0;
 const STUCK_AFTER: f32 = 8.0;
-/// The bot looks for a car to take this far around it (m).
+/// The bot looks for a car to take this far around it (m), and runs from officers on foot nearer
+/// than this before taking one.
 const LOOK: f32 = 40.0;
+const COPS_NEAR: f32 = 10.0;
 
 /// Where △ is in a tap: held one tick, then let go.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,9 +67,11 @@ pub struct Moment<'a> {
     pub feet: Vec3,
     pub car: Option<EntityId>,
     pub busy: bool,
-    /// Where the police are (the nearest officer or unit), and their vehicles (not to be taken).
+    /// Where the police are (the nearest officer or unit), their vehicles (not to be taken), and
+    /// the officers on foot.
     pub threat: Option<Vec3>,
     pub police: &'a [EntityId],
+    pub officers: &'a [Vec3],
     /// Wanted at all.
     pub wanted: bool,
     pub dt: f32,
@@ -101,7 +105,11 @@ impl Bot {
         }
         self.anchor_t += m.dt;
         let st = sim.vehicle_status(car);
-        let done = st.as_ref().is_some_and(|s| s.burning || s.flooded || s.health < 0.15);
+        // (Nearly done for, it still drives: with the police right there, getting out is getting
+        // arrested — out once it burns.)
+        let cops =
+            m.officers.iter().any(|o| o.distance(c.center) < 15.0) || m.threat.is_some_and(|t| t.distance(c.center) < 15.0);
+        let done = st.as_ref().is_some_and(|s| s.burning || s.flooded || (s.health < 0.15 && !cops));
         // Boxed in: out once the police are not right there (under their guns the car is the
         // better cover while the autopilot shoves to get free; on foot at three stars they shoot)
         // — or when that has gone nowhere for a long while.
@@ -175,18 +183,26 @@ impl Bot {
             self.best = f32::MAX;
             self.since_best = 0.0;
         }
+        // An officer on foot close by: run first (they would have the cuffs on before a car was
+        // taken from under their noses).
+        let cop = m
+            .officers
+            .iter()
+            .copied()
+            .filter(|o| o.distance(m.feet) < COPS_NEAR)
+            .min_by(|a, b| a.distance(m.feet).total_cmp(&b.distance(m.feet)));
         // Within reach of a car worth taking (the drive walks to its door and gets in): △.
-        if drive::Drive::nearest(sim, m.feet).is_some_and(|(id, _)| fit(id)) {
+        if cop.is_none() && drive::Drive::nearest(sim, m.feet).is_some_and(|(id, _)| fit(id)) {
             self.enter = true;
             self.taken += 1;
             return;
         }
         let feet = Vec2::new(m.feet.x, m.feet.z);
-        let goal = match self.target.and_then(|id| Car::read(sim, id)) {
-            Some(c) => Vec2::new(c.center.x, c.center.z),
-            None => {
+        let goal = match (cop, self.target.and_then(|id| Car::read(sim, id))) {
+            (None, Some(c)) => Vec2::new(c.center.x, c.center.z),
+            _ => {
                 // No car near: run, away from the police.
-                let from = m.threat.map(|t| Vec2::new(t.x, t.z)).unwrap_or(feet - Vec2::X);
+                let from = cop.or(m.threat).map(|t| Vec2::new(t.x, t.z)).unwrap_or(feet - Vec2::X);
                 feet + (feet - from).normalize_or(Vec2::X) * 60.0
             }
         };

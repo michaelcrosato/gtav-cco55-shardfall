@@ -27,6 +27,31 @@ fn clear_shot(sim: &Sim, eye: Vec3, me: Vec3, at: Vec3, who: EntityId) -> bool {
     })
 }
 
+/// The vehicles within `r` of `at`.
+fn cars_near(sim: &Sim, at: Vec2, r: f32) -> Vec<crate::drive::Car> {
+    sim.state
+        .entities
+        .iter()
+        .filter(|e| e.vehicle.is_some() && flat(e.pos).distance(at) < r)
+        .filter_map(|e| crate::drive::Car::read(sim, e.id))
+        .collect()
+}
+
+/// Whether `p` is on a vehicle's footprint, grown by a body's width.
+fn under_car(cars: &[crate::drive::Car], p: Vec2) -> bool {
+    cars.iter().any(|c| {
+        let d = p - flat(c.center);
+        d.dot(flat(c.forward())).abs() < c.half.z + 0.45 && d.dot(flat(c.left())).abs() < c.half.x + 0.45
+    })
+}
+
+/// Whether a vehicle stands across the straight way from `from` to `to` (people in the way in
+/// front of it do not hide it).
+fn car_across(cars: &[crate::drive::Car], from: Vec2, to: Vec2) -> bool {
+    let n = (from.distance(to) / 0.5).ceil().max(1.0) as usize;
+    (1..=n).any(|k| under_car(cars, from.lerp(to, k as f32 / n as f32)))
+}
+
 /// A way round the vehicles between `from` and `to` (at most 14 m off): A* over half-metre
 /// cells, with vehicles (grown by a body's width) and buildings blocked and roads open. The
 /// points along it, a metre apart, ending at `to` or as near it as there is a way; None when
@@ -188,11 +213,14 @@ pub struct MissionBot {
     pub hold: f32,
     pub tick: u32,
     /// The nearest it has come to where it walks, and seconds since it came nearer (no
-    /// headway: a detour sideways, the other way each time).
+    /// headway: a detour sideways, the other way each time; every third time a jump at whatever
+    /// is in the way instead, for `hop` seconds: a car pinning it to a wall, a low fence).
     pub best: f32,
     pub best_t: f32,
     pub detour: f32,
     pub side: f32,
+    pub tries: u32,
+    pub hop: f32,
     /// A fight from cover: seconds into the peek-and-duck cycle, seconds before cover is tried
     /// again, seconds in this cover and the hits landed when it was taken.
     pub peek: f32,
@@ -205,19 +233,31 @@ pub struct MissionBot {
 }
 
 impl MissionBot {
+    /// No headway on foot: a step aside (the other way each time), every third time a jump
+    /// ahead instead.
+    pub(crate) fn unstick(&mut self) {
+        self.tries += 1;
+        if self.tries.is_multiple_of(3) {
+            self.hop = 0.25;
+        } else {
+            self.detour = 0.9;
+            self.side = if self.side > 0.0 { -1.0 } else { 1.0 };
+        }
+    }
+
     /// A button pressed every other tick (menus, the phone, getting in).
-    fn tap(&mut self, bit: u32) {
+    pub(crate) fn tap(&mut self, bit: u32) {
         if self.tick.is_multiple_of(2) {
             self.frame.pad.pressed |= bit;
             self.frame.pad.held |= bit;
         }
     }
 
-    fn hold_button(&mut self, bit: u32) {
+    pub(crate) fn hold_button(&mut self, bit: u32) {
         self.frame.pad.held |= bit;
     }
 
-    fn cmd(&mut self, c: String) {
+    pub(crate) fn cmd(&mut self, c: String) {
         self.frame.cmds.push(c);
     }
 }
@@ -292,6 +332,21 @@ impl Freeway {
             b.tap(pad::EAST);
             return;
         }
+        // A burning or wrecked car: out of it before it goes up (△ held at speed bails out; a
+        // tap stops and gets out). (The escape bot, when on, sees to that itself: two taps out
+        // of step would hold △ down.)
+        if let Some(car) = self.drive.vehicle().and_then(|v| crate::drive::Car::read(sim, v))
+            && sim.vehicle_status(car.id).is_some_and(|s| s.burning || car.wrecked)
+            && !self.drive.busy()
+            && !self.bot.escape
+        {
+            if car.speed().abs() >= crate::drive::BAIL_SPEED {
+                b.frame.pad.held |= pad::NORTH;
+            } else {
+                b.tap(pad::NORTH);
+            }
+            return;
+        }
         // Wanted with a long drive ahead: lose the police first (a player who drives across
         // town under the sirens meets a roadblock), then go.
         let target_far = step
@@ -323,9 +378,11 @@ impl Freeway {
         use StepKind::*;
         // A car off the roads (a yard, a showroom, a lot: the autopilot knows only the roads):
         // by hand to the nearest road in a straight line first.
+        // (Not at speed: a corner cut across a plaza at 60 km/h is back on the road at once.)
         let drives = matches!(step.kind, DriveTo | Deliver | Race | Follow | Chase | Escape | LoseHeat | Goto);
         if drives
             && let Some(car) = self.drive.vehicle().and_then(|v| crate::drive::Car::read(sim, v))
+            && (car.vel.length() < 8.0 || b.exit.is_some())
             && let Some(to) = self.road_in_sight(sim, b, &car, dt)
         {
             if self.traffic.cars.iter().any(|a| a.pilot) {
@@ -709,7 +766,7 @@ impl Freeway {
     }
 
     /// The nearest car the player could take (not a wreck).
-    fn nearest_car(&self, sim: &Sim) -> Option<(EntityId, f32)> {
+    pub(crate) fn nearest_car(&self, sim: &Sim) -> Option<(EntityId, f32)> {
         let me = Self::feet(sim);
         sim.state
             .entities
@@ -738,15 +795,16 @@ impl Freeway {
 
     /// Walks (sprinting or not) to `to`: straight there when nothing fixed stands between,
     /// else over the walk map.
-    /// For a car more than 8 m from any road: the nearest road point within 80 m with nothing
-    /// fixed in the way (a yard's gate, a lot's way out), re-picked each second; None on a road.
-    fn road_in_sight(&self, sim: &Sim, b: &mut MissionBot, car: &crate::drive::Car, dt: f32) -> Option<Vec3> {
+    /// For a car more than 8 m from any road (until back within 5 m): the nearest road point
+    /// within 80 m with nothing fixed in the way of the car's width (a yard's gate, a lot's way
+    /// out), re-picked each second; None on a road.
+    pub(crate) fn road_in_sight(&self, sim: &Sim, b: &mut MissionBot, car: &crate::drive::Car, dt: f32) -> Option<Vec3> {
         let city = self.city.as_ref()?;
         let p = car.feet();
         let open = |l: &pav_world::lanes::Lane| !l.closed && l.kind != pav_world::lanes::LaneKind::Channel;
         // (Any lane is a road here: the storm channel's, closed to traffic, too.)
         let (_, _, off) = city.lanes.nearest(p, |_| true)?;
-        if off < 8.0 {
+        if off < if b.exit.is_some() { 5.0 } else { 8.0 } {
             b.exit = None;
             return None;
         }
@@ -764,12 +822,18 @@ impl Freeway {
                 .filter(|(d, _)| *d < 80.0)
                 .collect();
             points.sort_by(|a, c| a.0.total_cmp(&c.0));
-            b.exit = points.into_iter().map(|(_, q)| q).find(|q| clear_but_glass(sim, city, eye, *q + Vec3::Y * 1.0)).or(b.exit);
+            // (Clear down both its sides as well as the middle: a tree beside the line stops it.)
+            let wide = |q: Vec3| {
+                let along = flat(q - p).normalize_or(Vec2::Y);
+                let side = Vec3::new(-along.y, 0.0, along.x) * (car.half.x - 0.1);
+                [Vec3::ZERO, side, -side].into_iter().all(|o| clear_but_glass(sim, city, eye + o, q + o + Vec3::Y * 1.0))
+            };
+            b.exit = points.into_iter().map(|(_, q)| q).find(|q| wide(*q)).or(b.exit);
         }
         b.exit
     }
 
-    fn bot_walk(&self, b: &mut MissionBot, sim: &Sim, to: Vec3, sprint: bool, dt: f32) {
+    pub(crate) fn bot_walk(&self, b: &mut MissionBot, sim: &Sim, to: Vec3, sprint: bool, dt: f32) {
         let Some(city) = self.city.as_ref() else { return };
         let feet = Self::feet(sim);
         let here = flat(feet);
@@ -783,13 +847,15 @@ impl Freeway {
         if new_goal || dist < b.best - 0.5 {
             b.best = dist;
             b.best_t = 0.0;
+            if !new_goal {
+                b.tries = 0;
+            }
         }
         b.best_t += dt;
-        if b.best_t > 2.0 && b.detour <= 0.0 {
+        if b.best_t > 2.0 && b.detour <= 0.0 && b.hop <= 0.0 {
             b.best_t = 0.0;
             b.best = dist;
-            b.detour = 0.9;
-            b.side = if b.side > 0.0 { -1.0 } else { 1.0 };
+            b.unstick();
             b.path.clear();
         }
         b.replan -= dt;
@@ -813,16 +879,22 @@ impl Freeway {
                 _ => vec![goal],
             };
             // A vehicle across the first leg (cars at the kerb, a car between it and a door):
-            // the way round it, then on.
+            // the way round it to the first point of the way clear of them (a walk-map tile
+            // under a parked car is no place to step to), then on.
             if let Some(first) = b.path.first().copied() {
-                let leg = first - here;
+                let cars = cars_near(sim, here, 24.0);
+                let k = b.path.iter().take_while(|p| p.distance(here) < 14.0).position(|p| !under_car(&cars, *p)).unwrap_or(0);
+                let to = if under_car(&cars, first) { b.path[k] } else { first };
+                let leg = to - here;
                 let len = leg.length().min(14.0);
-                let dir = leg.normalize_or_zero();
-                let hit =
-                    (len > 1.0).then(|| sim.raycast(feet + Vec3::Y * 0.6, Vec3::new(dir.x, 0.0, dir.y), len, None)).flatten();
-                let car =
-                    hit.and_then(|h| h.entity).is_some_and(|e| sim.state.entities.get(e).is_some_and(|x| x.vehicle.is_some()));
-                if car && let Some(mut way) = round_cars(sim, city, here, here + dir * len) {
+                let to = here + leg.normalize_or_zero() * len;
+                if len > 1.0
+                    && car_across(&cars, here, to)
+                    && let Some(mut way) = round_cars(sim, city, here, to)
+                {
+                    if under_car(&cars, first) {
+                        b.path.drain(..k);
+                    }
                     way.append(&mut b.path);
                     b.path = way;
                 }
@@ -837,6 +909,10 @@ impl Freeway {
             b.detour -= dt;
             dir = Vec2::new(-dir.y, dir.x) * b.side;
         }
+        if b.hop > 0.0 {
+            b.hop -= dt;
+            b.tap(pad::WEST);
+        }
         b.frame.move_dir = dir;
         if sprint && here.distance(goal) > 3.0 {
             b.frame.held |= buttons::SPRINT;
@@ -845,7 +921,7 @@ impl Freeway {
 
     /// Walks round to `car`'s door (past a bumper when on its far side) and presses △ once
     /// it is the car the player would get into.
-    fn bot_enter(&self, b: &mut MissionBot, sim: &Sim, car: EntityId, dt: f32) {
+    pub(crate) fn bot_enter(&self, b: &mut MissionBot, sim: &Sim, car: EntityId, dt: f32) {
         if self.drive.vehicle() == Some(car) || self.drive.busy() {
             return;
         }
@@ -863,10 +939,12 @@ impl Freeway {
             b.tap(pad::NORTH);
             return;
         }
-        // On the far side: round the nearer bumper first.
-        let side = flat(door - c.feet()).normalize_or_zero();
+        // On the far side, close by: round the nearer bumper first. (Its side across the car:
+        // the door sits a little forward of the middle, which from afar tips the test.)
+        let side = flat(c.left()) * flat(door - c.feet()).dot(flat(c.left())).signum();
         let rel = flat(feet - c.feet());
-        let to = if rel.dot(side) < c.half.x * 0.5 && !near_door {
+        let close = rel.length() < c.half.z + 8.0;
+        let to = if close && rel.dot(side) < c.half.x * 0.5 && !near_door {
             let fwd = flat(c.forward());
             let reach = c.half.z + 1.6;
             let front = flat(c.feet()) + fwd * reach + side * (c.half.x + 0.9);
@@ -880,7 +958,7 @@ impl Freeway {
     }
 
     /// The autopilot to `dest` (switched on first).
-    fn bot_drive(&self, b: &mut MissionBot, dest: Vec3, desire: f32) {
+    pub(crate) fn bot_drive(&self, b: &mut MissionBot, dest: Vec3, desire: f32) {
         self.bot_drive_to(b, dest, desire, None);
     }
 
@@ -904,7 +982,7 @@ impl Freeway {
 
     /// The autopilot after something that moves (a target car, a runner): its destination
     /// renewed every second and a half.
-    fn bot_drive_moving(&self, b: &mut MissionBot, dest: Vec3, desire: f32, dt: f32) {
+    pub(crate) fn bot_drive_moving(&self, b: &mut MissionBot, dest: Vec3, desire: f32, dt: f32) {
         b.pilot_t -= dt;
         if b.pilot_t <= 0.0 || b.pilot.is_none() {
             b.pilot_t = 1.5;
@@ -943,7 +1021,7 @@ impl Freeway {
 
     /// Fights `who` at `at`: near enough and in sight, aim (the assist snaps on) and fire;
     /// otherwise closer.
-    fn bot_shoot(&self, b: &mut MissionBot, sim: &Sim, who: EntityId, at: Vec3, dt: f32) {
+    pub(crate) fn bot_shoot(&self, b: &mut MissionBot, sim: &Sim, who: EntityId, at: Vec3, dt: f32) {
         if self.drive.vehicle().is_some() {
             b.tap(pad::NORTH);
             return;

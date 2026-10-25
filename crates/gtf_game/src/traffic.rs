@@ -24,6 +24,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::drive::Car;
 
+/// The player's car on the run with the chasers within this (m) of a junction ahead takes a turn
+/// there over straight on when that leads no more than this much (m) less far from them.
+const CLOSE_CHASE: f32 = 110.0;
+const CORNER_BONUS: f32 = 35.0;
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TrafficDef {
@@ -847,6 +852,10 @@ impl Traffic {
         serde_json::json!({
             "cars": n(&|_| true),
             "autopilot": self.cars.iter().any(|a| a.pilot),
+            // The autopilot's driver: what stops it, its speed, seconds blocked, backing up.
+            "pilot": self.cars.iter().find(|a| a.pilot).map(|a| {
+                serde_json::json!({ "why": a.why, "speed": (a.speed * 10.0).round() / 10.0, "mood": format!("{:?}", a.mood), "blocked": (a.blocked * 10.0).round() / 10.0, "reverse": (a.reverse * 10.0).round() / 10.0, "route": a.route.len() })
+            }),
             "full": n(&|a| a.tier == Tier::Full),
             "rail": n(&|a| a.tier == Tier::Rail),
             "buses": n(&|a| a.bus.is_some()),
@@ -1410,29 +1419,35 @@ impl Traffic {
         while a.route.len() < 4 {
             let last = *a.route.last().unwrap_or(&a.lane);
             let next = match (a.pilot || a.away.is_some(), from) {
-                // Running: the turn whose road leads farthest from the chasers.
-                (true, Some(from)) => g.lanes[last as usize]
-                    .next
-                    .iter()
-                    .copied()
-                    .filter(|&n| {
-                        let l = &g.lanes[n as usize];
-                        !l.closed && drivable(l.kind) && l.turn != Turn::UTurn && !dead_end(g, n, 8)
-                    })
-                    .max_by(|&x, &y| {
-                        let reach = |n: u32| {
-                            // Two lanes on: where this choice leads.
+                // Running: the turn whose road leads farthest from the chasers — for the player's
+                // car with them close behind, a turn rather than straight on (round a corner
+                // they lose sight of it; down a long straight they never do).
+                (true, Some(from)) => {
+                    let close = a.pilot && g.lanes[last as usize].points.last().is_some_and(|p| p.distance(from) < CLOSE_CHASE);
+                    g.lanes[last as usize]
+                        .next
+                        .iter()
+                        .copied()
+                        .filter(|&n| {
                             let l = &g.lanes[n as usize];
-                            let after = l
-                                .next
-                                .first()
-                                .map(|&m| *g.lanes[m as usize].points.last().unwrap())
-                                .unwrap_or(*l.points.last().unwrap());
-                            after.distance(from)
-                        };
-                        reach(x).total_cmp(&reach(y)).then(y.cmp(&x))
-                    })
-                    .or_else(|| pick_next(g, last, rng)),
+                            !l.closed && drivable(l.kind) && l.turn != Turn::UTurn && !dead_end(g, n, 8)
+                        })
+                        .max_by(|&x, &y| {
+                            let reach = |n: u32| {
+                                // Two lanes on: where this choice leads.
+                                let l = &g.lanes[n as usize];
+                                let after = l
+                                    .next
+                                    .first()
+                                    .map(|&m| *g.lanes[m as usize].points.last().unwrap())
+                                    .unwrap_or(*l.points.last().unwrap());
+                                let corner = close && matches!(l.turn, Turn::Left | Turn::Right);
+                                after.distance(from) + if corner { CORNER_BONUS } else { 0.0 }
+                            };
+                            reach(x).total_cmp(&reach(y)).then(y.cmp(&x))
+                        })
+                        .or_else(|| pick_next(g, last, rng))
+                }
                 // The player's car on autopilot keeps to roads that go somewhere.
                 (true, None) => {
                     let mut tries = 0;
@@ -1740,7 +1755,7 @@ impl Traffic {
             let haste = match (a.mood, a.pilot) {
                 // (A race's gates, gate to gate: a little less flat out, the car has to last.)
                 (Mood::Flee, true) if a.through.is_some() => 1.3,
-                (Mood::Flee, true) => 1.4,
+                (Mood::Flee, true) => 1.25,
                 (Mood::Flee, false) => 1.25,
                 _ => 1.0,
             };
@@ -1781,9 +1796,10 @@ impl Traffic {
                         if id == a.car {
                             continue;
                         }
-                        // The autopilot on the run, boxed in a while, shoves a stopped car aside
-                        // (a roadblock, a car pulled over in its way) rather than wait behind it.
-                        if a.pilot && a.mood == Mood::Flee && a.jam > 2.0 && speed.abs() < 1.0 {
+                        // The autopilot on the run, boxed in a while, shoves a stopped or
+                        // creeping car aside (a roadblock, a car pulled over in its way, a queue
+                        // at a light) rather than wait behind it.
+                        if a.pilot && a.mood == Mood::Flee && a.jam > 2.0 && speed.abs() < 2.5 {
                             continue;
                         }
                         let gap = offset + along - my_half - half;
@@ -2057,8 +2073,9 @@ impl Traffic {
                 v0 = v0.min(18.0);
             }
             // On the run to a goal and sat behind a stopped car (a police car across the road):
-            // another way there, round that lane.
-            if a.goal.is_some() && a.mood == Mood::Flee && (car_ahead || a.jam > 2.0) && a.speed.abs() < 2.0 {
+            // another way there, round that lane. (The autopilot on the run with no goal counts
+            // it too: boxed in a while, it shoves the car aside.)
+            if (a.goal.is_some() || a.pilot) && a.mood == Mood::Flee && (car_ahead || a.jam > 2.0) && a.speed.abs() < 2.0 {
                 a.jam += dt;
             } else {
                 a.jam = 0.0;

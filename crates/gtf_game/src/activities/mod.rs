@@ -9,11 +9,12 @@ pub mod jumps;
 pub mod shields;
 pub mod vigilante;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Result, anyhow};
 use pav_core::InputFrame;
+use pav_core::entity::EntityId;
 use pav_core::frame::SimEvent;
 use pav_core::present::{DrawList, UiModel};
 use pav_core::sim::Sim;
@@ -85,16 +86,27 @@ impl Freeway {
         self.missions.run.is_none() && self.mode != "dev"
     }
 
-    /// The activities' tick, while playing.
-    pub(crate) fn activities_tick(&mut self, sim: &mut Sim, input: &InputFrame, dt: f32, real: f32, events: &mut Vec<SimEvent>) {
+    /// The activities' tick, while playing. The moves of the people they drive go into `out`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn activities_tick(
+        &mut self,
+        sim: &mut Sim,
+        input: &InputFrame,
+        dt: f32,
+        real: f32,
+        events: &mut Vec<SimEvent>,
+        out: &mut BTreeMap<EntityId, InputFrame>,
+    ) {
         if !self.activities_on() {
+            // (Vigilante and a random event end when a mission begins.)
+            self.street_end(sim);
             return;
         }
         let Ok(d) = def() else { return };
         self.jumps_tick(sim, &d, dt, real, events);
         self.shields_tick(sim, &d, dt, events);
-        self.vigilante_tick(sim, &d, input, dt, events);
-        self.events_tick(sim, &d, dt, events);
+        self.vigilante_tick(sim, &d, input, dt, events, out);
+        self.events_tick(sim, &d, input, dt, events, out);
     }
 
     /// What the activities show: the stunt banner, the shields.

@@ -1898,6 +1898,7 @@ impl Freeway {
             || self.heat.stars > 0
             || self.crew.switch.is_some()
             || self.mode.starts_with("mission/")
+            || self.street_busy()
         {
             return;
         }
@@ -1929,8 +1930,11 @@ impl Freeway {
     /// What the mission under way shows: the cards, the objective, subtitles, markers, blips,
     /// rings on the ground, the timer and meters, the letterbox.
     pub(crate) fn mission_ui(&self, sim: &Sim, ui: &mut UiModel, draw: &mut DrawList) {
-        // Markers for missions to pick up (free roam).
+        // Markers for missions to pick up (free roam; none while vigilante or an event is on).
         if self.missions.run.is_none() {
+            if self.street_busy() {
+                return;
+            }
             for (key, p) in self.open_missions() {
                 let Ok(d) = super::get(&key) else { continue };
                 let color = if d.activity { Color::hex(ACTIVITY_PINK) } else { self.protagonist_color(&d.protagonist) };
@@ -2195,7 +2199,8 @@ impl Freeway {
         let targets: Vec<&String> = step.targets.iter().chain(&step.pursuers).chain(&step.watchers).collect();
         let target_actor = step.target.as_deref().and_then(|t| t.strip_prefix("actor:"));
         for (id, a) in &run.actors {
-            if down(sim, run, id) {
+            // (Not the car the player sits in.)
+            if down(sim, run, id) || (a.entity.is_some() && a.entity == self.drive.vehicle()) {
                 continue;
             }
             let kind = if targets.contains(&id) || Some(id.as_str()) == target_actor {

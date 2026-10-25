@@ -630,17 +630,28 @@ impl Police {
                     let side = Vec3::new(back.z, 0.0, -back.x);
                     let s = if (c.center - m.player).dot(side) >= 0.0 { 1.0 } else { -1.0 };
                     m.player + back * 1.6 + side * s * 2.0
+                } else if seen && m.player_vel.length() > 4.0 && c.center.distance(m.player) < 16.0 {
+                    // Close, not ramming: onto its tail (the lead point from alongside is into
+                    // its side).
+                    m.player - m.player_vel.normalize() * 7.0
                 } else {
                     lead
                 };
-                // Closing fast from afar; a PIT itself is a nudge (a few m/s faster), not a crash.
+                // Closing fast from afar, the harder the more stars (at one or two a fast car
+                // can pull away; from three they drive flat out); a PIT itself is a nudge (a few
+                // m/s faster), not a crash.
                 let pv = m.player_vel.length();
+                let (gain, top) = match m.stars {
+                    0 | 1 => (2.5, 31.0),
+                    2 => (4.5, 36.0),
+                    _ => (7.0, 42.0),
+                };
                 let pace = if ram {
                     (pv + 3.0).clamp(4.0, 40.0)
                 } else if c.center.distance(m.player) < 30.0 {
-                    (pv + 4.0).clamp(8.0, 40.0)
+                    (pv + gain * 0.6).clamp(8.0, top - 2.0)
                 } else {
-                    (pv + 7.0).clamp(14.0, 42.0)
+                    (pv + gain).clamp(14.0, top)
                 };
                 (target, pace, ram)
             }

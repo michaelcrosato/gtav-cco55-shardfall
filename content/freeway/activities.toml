@@ -178,4 +178,158 @@ trivia = "Route 404 was once planned to run out along Palisade Pier to a floatin
 
 # ---- Vigilante ----
 
+# In a police car, D-pad right (keyboard E) or the phone's Jobs app starts it. Each level sends
+# suspects in getaway cars somewhere near; they drive about until the police car comes within
+# `spot` m (or its siren within twice that, or a hit), then run (`escape` m off, or well clear a
+# while, they think they have lost it and pull over). Ram or shoot a getaway car down
+# to `bail` of its health (a ram does `ram` times the crash's own damage to it) or box it in, and
+# they jump out and run on foot (unarmed) or fight (`armed` levels, as the `side` of
+# enemies.toml); a suspect down — or burnt out in the car — is a takedown, paying `pay`. The last
+# level done pays `bonus` and counts for completion; a civilian killed on duty docks `fine` (the
+# police do not come after one of their own for it). It ends on death, arrest, a time limit run
+# out, a suspect on foot getting away, or `leave` seconds out of a police car (not while chasing
+# a suspect on foot).
+[vigilante]
+title = "Vigilante"
+cars = ["sppd_interceptor", "sppd_tactical"]
+pay = 250
+bonus = 1000
+fine = 250
+leave = 60.0
+spawn = [60.0, 120.0]
+spot = 45.0
+escape = 320.0
+hide = 70.0
+bail = 0.2
+ram = 3.0
+tough = 0.5
+gap = 4.0
+hp = 30.0
+armed_hp = 50.0
+run = [4.8, 3.4]
+tire = 6.0
+side = "street"
+
+[vigilante.look]   # hoodies and dark denim
+skin = ["#f1c9a5", "#e0ac83", "#c68e62", "#a26a42", "#7a4b2a", "#4f3220"]
+shirt = ["#26262b", "#3b2f2f", "#2f3b4a", "#4a3b24", "#5a1f24", "#1f3a2a"]
+pants = ["#1d2430", "#2a2a2a", "#3a3a40", "#20304a"]
+shoes = ["#111111", "#2a2a2a", "#e6e6e6"]
+
+[[vigilante.level]]
+cars = 1
+riders = 1
+kinds = ["fenwick_commuter", "zephyr_wagon", "paloma_cab"]
+health = 0.45
+pace = 0.95
+time = 300.0
+call = "Stolen car"
+
+[[vigilante.level]]
+cars = 1
+riders = 2
+kinds = ["daimon_titan", "marlin_bay", "zephyr_wagon"]
+health = 0.5
+pace = 1.0
+time = 300.0
+call = "Two suspects in a stolen car"
+
+[[vigilante.level]]
+cars = 2
+riders = 1
+kinds = ["fenwick_commuter", "paloma_cab", "fenwick_courier"]
+health = 0.5
+pace = 1.0
+time = 360.0
+call = "Two getaway cars"
+
+[[vigilante.level]]
+cars = 1
+riders = 2
+armed = "p9"
+kinds = ["bravura_stallion", "daimon_titan"]
+health = 0.55
+pace = 1.05
+time = 330.0
+call = "Armed robbers"
+
+[[vigilante.level]]
+cars = 2
+riders = 2
+armed = "p9"
+kinds = ["daimon_titan", "zephyr_wagon", "marlin_bay"]
+health = 0.6
+pace = 1.1
+time = 420.0
+call = "Armed crew in two cars"
+
 # ---- Random events ----
+
+# Met in the street outside missions, not too often: each is checked every few seconds once free
+# roam has gone `after` seconds without an event (since the last one, or the start), where it
+# fits, with `chance` of happening at each check. `kind` says which it is.
+
+# A thief snatches a purse from someone near the player (on foot, where `crowd` people are
+# within 30 m in one of the `zones`) and runs (`run` m/s, slower after `tire` s; `escape` m off
+# and gone). One hit takes them down and the purse drops: walk over it, then give it back (D-pad
+# right by its owner: `reward`) or keep it (walk 60 m off with it: `keep`). Done either way.
+[[event]]
+id = "purse_snatcher"
+kind = "snatch"
+title = "Purse Snatcher"
+after = 150.0
+chance = 0.35
+zones = ["commercial", "downtown", "shops", "beach", "park"]
+crowd = 6
+reward = 150
+keep = 320
+run = [5.4, 4.2]
+tire = 10.0
+hp = 25.0
+escape = 85.0
+wait = 120.0
+speaker = "PASSER-BY"
+
+[event.lines]
+snatch = "Hey! My purse! Somebody stop him!"
+thanks = "My purse! Oh, thank you, thank you!"
+kept = "Hey! That's mine!"
+gone = "He got away..."
+
+# A robber outside a shop (`near`: the doors; the player in a car `reach` m off) begs for a
+# ride: stop by them and they get in, with `stars` on the player. Lose the police, then drop them
+# at one of the `drops` (`drop` m from the shop) for `reward`. They wait `wait` s for a ride; out
+# of the car they follow the player into the next one, but not from `escape` m behind.
+[[event]]
+id = "getaway_needed"
+kind = "getaway"
+title = "Getaway Needed"
+after = 150.0
+chance = 0.35
+near = ["landmark:gas", "landmark:grind_house", "landmark:diner", "landmark:gun_store"]
+reach = [40.0, 150.0]
+drops = [
+  "spot:dez_beach", "spot:roxy_flats", "spot:impound_lot", "spot:depot_gate",
+  "spot:cityworks_gate", "spot:diner_lot", "spot:luxe_front",
+]
+drop = [250.0, 800.0]
+stars = 2
+reward = 1200
+run = [5.2, 4.6]
+escape = 60.0
+wait = 75.0
+speaker = "ROBBER"
+
+[event.lines]
+beg = "Hey! You! I need a ride, now!"
+board = "Go, go, go! They're right behind me!"
+heat = "Lose the cops first!"
+wait = "Hey, wait for me!"
+thanks = "Nice driving. Here's your cut."
+gone = "Forget it, I'll find another ride."
+
+[event.look]   # a dark hoodie and a cash-stuffed sweat
+skin = ["#f1c9a5", "#e0ac83", "#c68e62", "#a26a42", "#7a4b2a"]
+shirt = ["#1f1f24", "#2b2b30", "#30242a"]
+pants = ["#1d2430", "#2a2a2a"]
+shoes = ["#111111", "#2a2a2a"]

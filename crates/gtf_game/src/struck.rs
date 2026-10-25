@@ -2,7 +2,8 @@
 //! that is about to hit someone throws them along its path by the impact (the character's
 //! knock-back), then the fall clip plays: up again and away, or dead above 12 m/s. Their capsule
 //! stops colliding for a moment, so the car carries on through rather than stopping dead as it
-//! would against a post.
+//! would against a post. Slower, the player's car driven into someone shoves them aside (boxed
+//! in by officers on foot, a crowd at the bumper): unhurt, and no strike.
 
 use glam::Vec3;
 use pav_core::entity::EntityId;
@@ -16,6 +17,8 @@ pub const LETHAL: f32 = 12.0;
 const NUDGE: f32 = 3.0;
 /// How long a struck person's capsule does not collide (s).
 const GHOST: f32 = 1.5;
+/// The knock-back of a shove aside (m/s).
+const SHOVE: f32 = 3.5;
 
 /// Who was hit, by what, where and how fast.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -48,8 +51,16 @@ fn ghost(sim: &mut Sim, id: EntityId, on: bool) {
 }
 
 impl Struck {
-    /// Before the physics step: vehicles about to run into any of `people` strike them.
-    pub fn tick(&mut self, sim: &mut Sim, people: &[EntityId], dt: f32, events: &mut Vec<SimEvent>) -> Vec<Strike> {
+    /// Before the physics step: vehicles about to run into any of `people` strike them; `shove`
+    /// is the player's car and the way it is driven (1 ahead, -1 backing up) when a pedal is down.
+    pub fn tick(
+        &mut self,
+        sim: &mut Sim,
+        people: &[EntityId],
+        shove: Option<(EntityId, f32)>,
+        dt: f32,
+        events: &mut Vec<SimEvent>,
+    ) -> Vec<Strike> {
         for g in &mut self.ghosts {
             g.1 -= dt;
         }
@@ -96,6 +107,22 @@ impl Struck {
                     events.push(SimEvent::Sound { cue: "impact.light".into(), pos: Some(at), gain: 1.0, pitch: 1.0 });
                     hits.push(Strike { who, car: c.id, at, dir, speed: speed.abs() });
                     self.count += 1;
+                }
+            }
+        }
+        if let Some((car, way)) = shove
+            && let Some(c) = crate::drive::Car::read(sim, car)
+            && c.speed().abs() <= NUDGE
+        {
+            let (fwd, left) = (c.forward() * way, c.left());
+            for &who in people {
+                let Some(p) = sim.feet(who) else { continue };
+                let to = p - c.feet();
+                let (z, x) = (to.dot(fwd), to.dot(left));
+                if z > c.half.z - 0.5 && z < c.half.z + 1.0 && x.abs() < c.half.x + 0.6 && to.y.abs() < 2.0 {
+                    // Aside, the nearer way, and a little ahead of the bumper.
+                    let side = left * if x >= 0.0 { 1.0 } else { -1.0 };
+                    sim.hit_character(who, p + Vec3::Y, (side + fwd * 0.4).normalize(), SHOVE, false, events);
                 }
             }
         }

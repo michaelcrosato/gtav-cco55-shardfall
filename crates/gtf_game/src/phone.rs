@@ -213,7 +213,7 @@ impl Freeway {
                 }
             }
             _ => {
-                let n = self.app_rows(feet).len().max(1);
+                let n = self.app_rows(sim, feet).len().max(1);
                 if self.phone.reading.is_none() {
                     let moved = crate::pad::move_focus(self.phone.focus, n, dy, |_| true);
                     if moved != self.phone.focus {
@@ -271,7 +271,13 @@ impl Freeway {
                     self.phone.close();
                 }
             }
+            // Vigilante's row first (start it in a police car, end it on a run), then missions.
+            "jobs" if i == 0 && self.vigilante_job(sim).is_some() => {
+                self.phone.close();
+                self.vigilante_pick(sim, events);
+            }
             "jobs" => {
+                let i = i - self.vigilante_job(sim).is_some() as usize;
                 if let Some((_, title, p)) = self.jobs(feet).get(i).cloned() {
                     self.front.waypoint = Some(Vec2::new(p.x, p.z));
                     self.note("jobs", "Waypoint", &title);
@@ -339,7 +345,7 @@ impl Freeway {
     }
 
     /// The rows of the open app.
-    fn app_rows(&self, feet: Vec3) -> Vec<PhoneRow> {
+    fn app_rows(&self, sim: &Sim, feet: Vec3) -> Vec<PhoneRow> {
         let row = |t: String, d: String| PhoneRow { title: t, detail: d };
         let metres = |p: Vec2| {
             let d = p.distance(Vec2::new(feet.x, feet.z));
@@ -359,7 +365,11 @@ impl Freeway {
             },
             "map" => self.places(feet).into_iter().map(|(n, p)| row(n, metres(p))).collect(),
             "jobs" => {
-                let v: Vec<PhoneRow> = self.jobs(feet).into_iter().map(|(_, t, p)| row(t, metres(Vec2::new(p.x, p.z)))).collect();
+                let mut v: Vec<PhoneRow> =
+                    self.jobs(feet).into_iter().map(|(_, t, p)| row(t, metres(Vec2::new(p.x, p.z)))).collect();
+                if let Some((t, d)) = self.vigilante_job(sim) {
+                    v.insert(0, row(t, d));
+                }
                 if v.is_empty() { vec![row("Nothing on right now".into(), String::new())] } else { v }
             }
             "radio" => {
@@ -411,7 +421,7 @@ impl Freeway {
         } else if app == "home" {
             Vec::new()
         } else {
-            self.app_rows(feet)
+            self.app_rows(sim, feet)
         };
         Some(PhoneUi { app: app.into(), title, tiles, rows, focus: self.phone.focus, clock })
     }

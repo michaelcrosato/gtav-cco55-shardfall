@@ -67,3 +67,20 @@ pants = ["#1a2230"]
 shoes = ["#111111"]
 height = [1.75, 1.95]
 build = [1.15, 1.35]
+
+# Vigilante's armed suspects (activities.toml [vigilante]): out of their getaway car they fight
+# as these — wilder shots than a crew's — and give up once badly hurt.
+[side.street]
+name = "Street crooks"
+prefix = "crook"
+weapons = ["p9"]
+accuracy = 0.3
+damage = 0.3
+retreat = 0.0
+grenades = 0
+skin = ["#f1c9a5", "#e0ac83", "#c68a62", "#8d5a3b", "#6b4428"]
+shirt = ["#26262b", "#3b2f2f", "#2f3b4a"]
+pants = ["#1d2430", "#2a2a2a"]
+shoes = ["#111111"]
+height = [1.68, 1.88]
+build = [0.95, 1.2]

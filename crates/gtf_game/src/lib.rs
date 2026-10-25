@@ -1035,7 +1035,7 @@ impl Game for Freeway {
             self.sky.step(&world, dt, &mut sim.state.rng, events);
         }
         let feet = Self::feet(sim);
-        let target = self.mission_waypoint(sim).or(self.front.waypoint);
+        let target = self.mission_waypoint(sim).or_else(|| self.street_waypoint(sim)).or(self.front.waypoint);
         self.gps.set(target);
         if let Some(c) = &self.city {
             self.gps.update(c, feet);
@@ -1107,13 +1107,14 @@ impl Game for Freeway {
             }
             self.ability_tick(input, real, events);
             self.mission_tick(sim, input, dt, real, events, &mut out);
-            self.activities_tick(sim, input, dt, real, events);
+            self.activities_tick(sim, input, dt, real, events, &mut out);
             let held = held || self.shop.is_some();
             let mut take = 0;
             if self.phone.open {
                 take |= phone::TAKES;
             }
-            if self.counter.is_some() {
+            // (A counter's prompt has D-pad right; so has vigilante's in a police car.)
+            if self.counter.is_some() || self.vigilante_takes_right(sim) {
                 take |= pav_core::input::pad::RIGHT;
             }
             let wheel = self.crew.wheel.is_some();
@@ -1228,17 +1229,20 @@ impl Game for Freeway {
             "weather": self.sky.weather,
             "peds": peds,
             "traffic": self.traffic.summary(),
+            "evade": json!({ "on": self.bot.escape, "tap": format!("{:?}", self.bot.tap), "stuck": round(self.bot.anchor_t), "bailed": self.bot.bailed, "taken": self.bot.taken }),
             "heat": json!({ "stars": self.heat.stars, "searching": self.heat.searching, "reports": self.heat.reports.len(), "evade": round(self.heat.evade), "units": self.police.units.len(), "officers": self.police.officers.len(), "police_spawned": self.police.spawned, "spawn_in_view": self.police.spawn_in_view }),
             "fate": match self.fate { fate::Fate::Alive => "alive", fate::Fate::Wasted { .. } => "wasted", fate::Fate::Busted { .. } => "busted" },
             "health": round(self.combat.health),
             "money": self.money,
             "mission": self.mission_status(),
+            "mbot": json!({ "walk": self.mbot.path.iter().take(3).map(|p| [p.x.round(), p.y.round()]).collect::<Vec<_>>(), "goal": self.mbot.goal.map(|g| [g.x.round(), g.y.round()]), "step": self.mbot.step, "t": round(self.mbot.t) }),
             "activities": json!({
                 "done": self.activities.done.len(),
                 "flight": self.activities.jumps.flight.as_ref().map(|f| if f.air { "air" } else { "gate" }),
                 "stunt_run": self.activities.jumps.run.is_some(),
                 "completion": round(self.completion() * 100.0),
             }),
+            "activity": self.street_status(sim),
             "drive": match self.drive.phase {
                 drive::Phase::Foot => "foot",
                 drive::Phase::Enter { .. } => "entering",
@@ -1262,7 +1266,7 @@ impl Game for Freeway {
     fn bot(&self, _sim: &Sim) -> InputFrame {
         // In a mission: the mission bot's presses and commands. On autopilot: the traffic
         // driver's pedals and wheel, as a controller would give them.
-        let mut f = if self.missions.run.is_some() { self.mbot.frame.clone() } else { InputFrame::default() };
+        let mut f = if self.missions.run.is_some() { self.mbot.frame.clone() } else { self.street_frame() };
         if let (Some(vi), Some(_)) = (self.traffic.pilot_input, self.drive.vehicle()) {
             f.pad.r2 = vi.throttle;
             f.pad.l2 = vi.brake;
@@ -1300,6 +1304,10 @@ impl Game for Freeway {
 
     fn outcome(&self) -> pav_core::games::Outcome {
         use pav_core::games::Outcome;
+        // An activity played with `activity <id>`.
+        if let Some(o) = self.street_outcome() {
+            return o;
+        }
         if !self.mode.starts_with("mission/") {
             return Outcome::Playing;
         }
@@ -1585,6 +1593,7 @@ impl Game for Freeway {
             draw.ribbons.extend(self.gps.ribbon(feet, 160.0));
             self.mission_ui(sim, &mut ui, &mut draw);
             self.activities_ui(sim, &mut ui, &mut draw);
+            self.street_ui(sim, &mut ui, &mut draw);
             // A mission's subtitled lines duck the radio; with none, the scanner's words, else
             // the talk station's.
             dialogue = ui.subtitle.is_some();

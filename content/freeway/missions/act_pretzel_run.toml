@@ -80,7 +80,7 @@ name = "Lucky"
 
 [[step]]
 kind = "choose"
-on_start = [{ traffic = 0.2 }, { heat_cap = 0 }]
+on_start = [{ traffic = 0.1 }, { heat_cap = 0 }]
 options = [
   { id = "small", title = "Bet $500", cost = 500, lines = ["Win: $1,000 back.", "Vinnie, Diamond and Lucky put up the rest."] },
   { id = "big", title = "Bet $1,000", cost = 1000, lines = ["Win: $2,000 back.", "Diamond says you won't."] },

@@ -294,7 +294,10 @@ impl Freeway {
         // The people react to what the weapon did.
         if let Some(at) = res.gunfire {
             self.peds.scare(sim, &city.walk, at, 40.0);
-            crimes.push((Crime::Shooting, at));
+            // (An officer on vigilante duty fires without a report.)
+            if !self.on_duty() {
+                crimes.push((Crime::Shooting, at));
+            }
         }
         for &(who, at) in &res.hurt {
             let cop = self.police.is_officer(who);
@@ -306,13 +309,18 @@ impl Freeway {
                 self.peds.scare(sim, &city.walk, at, 15.0);
             }
             self.peds.incident(sim, at, 35.0);
-            crimes.push((if cop { Crime::AttackPolice } else { Crime::Assault }, at));
+            // (A vigilante's suspects and a purse snatcher are fair game.)
+            if !self.fair_game(who) {
+                crimes.push((if cop { Crime::AttackPolice } else { Crime::Assault }, at));
+            }
         }
         for &(who, at) in &res.killed {
             let cop = self.police.is_officer(who);
             self.peds.forget(who);
             self.peds.scare(sim, &city.walk, at, 25.0);
-            crimes.push((if cop { Crime::KillPolice } else { Crime::KillCivilian }, at));
+            if !self.fair_game(who) {
+                crimes.push((if cop { Crime::KillPolice } else { Crime::KillCivilian }, at));
+            }
         }
         for d in &deeds {
             match *d {
@@ -339,8 +347,18 @@ impl Freeway {
             .collect();
         crimes.extend(typed.into_iter().map(|c| (c, player)));
         let mine = self.drive.vehicle();
-        for hit in self.struck.tick(sim, &people, dt, events) {
-            if Some(hit.car) == mine {
+        let shove = self.drive.input.and_then(|(car, i)| {
+            let way = if i.throttle > 0.1 {
+                1.0
+            } else if i.brake > 0.1 {
+                -1.0
+            } else {
+                return None;
+            };
+            Some((car, way))
+        });
+        for hit in self.struck.tick(sim, &people, shove, dt, events) {
+            if Some(hit.car) == mine && !self.fair_game(hit.who) {
                 let cop = self.police.is_officer(hit.who);
                 let crime = match (cop, hit.speed >= crate::struck::LETHAL) {
                     (true, true) => Crime::KillPolice,
@@ -458,6 +476,15 @@ impl Freeway {
                     crimes.push((Crime::Brandish, player));
                 }
             }
+            // On vigilante duty, harm to the public is not the police's to chase: a death docks
+            // the run's pay instead (attacks on officers are reported as ever).
+            if self.on_duty() {
+                let deaths = crimes.iter().filter(|c| c.0 == Crime::KillCivilian).count();
+                crimes.retain(|c| !matches!(c.0, Crime::Assault | Crime::KillCivilian | Crime::Vehicular));
+                if deaths > 0 {
+                    self.vigilante_casualties(deaths);
+                }
+            }
             self.law(sim, &city, player, crimes, &mut inputs, &mut out, events, real, dt);
         }
         self.ai_inputs = inputs;
@@ -473,6 +500,8 @@ impl Freeway {
                 .filter_map(|o| sim.feet(o.id))
                 .chain(self.police.units.iter().filter_map(|u| sim.state.entities.get(u.vehicle).map(|e| e.pos)))
                 .min_by(|a, b| a.distance(feet).total_cmp(&b.distance(feet)));
+            let officers: Vec<Vec3> =
+                self.police.officers.iter().filter(|o| o.duty != police::Duty::Seated).filter_map(|o| sim.feet(o.id)).collect();
             let bm = crate::bot::Moment {
                 city: &city,
                 feet,
@@ -480,6 +509,7 @@ impl Freeway {
                 busy: self.drive.busy() || matches!(self.drive.phase, drive::Phase::Stopping { .. }),
                 threat,
                 police: &police,
+                officers: &officers,
                 wanted: self.heat.stars > 0,
                 dt,
             };
