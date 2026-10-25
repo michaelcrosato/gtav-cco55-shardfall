@@ -1,4 +1,4 @@
-# HANDOFF — Grand Theft Freeway-BX, session 5 (2026-10-25; M7 mostly done)
+# HANDOFF — Grand Theft Freeway-BX, session 5 (2026-10-25; M7 done, M8 under way)
 
 For the next implementing session (or this one after a compaction). Read `CLAUDE.md` (it imports
 `docs/DOCTRINE.md`), then this page, then `PROGRESS.md` → "Now", then `PLAN.md` §0–§4 and §10
@@ -13,16 +13,17 @@ truth; this page says where things stand and what to do next.
   E12 tools, E13 app shell, E14 regions, plus hidden blocks (`block_flags::HIDDEN`, the map's
   invisible wall), the incremental mesh tally in `pav_view`, districts' named `[[spot]]`s and
   `VehicleInput.grip` (M6). Engine commits stay upstreamable (`engine:` prefix).
-- **Health:** pav_core 305, pav_view 44, pav_world 11, gtf_game 98 (+8 ignored reports) green;
-  clippy `-D warnings` clean on the touched crates; `gtf perf view=all` (release) within every budget
+- **Health (M7's end, `bd2b6db`):** every workspace crate's tests green in release (pav_core 313,
+  gtf_game 147 with 25 long bot suites ignored and run separately, pav_view 47, the rest 202);
+  wasm clippy and clippy `-D warnings` clean; `gtf perf view=all` (release) within every budget
   with traffic and crowds; soaks as in `PROGRESS.md` → Now.
 - **Sessions 4-5 (2026-10-24/25), under the `/goal` below:** D1 fixed (wasm clippy clean);
   M7's story missions (m1-m3, s1-s3, h0, h1 Loud and Smart), the radio, 21 landmarks with
   interiors, and every activity (the Pretzel Run, 5 stunt jumps, 2 hold-ups, vigilante, the
   Purse Snatcher and Getaway Needed, 15 Lost Shields and the gold Kaze), completion and the
-  STATS cards. The bot wins every mission and activity on seeds 1-3. Left in M7: bodies and
-  looks, the §7.8 suites, landmark captures, the M7 acceptance run (`PROGRESS.md` → Remaining
-  work).
+  STATS cards; helicopter bodies and people's looks; the §7.8 suites; landmark captures. The
+  bot wins every mission and activity on seeds 1-3, and plays the whole game to 98% in one
+  run. **M7 done** (acceptance at `bd2b6db`, `PROGRESS.md` → Milestones).
 
 ## The M6 systems (where to look)
 - **Missions** — `crates/gtf_game/src/missions/`: `mod.rs` (the DSL types, the validator with
@@ -66,17 +67,14 @@ truth; this page says where things stand and what to do next.
 ## Next, in value order (PLAN §2)
 `PROGRESS.md` → **Remaining work** is the full checklist (a gap inventory of the code against
 PLAN, 2026-10-24). In short:
-1. **Finish M7:** helicopter bodies and people's looks (hair, headwear, outfits); the §7.8
-   suites (`content.rs`, `district.rs`, `player.rs`, `save.rs`, `replay.rs`, `ui.rs`); landmark
-   captures at their best hour; wasm clippy and the full workspace tests (the acceptance run).
-2. **M8 frontend and attract:** the hills title, intro and loading cards, the missing settings
+1. **M8 frontend and attract** (under way): the hills title, intro and loading cards, the missing settings
    and the toggles nothing reads, About with the full Source Information, and the attract
    director (7 vignettes, 10 s idle, any input returns, a 30-minute soak). Today a 10 s idle
    only logs "attract would start". Touch = attract only, with the gear overlay.
-3. **M9 polish:** the gameplay, audio, visual and performance gaps in Remaining work
+2. **M9 polish:** the gameplay, audio, visual and performance gaps in Remaining work
    (`?perf=1`, quality presets, camera shake, reverb, dialogue ducking, tyres, headlights) and
    the open issues.
-4. **M10 release:** the deliverables D14–D15. Write `README.md`, `docs/gtf/ENGINE_ANALYSIS.md`
+3. **M10 release:** the deliverables D14–D15. Write `README.md`, `docs/gtf/ENGINE_ANALYSIS.md`
    and `docs/gtf/HANDOFF.md`. Build the single-file HTML with its header comment and the zipped
    Windows `.exe`. Write the final report.
 
@@ -105,6 +103,11 @@ PLAN, 2026-10-24). In short:
 - **Builds:** 4 vCPU, fixed disk allowance; `CARGO_BUILD_JOBS=4`. Soaks, perf and quick looks
   need a release `gtf` (`cargo build --release -p gtf_app --bin gtf`, ~45 s incremental). Prune
   duplicate artefacts in `target/*/deps` when the disk runs low.
+- **The workspace's tests** do not fit the disk as one `cargo test --workspace` (it resolves
+  features again and builds every artifact a second time). Run them in release crate by crate:
+  `-p pav_audio -p pav_ui -p pav_render -p pav_world -p pav_app -p gtf_app` together, then
+  pav_core, gtf_game and pav_view alone, then pav_tools's lib and each `--test` one at a time,
+  deleting each test binary after its run (session 5's M7 close, `PROGRESS.md` → Log).
 - **Looking at things:** script the REPL — `printf 'load scene=freeway/mission/dev_test2\nstep
   ticks=400\ncapture width=1280 height=720 hud=true out=/path/a.png\n' | ./target/release/gtf
   repl` — then open every image. `ui` prints the UI model as JSON (overlay, prompts, screens);

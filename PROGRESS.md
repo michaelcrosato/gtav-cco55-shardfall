@@ -5,13 +5,14 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase (2026-10-25, session 5):** M0-M6 done; **M7 is under way.**
+- **Phase (2026-10-25, session 5):** M0-M7 done; **M8 is under way** (the attract director,
+  the settings, then the rest of the frontend).
   - **Done in sessions 4-5:** D1 (wasm clippy clean); the story missions m1-m3, s1-s3, h0 and
     h1 (Loud and Smart); the radio; the landmarks and interiors; **every activity** (the
     Pretzel Run, 5 stunt jumps, 2 hold-ups, vigilante, 2 random events, 15 Lost Shields and
-    the gold Kaze); completion and the STATS cards.
-  - **Next:** bodies and looks, the §7.8 suites, landmark captures, wasm clippy and the M7
-    acceptance run; then M8.
+    the gold Kaze); completion and the STATS cards; helicopter bodies and people's looks; the
+    §7.8 suites; landmark captures; the M7 acceptance run (milestone entry below).
+  - **Next:** M8 (Remaining work → M8), then M9 and M10.
   - Read `HANDOFF.md` first, then this file. **Remaining work** (below the milestones) is the
     checklist.
 - **Missions and activities (2026-10-25):** the bot wins every story mission, the race and both
@@ -32,10 +33,10 @@ resumed or compacted session reads first.
 - **Perf:** session 4's container passed `gtf perf view=all` before the session's work
   (downtown 3.6-3.9 ms a frame, 2.0-2.1 ms a tick). The landmarks helper measured every view
   at or under 3.60 ms with the landmarks in (interleaved A/B, best of 2-4). Thin margin: M9.
-- **Tests (merged tree, 2026-10-24):**
-  - pav_core, pav_audio, pav_ui, pav_tools, pav_world, gtf_game and gtf_app: green.
-  - gtf_game: 114 passed, 8 ignored, plus the new `story_*` ones.
-  - clippy `-D warnings` clean on the touched crates.
+- **Tests (M7's end, `bd2b6db`, 2026-10-25, release):** every workspace crate green — pav_core
+  313, gtf_game 147 (25 long ones ignored, run separately: M7 acceptance), pav_view 47,
+  pav_audio, pav_ui, pav_render, pav_world, pav_app, gtf_app and pav_tools 202; wasm clippy
+  clean; clippy `-D warnings` clean on the touched crates.
 - **Helpers:** none running. (The vigilante and random-events helper was stopped by a container
   restart; its work was merged and finished in session 5.)
 - **Branch / PR:** `claude/keen-cerf-g5vksy`, draft PR #2 (description current to the radio
@@ -96,8 +97,26 @@ resumed or compacted session reads first.
       glyph markup), the ability grade was too faint, the fail card lost "failed" once the
       banner faded, the results printed ✓/✗ in a font without them, `dev_test2` started behind a
       parked SUV.
-- [ ] **M7 Content** — final district, landmarks, interiors, all vehicles and props, missions m1–m3,
-      s1–s3, h0, h1 (Loud + Smart), activities, radio stations, completion.
+- [x] **M7 Content** — final district, landmarks, interiors, all vehicles and props, missions m1–m3,
+      s1–s3, h0, h1 (Loud + Smart), activities, radio stations, completion. *Acceptance
+      (2026-10-25, release, the merged tree at `bd2b6db`):*
+      - **Story:** the bots win every story mission on seeds 1-3, first time (ignored
+        `story_*` in `tests/missions.rs`: m1, m2, m3, s1, s2 quiet and loud, s3, h0, h1 Loud and
+        Smart; 27 of 27 runs, no retries).
+      - **Activities:** the race and both hold-ups (`activity_*`, 9 of 9), vigilante, the Purse
+        Snatcher and Getaway Needed (`tests/activities_street.rs`, 9 of 9). Every stunt jump is
+        landed from its run-up on three seeds and the fifteen Lost Shields are taken
+        (`tests/activities.rs`, default suite).
+      - **Content and captures:** `tests/content.rs` validates every file and name. Every
+        landmark was captured at its best hour and looked at (`out/landmarks/`, 24 views).
+      - **Completion from play:** `tests/completion.rs` (ignored) has the bots play the whole
+        game in one free-roam game: every mission, activity, jump and shield, to 98.0% (story,
+        activities and shields done; 8 of 10 golds). 100% with gold everywhere is checked in
+        `activities.rs`. This test found two bugs in missions started away from their scene
+        (fixed in `bd2b6db`).
+      - **Checks (release, at `bd2b6db`):** every workspace crate's tests pass (pav_core 313,
+        gtf_game 147 with 25 long ones ignored, pav_view 47, pav_tools with the rest 202; run
+        crate by crate to fit the disk, Log), and wasm clippy is clean.
 - [ ] **M8 Frontend and attract** — title, menus, settings, About, loading cards, attract director,
       touch = attract only.
 - [ ] **M9 Polish** — art, animation, audio mix, UX against the 10-foot rules, accessibility,
@@ -156,9 +175,27 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
       three homes with their beds (saves happen at the bed), the warehouse, Luxe's showroom and
       the arcade. Shops open at their counter. Rooms are `Walk::Indoor` tiles: people can be put
       and walk there, crowds don't spawn there.
-- [ ] **Bodies and looks.** The two helicopters have no authored body (`pav_view` draws a
-      procedural one). People vary only by colour, height and build; add hair, headwear,
-      accessories and outfits.
+- [x] **Bodies and looks** (2026-10-25, the looks helper: `dc0ea9b` engine, `78b1b3f` content,
+      `14730f2` game).
+      - **Helicopters:** `pav_view` draws a helicopter's body prop as it does a car's; its
+        `rotor` group turns about the mast and `tail_rotor` 1.7 times as fast, `beacon*` parts
+        blink, `nav*` glow and `siren_*` flash when crewed. Two bodies in `LIB/gtf_vehicles`:
+        `skylark_news` (white and blue, three blades, a camera ball) and `sppd_air` (dark with a
+        white band, four blades, the searchlight on the body, red and blue lamps).
+      - **People:** `PuppetDef` gained hair (eight styles and a colour), beards (four),
+        headwear (ballcap, beanie, hardhat, helmet, tactical helmet, hood), sunglasses, a
+        backpack or shoulder bag, a badge, a vest and a tie, and `neck` (a smaller head on a
+        longer neck). `gtf_game::looks` builds everyone on peds.toml's `[body]` and dresses them
+        from a `wear` table per kind: the nine archetypes, officers on foot, the enemy sides,
+        street crooks and robbers, and the crew (Dez's cap and goatee, Mack's grey stubble and
+        sunglasses, Roxy's pink ponytail).
+      - **Evidence:** pav_core, pav_view and gtf_game tests (the body's height, dressing
+        chances, a dressing that draws nothing from the main random stream, the rotor parts
+        turning, a crewed helicopter's beacon and sirens); captures looked at (the helper's
+        and mine): `out/looks/` in its worktree, the Skylark on St. Brigid's pad and in flight,
+        the air unit by day and at night at 4★, a mixed crowd of the crew, officers, SWAT and
+        pedestrians, sheets of every archetype and side. New tools: `photo` (a held camera)
+        and `lineup <who>`.
 - [x] **Activities** (2026-10-24/25, `content/freeway/activities.toml`, `activities/`).
       - **The Pretzel Run** (`act_pretzel_run`): three laps round east Paloma Bay against three
         racers, a bet through `choose` costs; the race DSL drives racers gate to gate
@@ -202,10 +239,23 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
       `completion_reaches_100_with_everything_done`. Capture looked at:
       `out/act/stats_tab.png` (the activities card's title was cut off and two of its six lines
       never showed; fixed to four lines and a done/total title).
-- [ ] **Checks.** Capture every landmark at its best time of day. Add the PLAN §7.8 suites that
-      do not exist yet: `content.rs` (every file and reference validates), `district.rs`,
-      `player.rs`, `save.rs`, `replay.rs` and `ui.rs`. Each may fold into an existing file if
-      it says so.
+- [x] **Checks** (2026-10-25). The PLAN §7.8 suites that were missing (`c2f3fa5`):
+      `content.rs` (5: every file loads and validates; every prop, material, clip, sound cue,
+      spot and landmark named exists), `district.rs` (4: the same city whatever the seed, one
+      walking network, no building on a road, every landmark's door on the network), `player.rs`
+      (4: walk, run, sprint until the stamina is spent; jump; crouch; swim), `save.rs` (3: a
+      round trip into a fresh game, a save from before activities, a refused newer or broken
+      one), `replay.rs` (2: two minutes of roam with heat and traffic replay exactly; a snapshot
+      mid-chase plays on exactly) and `ui.rs` (5: the HUD on foot, with money and stars and in
+      a car; the pause menu's five tabs; the wheels; the phone; the banners; each state's UI
+      model written as JSON). Every landmark captured at its best hour and looked at
+      (`out/landmarks/`, 24 views: the bank tower, City Hall, SPPD Central, the hospital roof,
+      the garage, the impound lot, Bang Bang Bros., Paloma Customs, Gas-N-Grab, the Grind House,
+      the diner, Luxe Motors, the Ironclad depot, the City Works yard, the harbor warehouse, the
+      freighter, the pier at night, Sunset Row's neon, the three homes, the hills both ways and
+      the freeway). Fixed after looking: traffic-light lenses glowed when unlit; the avenue's
+      quay end let cars into the sea (a view of it now, `quay_dead_end`). Art notes for M9 are
+      in Open issues.
 
 **M8 frontend and attract**
 - [ ] **Screens.** The title is a drone orbit over downtown; PLAN wants the hills at golden hour.
@@ -264,19 +314,19 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 ## Definition of Done evidence (PLAN.md §2)
 | Item | Status | Evidence (test, command + result, capture looked at, artifact) |
 |---|---|---|
-| D1 Builds and checks | ◐ | 2026-10-24: wasm clippy clean (`1dfb757`); host clippy -D warnings and the touched crates' tests green after each merge; builds and the final full run are M10 |
-| D2 The district | ◐ | 2026-10-24: 21 parts-built landmarks with interiors, Luxe's breakable glass, the turning Big Wheel, the City Works yard, the harbor warehouse, the pier and freighter, shop signs (merge `2451340`; `pav_world/tests/paloma.rs`, gtf_game landmark tests, the helper's captures); the spur's re-routed end (`out/s4/spur_above2.png`); landmark captures at their best hour are still to do |
-| D3 Player | ◐ | M3: feel ranges for all 13 road archetypes, driving/carjack/bail-out/helicopter tests, on-foot camera with wall handling; M6: three protagonists with their own cash, weapons and places, the switch wheel and sky-cam, abilities (`tests/protagonists.rs`); final looks and animation polish wait for M7/M9 |
+| D1 Builds and checks | ◐ | 2026-10-24: wasm clippy clean (`1dfb757`); host clippy -D warnings and the touched crates' tests green after each merge. 2026-10-25 (M7's end, `bd2b6db`): every workspace crate's tests green in release (pav_core 313, gtf_game 147, pav_view 47, the rest with pav_tools 202) and wasm clippy clean. Builds and the final full run are M10 |
+| D2 The district | ◐ | 2026-10-24: 21 parts-built landmarks with interiors, Luxe's breakable glass, the turning Big Wheel, the City Works yard, the harbor warehouse, the pier and freighter, shop signs (merge `2451340`; `pav_world/tests/paloma.rs`, gtf_game landmark tests, the helper's captures); the spur's re-routed end (`out/s4/spur_above2.png`). 2026-10-25: every landmark captured at its best hour and looked at (`out/landmarks/`, 24); `tests/district.rs` (same city whatever the seed, one walking network, no building on a road, every door on the network); roads ending at the water closed off (`01bbca8`). Streaming with no holes and the weather set are re-checked in M10's final run |
+| D3 Player | ◐ | M3: feel ranges for all 13 road archetypes, driving/carjack/bail-out/helicopter tests, on-foot camera with wall handling; M6: three protagonists with their own cash, weapons and places, the switch wheel and sky-cam, abilities (`tests/protagonists.rs`). 2026-10-25: `tests/player.rs` (walk/run/sprint and stamina, jump, crouch, swim); the crew's looks and both helicopters' bodies (`dc0ea9b`, `14730f2`). Vault, the bat and heavy melee, and animation polish: M9 |
 | D4 Living city | ◐ | M4: traffic and pedestrian soaks within limits, buses, parked cars, struck people, witnesses; roam soak open issue (one stuck car in 2,700 s) |
 | D5 Heat | ◐ | M5: `tests/heat.rs` (reporting, arrest, Wasted, respray, car swap, evasion), police never spawn in view, 3★ night captures |
-| D6 Missions and activities | ◐ | M6: the mission system end to end (`tests/missions.rs`, `docs/gtf/MISSIONS.md`). 2026-10-24: the eight story missions with the heist both ways; the bot wins each on seeds 1-3 (`play bot=true seeds=3`; ignored `story_*` tests). 2026-10-25: every activity (race, 5 jumps, 2 hold-ups, vigilante, 2 random events, 15 Lost Shields), each won by the bot on seeds 1-3 (`activity_*`, `activities.rs`, `activities_street.rs`); completion and STATS cards. Economy and saves from M6. To do: the M7 acceptance run |
+| D6 Missions and activities | ✔ | M6: the mission system end to end (`tests/missions.rs`, `docs/gtf/MISSIONS.md`). 2026-10-24: the eight story missions with the heist both ways; the bot wins each on seeds 1-3 (`play bot=true seeds=3`; ignored `story_*` tests). 2026-10-25: every activity (race, 5 jumps, 2 hold-ups, vigilante, 2 random events, 15 Lost Shields), each won by the bot on seeds 1-3 (`activity_*`, `activities.rs`, `activities_street.rs`); completion and STATS cards. Economy and saves from M6 (`tests/save.rs`: a round trip, an old save, a refused newer or broken one). M7 acceptance at `bd2b6db`: 27/27 story runs, 9/9 activity missions, 9/9 street activities, all first time; the whole game by the bots to 98.0% completion (`tests/completion.rs`) |
 | D7 UI | ◐ | M1 kit + M6 screens: intro card, objectives, subtitles, fail card, results, switch wheel, phone (9 apps), shop menus, save slots, captured with HUD (`out/m6/`); the 10-foot review is M9 |
 | D8 Frontend | ☐ | |
 | D9 Attract mode | ☐ | |
 | D10 Audio | ☐ | Radio part done 2026-10-24: 5 music stations + SPNN talk, DJ cards, scanner chatter, the radio −6 dB under the effects and ducked 8 dB (dialogue) / 12 dB (menus); `cargo test -p pav_audio`, `-p gtf_game --test radio`; captures `out/radio/`. SFX, loops and the mix pass remain (M9). |
 | D11 Visuals (incl. FPS readout) | ☐ | |
 | D12 Performance | ◐ | `gtf perf view=all` (release) within every budget with the population, 2026-10-18 |
-| D13 Verification | ☐ | |
+| D13 Verification | ◐ | 2026-10-25: bots complete every mission (both heist approaches) on 3 seeds (M7 acceptance, release); the evasion bot escapes 3★ (`the_evasion_bot_escapes_three_stars`; `evasion_rate` rolling 8/8, standing 5/8); snapshot/replay exact with the full city and population (`tests/replay.rs`); UI model captures of the HUD, pause tabs, wheels, phone and banners (`tests/ui.rs`). Soaks, the attract soak and every §5.9 screen captured: M8-M10 |
 | D14 Docs | ☐ | |
 | D15 Delivery | ☐ | |
 | D16 Developer demo level | ☐ | |
@@ -517,30 +567,94 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
     a crouch before walking off, and go round a car's bumper only when close to it; off-road
     hand driving is for slow cars, held until back within 5 m of a lane; a burning or wrecked
     car is left.
+- 2026-10-25 — **Water, heat and the bots (session 5, later):**
+  - **Heat clears out of sight anywhere, at half rate inside the search zone** (PLAN §5.6.5):
+    5 + 5 × stars seconds unseen outside it, twice that inside. Tests that need a chase raise the
+    stars again once the police have come (`heat.rs`, `replay.rs`).
+  - **Water.** A car that floods (water over 0.9 of its height) puts its driver out to swim; a
+    flooded police car counts as wrecked for vigilante (a spare comes). The bots swim for the
+    nearest walkable ground and climb out.
+  - **Roads that end at the water close like the map's edge** (engine, `pav_world`): their
+    turnaround is pulled back 16 m and DEAD END barriers stand across them. A police car in a
+    chase had driven off the avenue's quay end into the sea.
+  - **Busted:** getting in or out of a car starts the officer's count again; on foot, staying
+    within a metre for 0.7 s counts as standing still (pinned between officers, the run cycle's
+    speed hid it).
+  - **The evasion bot** remembers the 24 lanes it drove last (a way back onto one costs 150 m of
+    reach: it circled blocks), runs from a unit within 140 m while they search, gets out of a car
+    crawling under 1.5 m/s at ≤ 2★ with an officer within 8 m (before they reach the door),
+    keeps to a car a mission's `abandoned` condition names however damaged (s3's Kaze), and looks
+    120 m for a car when none is within 40 m.
+  - **The escape autopilot's haste by road:** 1.7 × the limit on the freeway, 1.55 on boulevards
+    and avenues, 1.3 on ramps, 1.4 elsewhere (the turns still at a safe speed). This replaces the
+    flat 1.25. Making for the freeway after 12 s with a unit on its tail was tried and dropped:
+    it found short stretches and shuttled.
+  - **Police coming the other way at ≤ 2★** pull over to their own side at 3 m/s until the car
+    is past, then turn and give chase (they drove head-on into it).
+  - **A car a mission placed across the road** (kept loaded, an end within 1.5 m of another lane's
+    middle: h1's City Works truck on Route 404) is in the way on every lane it stands in, so
+    traffic and the armoured truck stop at it. Other cars (wrecks, cars knocked about) count on
+    their own lane only, so traffic gets round them instead of queueing for good, and the player's car
+    on autopilot sees even a placed one on its own lane only and noses round it as a player
+    would. Counting every stray car on every lane lost vigilante 0/3: the bot's rammed wrecks
+    blocked its way in both lanes.
+  - **Racers** move out to pass a slower car within 40 m (under 0.92 of their pace), with the
+    room measured to the route's next turn.
+  - **Kept bodies wait for their ground (engine, `pav_core`).** A `Keep` body (a mission's car or
+    actor) over ground that has not streamed in holds still without gravity until it has; a kept
+    person on foot there is not stepped. Mission actors had dropped to −17 m and a guard to −39 m
+    (`pav_core/tests/regions.rs`).
+  - **Vigilante's people and cars go back to the world** once their level is over (they go with
+    their ground); those down are taken away out of sight or once under the ground. Dispatch
+    looks wider (30-192 m, any height) after 6 s with nowhere to put the suspects (the unit up on
+    the freeway).
+  - **Mission tests retry like a player:** after a fail, ✕ Retry up to twice (never Skip); the
+    line printed says how many.
+  - **The 3★ test counts escapes over chases:** seeds 1-8 until five chases (a seed where no unit
+    finds the car within 2 minutes is no chase); at least three escape.
+  - Smaller: a stick tilted 0.55 or less walks (it jogged); a refused save says "Can't load this
+    save"; traffic-light lenses are dark when unlit (they glowed at night in every colour).
+- 2026-10-25 — **Bodies and looks** (the looks helper's calls, reviewed at the merge):
+  - A look's new choices (hair, beard, accessories) come from `Rng::fork` (a stream of its own
+    from the generator's state): each look draws from the main stream exactly what it did
+    before, so the bots' runs keep their outcomes.
+  - The new puppet fields are left out of a look's serialization while unset: older looks and
+    saves keep their bytes. The new helmet kinds come after Hood, so Shardfall's loot helms keep
+    their indices. Far-off people leave out parts under a pixel across (every game; orthographic
+    views draw everything).
+  - Helicopter sirens are a flashing light bar only: no wail, and traffic does not pull over for
+    one. The air unit lights its lamps at night and its bar while it pursues.
+  - A protagonist's `cap` is a baseball cap. Beards are a quarter as likely with long, bun or
+    ponytail hair.
 
 ## Open issues
 - Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround (limit 0);
   roam AI crashes 0-3 per 900 s with buses turning at junctions the most common. M9 polish.
-- Evasion bot from a standstill: 2/8 seeds (Wasted after being pinned by a PIT; it will not drive
-  through the officers who get out). M9: fast-road routing, not stopping for armed officers.
-  (Session 5's escape changes — paced pursuit, the shove, keeping a damaged car — were not
-  re-measured at 3★ from a standstill; the 3★ rolling test passes.)
-- Vigilante seed 6 runs out level 3's clock (two cars that keep slipping away); seeds 1-5 and
-  7-8 win. A long chase is the activity's difficulty, but the bot could ram sooner.
+  (Since session 5 the avenue's quay end is closed off like the map's edge; re-check in M9's
+  soaks.)
+- Evasion bot at 3★ (`evasion_rate`, session 5): rolling 8/8, from a standstill 4/8 (pinned by
+  a PIT, or caught getting going). The 3★ test passes. M9: fast-road routing from a standstill.
+- Vigilante: getaway cars take turns at 1.375 times the safe speed (only the autopilot and cars
+  with a goal are held to it), so on a winding route the bot rarely closes in and a long chase
+  is what costs a run (seeds 1-3 win since the placed-car rule; seed 6 of 1-8 ran out level 3's
+  clock in session 5's first measure). M9: hold runners to the turn speed too, or ram sooner.
+- **Free roam's tip while wanted:** at 4★ the bottom line still says "Explore Paloma Bay. Hold
+  L1 for the weapon wheel." just above the dispatch subtitle; PLAN's HUD shows "Lose the cops."
+  there (M9 UX pass).
+- **Art notes from the landmark captures (M9 art pass):** at night the palms' fronds glow
+  lime green as if lit, the crosswalk paint reads near white, and the shop signs' neon barely
+  shows; traffic drives without headlights (Remaining work).
+- **Helicopters (the looks helper):** the helicopter HUD shows a car's control prompts; the
+  canopy is opaque, so its crew cannot be seen; the searchlight's spot on the ground was not
+  identified in a capture (only its origin moved to the body's lamp).
+- **The UI Gallery** sits in the main menu and the pause menu's Game tab: a developer's page in
+  the player's menus (M8: keep it reachable from About instead, or for `freeway/gallery`).
 - DualSense button mapping through gilrs on the user's Windows machine (a user check).
 - Dense traffic can lock a junction box into a queue that never clears (why missions thin
   traffic). M7/M9: give way by arrival order inside the box, or let the tail re-route.
 - `dev_test` takes the bot about 395 s of game time (long drive legs at a safe pace); the whole
   missions suite runs in about a minute in the dev build. M7's missions should keep drive legs
   short or use `traffic` thinning.
-- **D1: wasm clippy is not clean** (`cargo clippy -p pav_app -p gtf_app --target
-  wasm32-unknown-unknown -- -D warnings`, found 2026-10-18). There are four wasm-only lints in
-  vendored engine code (`689142b`), and no earlier session recorded this check as passing.
-  `clippy::drop_non_drop` fires at `pav_tools/src/animation_tools.rs:287`, `asset_tools.rs:95`
-  and `creature_tools.rs:662` (on wasm `std::fs::File` has no `Drop`).
-  `clippy::default_constructed_unit_structs` fires at `pav_app/src/asset_watch.rs:48` (the wasm
-  `AssetWatcher` is a unit struct). With those two lints allowed, the rest is clean. Fix them in
-  one `engine:` commit (a block scope instead of `drop`, and `Self` for the unit struct).
 - **Perf depends on the container.** `gtf perf view=downtown_street` (release) builds a frame
   in 4.7-5.4 ms (budget 4; outliers to 7) and runs a tick in 2.8-3.6 ms (budget 3) on session
   3's container. A release build of the last commit before M6 (`fbe56bf`) gave the same numbers
@@ -683,3 +797,29 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
     worktree `target/` dirs and stale test executables were deleted. The landmarks helper's
     baseline binary was deleted with them (it lived in the shared scratchpad), so its last perf
     A/B is best-of-2.
+- 2026-10-24/25 — **Activities (M7).** The stunt jumps with district `[[prop]]`s (`3fa1a6c`,
+  `e461db2`, `bd65cb0`), the Lost Shields and the gold Kaze (`dcfbf94`, `8ad20f1`), the race
+  and the hold-ups as missions (`1ffb533`, `862400c`, `ca1dfef`), vigilante and two random
+  events (`93a8a2d`, `bbed66b`), their bot tests (`c56a858`), the STATS card (`bd3bbf9`).
+  Evidence in Remaining work → Activities.
+- 2026-10-25 — **The §7.8 suites and the landmark captures** (`c2f3fa5`; fixes after looking:
+  `01bbca8`, `4a9f866`, `7403f2d`), and **bodies and looks** merged from the looks helper
+  (`a58c775`: `dc0ea9b`, `78b1b3f`, `14730f2`).
+- 2026-10-25 — **M7 done.** The acceptance run on the merged tree found what it was for:
+  - **Fixes:** kept bodies hold still over ground not yet streamed in (`6108b09`, engine);
+    a placed car blocks every lane it stands in, the autopilot reads its own copy of the lanes,
+    vigilante's spawn band widens when nothing fits (`e3df80a`); a mission started away from
+    its scene streams the ground in before putting the player down, and a waiting driver is
+    seated when its car wakes (`bd2b6db`).
+  - **Rates at the final traffic rule** (release, seeds 1-8): h1, s3, the grind, the gas
+    station and the race 8/8 each; evasion rolling 8/8 and standing 5/8; vigilante 3/3 on
+    seeds 1-3.
+  - **Acceptance** as in the milestone entry: 27/27 story runs, 9/9 activity missions, 9/9
+    street activities, the whole game by the bots to 98.0%.
+  - **Workspace tests (release, `bd2b6db`):** run crate by crate (`cargo test --workspace`
+    resolves features again and duplicates every artifact, more than the disk allowance holds):
+    pav_audio, pav_ui, pav_render, pav_world, pav_app and gtf_app together, pav_tools's lib
+    and 22 suites one at a time (their binaries removed after each): 202 passed, 0 failed, 6
+    ignored; pav_core 313 passed; gtf_game 147 passed, 25 ignored (the long bot suites, run
+    above); pav_view 47 passed, 1 ignored. `cargo clippy -p pav_app -p gtf_app --target
+    wasm32-unknown-unknown -- -D warnings` clean.
