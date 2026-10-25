@@ -1193,10 +1193,12 @@ pub struct DisplayRequest {
     pub dynamic: bool,
 }
 
-/// The host's quality presets a game can ask for.
+/// The host's quality presets a game can ask for; `Auto` leaves it to the host (Medium on a
+/// touch screen, Low on a software renderer, else High).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DisplayQuality {
+    Auto,
     Low,
     Medium,
     #[default]

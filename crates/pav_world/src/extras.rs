@@ -81,7 +81,7 @@ pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut
             text: s.text.clone(),
             pos: Vec3::new(p.x, y + s.height + 0.6, p.y),
             size: s.size,
-            color: Color::hex("#f4f1ea"),
+            color: Color::try_hex(&s.color).unwrap_or(Color::hex("#f4f1ea")),
             mode: LabelMode::Billboard,
             facing: Default::default(),
         });

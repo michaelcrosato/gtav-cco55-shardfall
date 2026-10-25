@@ -149,12 +149,13 @@ impl PlayShell {
         app.quit
     }
 
-    /// Smooths the frame time (seconds) for the readout.
+    /// Smooths the frame time (seconds) for the readout: over about a third of a second, so a
+    /// slow device's few frames a second read true at once.
     pub fn frame_time(&mut self, dt: f32) {
         if dt <= 0.0 {
             return;
         }
-        let k = 0.05;
+        let k = (dt * 3.0).clamp(0.05, 1.0);
         self.frame_ms += (dt * 1000.0 - self.frame_ms) * k;
         self.fps = 1000.0 / self.frame_ms.max(0.1);
     }

@@ -1017,7 +1017,9 @@ impl App {
             self.next_draw = if now > self.next_draw + step { now + step } else { self.next_draw + step };
         }
         let now = Instant::now();
-        let dt = (now - self.last).as_secs_f32().min(0.1);
+        // (The readout gets the frame's true length; the rest at most a tenth of a second.)
+        let real = (now - self.last).as_secs_f32();
+        let dt = real.min(0.1);
         self.last = now;
         self.fps.frames += 1;
         let since = self.fps.since.elapsed().as_secs_f32();
@@ -1030,7 +1032,7 @@ impl App {
 
         // Devices.
         self.input.poll_gamepad();
-        self.play.frame_time(dt);
+        self.play.frame_time(real);
         if self.play_frame.is_some() {
             // A hook game reads the whole pad itself (Options is its pause menu).
             self.input.pad.taps.clear();
@@ -1771,6 +1773,7 @@ impl App {
             if let Some(d) = self.play.display(&play.app) {
                 use pav_core::present::DisplayQuality;
                 self.prefs.quality = match d.quality {
+                    DisplayQuality::Auto => crate::quality::Quality::Auto,
                     DisplayQuality::Low => crate::quality::Quality::Low,
                     DisplayQuality::Medium => crate::quality::Quality::Medium,
                     DisplayQuality::High => crate::quality::Quality::High,

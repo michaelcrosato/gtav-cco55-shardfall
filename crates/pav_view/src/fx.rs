@@ -191,6 +191,42 @@ pub fn preset(name: &str) -> (ParticleBurst, f32) {
             },
             15.0,
         ),
+        // A car's exhaust: a small grey puff that thins out behind it.
+        "exhaust" => (
+            ParticleBurst {
+                area: Vec3::new(0.04, 0.02, 0.04),
+                vel: Vec3::new(0.0, 0.3, 0.0),
+                spread: 0.25,
+                gravity: -0.25,
+                drag: 1.8,
+                life: (0.5, 1.1),
+                size: (0.1, 0.6),
+                color0: Vec4::new(0.55, 0.55, 0.57, 0.38),
+                color1: Vec4::new(0.7, 0.7, 0.72, 0.0),
+                additive: false,
+                turbulence: 0.8,
+                ..b
+            },
+            12.0,
+        ),
+        // Dust thrown up behind wheels on sand or dirt: a billow that rises and spreads.
+        "trail" => (
+            ParticleBurst {
+                area: Vec3::new(0.3, 0.05, 0.3),
+                vel: Vec3::new(0.0, 2.4, 0.0),
+                spread: 1.2,
+                gravity: -0.2,
+                drag: 1.6,
+                life: (1.2, 2.2),
+                size: (0.4, 1.8),
+                color0: Vec4::new(0.58, 0.48, 0.34, 0.6),
+                color1: Vec4::new(0.72, 0.64, 0.52, 0.0),
+                additive: false,
+                turbulence: 1.2,
+                ..b
+            },
+            16.0,
+        ),
         // Raindrops splashing on the ground: a few droplets kicked up and falling back.
         "splash" => (
             ParticleBurst {

@@ -884,6 +884,13 @@ pub struct Sign {
     pub height: f32,
     #[serde(default = "sign_size")]
     pub size: f32,
+    /// The letters' colour (dark letters read against the sky).
+    #[serde(default = "post_sign_color")]
+    pub color: String,
+}
+
+fn post_sign_color() -> String {
+    "#f4f1ea".into()
 }
 
 fn sign_height() -> f32 {

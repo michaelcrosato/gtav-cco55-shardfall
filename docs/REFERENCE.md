@@ -538,7 +538,8 @@ offset, volume, muffle, `segments`) in its `AudioScene`; `pav_audio::music` rend
 What a game's settings page needs from its host, and looks for frontend pictures:
 - **Display:** `AppRequests.display: Option<DisplayRequest>` — `serial` (a new one is applied),
   `fullscreen` and `vsync` (the window's; a browser page leaves them to the browser), `quality`
-  (`low`, `medium`, `high`: the app's presets), `render_scale` (0.25-1, multiplies what the
+  (`auto`: the host picks, Medium on a touch screen and Low on a software adapter, else High;
+  or `low`, `medium`, `high`: the app's presets), `render_scale` (0.25-1, multiplies what the
   preset draws) and `dynamic` (resolution follows the frame rate on any device, not only touch).
   `pav_app` applies it to its quality preset, its scaler and the window.
 - **Subtitles and contrast:** `UiModel.subtitle_scale` (0.6-2) sizes subtitles;
@@ -555,9 +556,10 @@ What a game's settings page needs from its host, and looks for frontend pictures
 - **Bodies:** `Sim::set_solid(id, false)` makes an entity's body stop colliding and stop rays
   (a fallen character: people walk over it, bullets and sight lines pass it).
 - **Particles from a game:** `SimEvent::Fx { preset, pos, dir, scale }` draws one burst of a
-  `pav_view::fx` preset (`smoke`, `sparks`, `dust`, `splash`...; an unknown name draws `fire`):
-  a dozen particles at scale 1, thrown along `dir` when it is not zero. Push it from `pre` or
-  `post` like a sound.
+  `pav_view::fx` preset (`smoke`, `sparks`, `dust`, `splash`, `exhaust`, `trail`...; an unknown name draws
+  `fire`): a dozen particles at scale 1, thrown along `dir` when it is not zero. Push it from
+  `pre` or `post` like a sound. `SimEvent::Splash { pos }` throws water up with rings on the
+  surface.
 - **Attract card:** a `TitleCard` with `small_logo` puts the logo and caption top left and its
   `prompt` (no button glyph) breathing at the bottom right; set `UiModel.perf = false` while it
   is up (the FPS readout shares the corner).
