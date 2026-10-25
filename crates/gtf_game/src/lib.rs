@@ -21,9 +21,11 @@ pub mod about;
 pub mod activities;
 pub mod ambience;
 pub mod anchor;
+pub mod attract;
 pub mod audio;
 pub mod bot;
 pub mod camera;
+pub mod cards;
 pub mod combat;
 pub mod content;
 pub mod cover;
@@ -58,7 +60,7 @@ pub mod views;
 pub mod world;
 
 use camera::{Look, OrbitCam};
-use frontend::{Action, Ctx, Front, Page};
+use frontend::{Action, Ctx, Front, GameMenu, Page};
 use hud::{Note, WEAPONS, WheelState};
 use settings::Settings;
 
@@ -82,6 +84,8 @@ pub fn register() {
 const WHEEL_DELAY: f32 = 0.18;
 /// Seconds D-pad left must be held in a car before the radio wheel opens (a tap steps back).
 const RADIO_WHEEL_DELAY: f32 = 0.3;
+/// How near their bed a protagonist must be for the pause menu to save (their safehouse).
+const SAFEHOUSE_REACH: f32 = 30.0;
 
 /// The radio wheel: every station, then "Off".
 fn radio_wheel_ui(def: &radio::RadioDef, w: &WheelState, on: Option<usize>) -> Wheel {
@@ -226,6 +230,15 @@ pub struct Freeway {
     /// Stunt jumps, the Lost Shields, vigilante, random events: what is done and under way.
     #[serde(default)]
     pub activities: activities::Activities,
+    /// The attract loop (the game playing itself on the menus and on touch screens).
+    #[serde(default)]
+    pub attract: attract::Attract,
+    /// The new game's intro and the loading cards.
+    #[serde(default)]
+    pub cards: cards::Cards,
+    /// The last rumble asked of the host (a new serial is a new one).
+    #[serde(default)]
+    pub rumble: Option<pav_core::present::Rumble>,
     #[serde(default)]
     pub mbot: missions::bot::MissionBot,
     #[serde(default)]
@@ -369,6 +382,9 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
         crew: protagonists::Crew::new(0),
         missions: missions::Missions::default(),
         activities: activities::Activities::default(),
+        attract: attract::Attract::default(),
+        cards: cards::Cards::default(),
+        rumble: None,
         mbot: missions::bot::MissionBot::default(),
         phone: phone::Phone::default(),
         shop: None,
@@ -393,6 +409,10 @@ pub fn build(sim: &mut Sim, rest: Option<&str>) -> Result<()> {
     game.dress_player(sim);
     if let Some(m) = &mission {
         game.start_mission(sim, &m.key, false, true, &mut Vec::new())?;
+    }
+    // `freeway/attract`: the loop at once (any input leaves it for the title).
+    if game.mode == "attract" {
+        game.attract_start(sim, false);
     }
     sim.state.play = Some(GameBox::new(game));
     Ok(())
@@ -427,7 +447,11 @@ impl Freeway {
                 }
             } else if let Some(json) = c.strip_prefix("host.settings ") {
                 match serde_json::from_str::<Settings>(json) {
-                    Ok(s) => self.settings = s,
+                    Ok(s) => {
+                        self.settings = s;
+                        // (A new serial: the host applies their display part.)
+                        self.settings_serial += 1;
+                    }
                     Err(e) => log::warn!("kept settings unreadable ({e}); using defaults"),
                 }
             } else if let Some(rest) = c.strip_prefix("host.save ") {
@@ -449,7 +473,8 @@ impl Freeway {
         for c in &input.cmds {
             let mut w = c.split_whitespace();
             match (w.next(), w.next()) {
-                // `mission start|replay <key>`, `mission quit`, `mission fail`, `mission choose <id>`.
+                // `mission start|replay <key>`, `mission quit`, `mission fail`, `mission choose <id>`,
+                // `mission skip [n]` (on to the next checkpoint, n times).
                 (Some("mission"), Some(verb)) => {
                     let arg = w.next().unwrap_or("");
                     match verb {
@@ -472,11 +497,12 @@ impl Freeway {
                             }
                         }
                         "choose" => self.missions.bot_choice = (!arg.is_empty()).then(|| arg.to_string()),
+                        "skip" => self.skip_checkpoints(sim, arg.parse().unwrap_or(1), events),
                         // A choice kept from an earlier mission (the heist's approach), for tests.
                         "story" if !arg.is_empty() => {
                             self.missions.story.insert(arg.to_string());
                         }
-                        _ => log::warn!("mission: start, replay, quit, fail, choose or story"),
+                        _ => log::warn!("mission: start, replay, quit, fail, choose, skip or story"),
                     }
                 }
                 // `switch <protagonist>`: the switch, wheel or not.
@@ -603,12 +629,25 @@ impl Freeway {
                         let side = w.next().unwrap_or("gang");
                         let weapon = w.next();
                         let at = Self::feet(sim);
+                        let chest = at + Vec3::Y * 1.2;
                         for i in 0..n.min(12) {
                             let a = i as f32 / n.max(1) as f32 * 1.6 - 0.8 + sim.state.rng.range(-0.2, 0.2);
                             let r = sim.state.rng.range(18.0, 26.0);
-                            let want = Vec2::new(at.x + a.sin() * r, at.z + a.cos() * r);
-                            let Some(p) = city.walk.nearest_walkable(want, 6) else { continue };
-                            let feet = Vec3::new(p.x, city.ground_y(p).max(at.y - 2.0), p.y);
+                            // Where they can see the player: round the arc from the first pick
+                            // until a spot has a line on them (else the first pick).
+                            let place = |k: usize| {
+                                let turn = [0.0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.6][k];
+                                let rr = if k < 4 { r } else { r * 0.7 };
+                                let want = Vec2::new(at.x + (a + turn).sin() * rr, at.z + (a + turn).cos() * rr);
+                                let p = city.walk.nearest_walkable(want, 6)?;
+                                Some(Vec3::new(p.x, city.ground_y(p).max(at.y - 2.0), p.y))
+                            };
+                            let sees = |f: Vec3| {
+                                let eye = f + Vec3::Y * 1.5;
+                                let d = chest - eye;
+                                sim.raycast(eye, d.normalize_or(Vec3::X), d.length() - 0.3, None).is_none()
+                            };
+                            let Some(feet) = (0..8).filter_map(place).find(|f| sees(*f)).or_else(|| place(0)) else { continue };
                             let face = (at.x - feet.x).atan2(at.z - feet.z);
                             if self.enemies.spawn(sim, side, feet, face, weapon).is_none() {
                                 log::warn!("enemies: no side '{side}' (content/freeway/enemies.toml)");
@@ -845,8 +884,13 @@ impl Freeway {
                     if let Some(c) = drive::Car::read(sim, car) {
                         self.chase.place_behind(c.yaw);
                         if c.radio {
-                            let last = self.radio.last;
-                            self.radio.tune(Some(last));
+                            // The station set in the settings, else the one last listened to.
+                            let pick = self
+                                .settings
+                                .station
+                                .as_ref()
+                                .and_then(|id| radio::def().ok()?.station.iter().position(|s| &s.id == id));
+                            self.radio.tune(Some(pick.unwrap_or(self.radio.last)));
                         }
                     }
                 }
@@ -981,7 +1025,12 @@ impl Freeway {
     }
 
     fn look(&self) -> Look {
-        Look { sensitivity: self.settings.sensitivity, invert_y: self.settings.invert_y, recentre: self.settings.recentre }
+        Look {
+            sensitivity: self.settings.sensitivity,
+            sensitivity_y: self.settings.sensitivity_y,
+            invert_y: self.settings.invert_y,
+            recentre: self.settings.recentre,
+        }
     }
 
     /// The menus show the city from a drone; play uses the orbit camera.
@@ -996,8 +1045,17 @@ impl Freeway {
         }
     }
 
-    /// The camera for this page.
+    /// The camera for this page (shaking less with "Reduce camera shake" on).
     pub fn camera(&self, sim: &Sim) -> CameraIntent {
+        let mut c = self.camera_shot(sim);
+        if self.settings.reduce_shake {
+            c.shake *= 0.2;
+        }
+        c
+    }
+
+    /// The page's shot, before the settings have their say.
+    fn camera_shot(&self, sim: &Sim) -> CameraIntent {
         if let Some(v) = &self.view {
             return v.camera();
         }
@@ -1016,12 +1074,18 @@ impl Freeway {
         if let Some(t) = &self.tour {
             return t.camera(self.time * tour::SPEED);
         }
+        if let Some(c) = self.cards_camera(sim) {
+            return c;
+        }
         if self.drone_view() {
-            return camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0);
+            return camera::title(self.ui_time);
         }
         // A switch's sky-cam (or quick blend), a mission's cutscene, the phone's camera.
         if let Some(s) = &self.crew.switch {
             return s.camera(&OrbitCam::settled(s.dest, s.yaw));
+        }
+        if let Some(c) = self.attract_camera(sim) {
+            return c;
         }
         if let Some(c) = self.mission_camera(sim) {
             return c;
@@ -1041,20 +1105,33 @@ impl Freeway {
             return c;
         }
         match self.drive.vehicle().and_then(|car| ride(sim, car)) {
-            Some(r) => self.chase.intent(&r),
+            // (A cinematic shot from behind a wall, or from inside another car, gives way to the
+            // chase view.)
+            Some(r) => {
+                let car = self.drive.vehicle();
+                self.chase.intent_clear(&r, &|from, to| {
+                    let d = to - from;
+                    sim.raycast(from, d.normalize_or(Vec3::Y), (d.length() - 0.2).max(0.0), car).is_some()
+                })
+            }
             None => self.cam.intent(),
         }
     }
 
     /// The look of the moment: the clock and the weather.
     fn look_now(&self) -> ViewIntent {
-        match daytime::def() {
+        let mut v = match daytime::def() {
             Ok(world) => self.sky.view(&world),
             Err(e) => {
                 log::error!("{e:#}");
                 ViewIntent::default()
             }
-        }
+        };
+        // The brightness setting scales the exposure.
+        v.exposure *= self.settings.brightness;
+        // The cards' painterly or print picture.
+        v.stylize = self.cards_style();
+        v
     }
 }
 
@@ -1088,8 +1165,8 @@ impl Game for Freeway {
             }
         }
         if self.drone_view() {
-            let c = camera::drone(world::DOWNTOWN, self.ui_time, 230.0, 125.0);
-            sim.state.world.interest.push(c.target);
+            let c = camera::title(self.ui_time);
+            sim.state.world.interest.extend_from_slice(&[c.eye, c.target]);
         }
         if let Some(v) = &self.view {
             sim.state.world.interest.extend_from_slice(&[v.eye, v.target]);
@@ -1108,9 +1185,25 @@ impl Game for Freeway {
             }
         }
         self.host_cmds(input);
+        // Touch screens play the attract loop and nothing else (once past the boot splash).
+        if self.touch && !self.attract.on && self.front.page != Page::Boot {
+            self.attract_start(sim, true);
+        }
+        self.attract_cmds(sim, input);
+        // The attract loop's own presses stand in for the host's input (any of which ends it).
+        let own;
+        let input = match self.attract_input(sim, input, dt, real, events) {
+            Some(f) => {
+                own = f;
+                &own
+            }
+            None => input,
+        };
         self.world_cmds(sim, input, events);
         if let Ok(world) = daytime::def() {
-            self.sky.step(&world, dt, &mut sim.state.rng, events);
+            // (The title's golden hour holds while the menus are up.)
+            let held = if self.drone_view() { 0.0 } else { dt };
+            self.sky.step(&world, held, &mut sim.state.rng, events);
         }
         let feet = Self::feet(sim);
         let target = self.mission_waypoint(sim).or_else(|| self.street_waypoint(sim)).or(self.front.waypoint);
@@ -1118,36 +1211,47 @@ impl Game for Freeway {
         if let Some(c) = &self.city {
             self.gps.update(c, feet);
         }
+        let game =
+            GameMenu { on_mission: self.missions.run.is_some(), checkpoint: self.may_restart(), save: self.save_here(sim) };
+        let blips = if self.front.page == Page::Pause && self.front.pause_tab == 0 { self.map_blips(sim) } else { Vec::new() };
         let mut ctx = Ctx {
             settings: &mut self.settings,
             has_save: !self.saves.is_empty(),
             web: self.web,
             player: Vec2::new(feet.x, feet.z),
             now: self.ui_time,
-            on_mission: self.missions.run.is_some(),
+            game,
+            blips,
         };
         let mut sounds = Vec::new();
         match self.front.step(input, &mut ctx, real, &mut sounds) {
-            Some(Action::Play) => self.roam_age = 0.0,
+            Some(Action::Play) => self.cards_loading(sim),
             Some(Action::Continue) => {
-                self.roam_age = 0.0;
                 if let Some(json) = self.newest_save()
                     && let Err(e) = self.load_game(sim, &json)
                 {
                     log::warn!("continue: {e:#}");
                 }
+                self.cards_loading(sim);
             }
             Some(Action::NewGame) => {
-                self.roam_age = 0.0;
                 self.new_game(sim);
+                self.cards_intro(sim);
             }
             Some(Action::Replay) => self.shop = Some(shops::ShopState::new(shops::Counter::Replay, true)),
             Some(Action::Load) => self.shop = Some(shops::ShopState::new(shops::Counter::Load, true)),
+            Some(Action::Save) => self.shop = Some(shops::ShopState::new(shops::Counter::Save, true)),
+            Some(Action::Restart) => self.restart_checkpoint(sim, events),
             Some(Action::QuitMission) => self.quit_mission(sim),
             Some(Action::Settings) => self.settings_changed(),
             Some(Action::Quit) => self.quit = true,
             None => {}
         }
+        // Ten seconds without input on the title or a main-menu page: the attract loop.
+        if self.front.attract_due && self.front.page.idles() && !self.attract.on {
+            self.attract_start(sim, false);
+        }
+        self.cards_tick(sim, input, real, events);
         // The radio runs on real time (slow motion and the pause menu neither stretch nor stop
         // it); a report going on air says what the police are doing now.
         self.radio.clock += real as f64;
@@ -1170,7 +1274,10 @@ impl Game for Freeway {
                 self.crew.card = None;
             }
         }
-        let out = if self.front.page == Page::Play {
+        self.combat.assist_strength = self.settings.aim_assist;
+        self.traffic.crowd = Some(self.settings.quality.population());
+        self.peds.crowd = Some(self.settings.quality.population());
+        let out = if self.front.page.plays() {
             let mut out = BTreeMap::new();
             self.switch_tick(sim, real, events);
             // Who has the controls: a switch, a mission's card or cutscene, a menu — or the
@@ -1201,7 +1308,7 @@ impl Game for Freeway {
             out.extend(more);
             self.life_idle(sim);
             self.mission_bot_tick(sim, real);
-            if self.autosave && self.missions.run.is_none() {
+            if self.autosave && self.missions.run.is_none() && !self.attract.on {
                 self.autosave = false;
                 self.save_game(sim, "auto");
             }
@@ -1228,6 +1335,7 @@ impl Game for Freeway {
             hot.extend(sim.state.player.and_then(|p| sim.state.entities.get(p)).map(|e| e.pos));
         }
         self.traffic.crashes(sim, events, &hot);
+        self.rumble_from(sim, events);
         audio::crash_sounds(events);
         // Explosions hurt everyone near them; whoever sat in the vehicle that blew up dies.
         let blast = fate::blasts(sim, events, sim.state.player);
@@ -1301,6 +1409,7 @@ impl Game for Freeway {
             }),
             "wheel": self.wheel_open(),
             "attract_due": self.front.attract_due,
+            "attract": self.attract_status(),
             "idle": round(self.front.idle),
             "camera_yaw": round(self.cam.yaw.to_degrees()),
             "clock": daytime::format_time(self.sky.hour),
@@ -1375,7 +1484,7 @@ impl Game for Freeway {
 
     fn world_paused(&self) -> bool {
         let f = &self.front;
-        f.page == Page::Pause
+        matches!(f.page, Page::Pause | Page::Loading)
             || (matches!(f.page, Page::Settings | Page::Gallery | Page::About) && matches!(f.back, Page::Pause | Page::Play))
             || (f.page == Page::Play && (self.mission_pauses_world() || self.shop.is_some()))
     }
@@ -1417,23 +1526,24 @@ impl Game for Freeway {
         let page = self.front.page;
         let mut ui =
             if page == Page::Gallery { gallery::page(self.front.gallery, self.front.since, feet) } else { UiModel::default() };
-        ui.perf = self.settings.fps && !self.touch;
+        // (Touch screens start with it off: `host.platform`; the gear's overlay turns it on.)
+        ui.perf = self.settings.fps;
         ui.glyphs = self.settings.glyphs;
         ui.scale = self.settings.hud_scale;
         ui.safe_margin = self.settings.safe_area;
+        ui.subtitle_scale = self.settings.subtitle_size;
+        ui.high_contrast = self.settings.high_contrast;
         ui.time = self.ui_time;
         if page != Page::Gallery {
-            let brief = self.missions.run.as_ref().and_then(|r| {
-                let d = missions::get(&r.key).ok()?;
-                let objective = d.step.get(r.step).and_then(|s| s.objective.clone()).unwrap_or_default();
-                Some(TextCard { heading: d.title.to_uppercase(), lines: vec![d.text.clone(), objective] })
-            });
+            let game =
+                GameMenu { on_mission: self.missions.run.is_some(), checkpoint: self.may_restart(), save: self.save_here(sim) };
+            let map_blips = if page == Page::Pause && self.front.pause_tab == 0 { self.map_blips(sim) } else { Vec::new() };
             ui.screen = self.front.screen(
                 &self.settings,
                 !self.saves.is_empty(),
                 self.web,
                 player,
-                &blips,
+                &map_blips,
                 &self.gps.minimap(feet),
                 {
                     let mut row = self.crew.stat_cards(self.front.stats, self.money);
@@ -1441,12 +1551,15 @@ impl Game for Freeway {
                     row.focus = self.front.stats.min(row.cards.len().saturating_sub(1));
                     row
                 },
-                brief,
-                self.missions.run.is_some(),
+                self.brief(),
+                game,
             );
+            if let Some(card) = self.cards_screen() {
+                ui.screen = Some(card);
+            }
         }
         let mut shop_screen = None;
-        if page == Page::Play {
+        if page.plays() {
             let heading = sim.player().and_then(|p| p.character.as_ref()).map(|c| c.facing).unwrap_or(0.0);
             let help = if self.drive.vehicle().is_some() {
                 (self.drive.card < 8.0).then_some((
@@ -1632,7 +1745,7 @@ impl Game for Freeway {
             ui.toasts = self.notes.iter().map(|n| n.toast()).collect();
         }
         // Wasted and Busted: the banner over a draining picture.
-        if page == Page::Play {
+        if page.plays() {
             let t = self.fate.since();
             let banner = match self.fate {
                 fate::Fate::Wasted { .. } => Some((BannerKind::Wasted, "WASTED", format!("Hospital bill ${}", fate::WASTED_FEE))),
@@ -1660,14 +1773,17 @@ impl Game for Freeway {
                     0.0
                 }
             }
-            Page::Play if !self.fate.alive() => ((self.fate.since() - (fate::LENGTH - 0.7)) / 0.6).clamp(0.0, 1.0),
-            Page::Title | Page::Play => self.front.fade(self.ui_time, 0.6),
+            Page::Play | Page::Attract if !self.fate.alive() => {
+                ((self.fate.since() - (fate::LENGTH - 0.7)) / 0.6).clamp(0.0, 1.0)
+            }
+            // (Page changes fade in a quarter of a second, PLAN §5.8-§5.9.)
+            Page::Title | Page::Play | Page::Attract | Page::Loading => self.front.fade(self.ui_time, 0.25),
             _ => 0.0,
         };
-        let menu = page != Page::Play;
+        let menu = !page.plays();
         let mut draw = DrawList::default();
         let mut dialogue = false;
-        if page == Page::Play {
+        if page.plays() {
             draw.ribbons.extend(self.gps.ribbon(feet, 160.0));
             self.mission_ui(sim, &mut ui, &mut draw);
             self.activities_ui(sim, &mut ui, &mut draw);
@@ -1675,7 +1791,9 @@ impl Game for Freeway {
             // A mission's subtitled lines duck the radio; with none, the scanner's words, else
             // the talk station's.
             dialogue = ui.subtitle.is_some();
-            if !dialogue && self.settings.subtitles {
+            if !self.settings.subtitles {
+                ui.subtitle = None;
+            } else if !dialogue {
                 ui.subtitle = rdef.as_ref().and_then(|d| self.radio_subtitle(d));
             }
             if shop_screen.is_some() {
@@ -1690,13 +1808,18 @@ impl Game for Freeway {
                 ui.help = None;
                 ui.prompts.clear();
             }
+            // The attract loop shows its own corner, and of the HUD only what a chase shows off.
+            self.attract_ui(&mut ui);
+        }
+        if self.settings.colorblind {
+            hud::colorblind(&mut ui);
         }
         if let Some(c) = &self.city {
             world::signal_lamps(c, self.camera(sim).target, self.time, &mut draw.prims);
             world::wheels(c, self.camera(sim).eye, self.time, &mut draw.assets);
         }
         self.combat.draw(&mut draw);
-        if let (Some((from, vel)), true) = (self.combat.arc, page == Page::Play && self.combat.aiming) {
+        if let (Some((from, vel)), true) = (self.combat.arc, page.plays() && self.combat.aiming) {
             draw.ribbons.push(RibbonDraw {
                 points: combat::arc(sim, from, vel),
                 width: 0.06,
@@ -1737,6 +1860,7 @@ impl Game for Freeway {
             audio: AudioScene {
                 master: self.settings.master,
                 effects: self.settings.sfx,
+                voice: self.settings.dialogue,
                 // Menus duck the radio and the city most, subtitled dialogue a little less.
                 ducking: if menu {
                     audio::DUCK_MENU
@@ -1760,7 +1884,8 @@ impl Game for Freeway {
                     .as_ref()
                     .map(|json| SettingsRequest { serial: self.settings_serial, json: json.clone() }),
                 quit: self.quit,
-                vibrate: None,
+                // (The Vibration setting turns it off.)
+                vibrate: self.rumble.filter(|_| self.settings.vibration && !self.attract.on),
                 keys: Some(if menu {
                     pad::MENU_KEYS.clone()
                 } else if self.drive.vehicle().is_some() {
@@ -1769,6 +1894,20 @@ impl Game for Freeway {
                     pad::FOOT_KEYS.clone()
                 }),
                 mouse_look: !menu && !self.wheel_open() && !self.radio_wheel_open(),
+                // (Until the player changes a setting the host keeps its own: phones and tablets
+                // start at Medium with dynamic resolution.)
+                display: (self.settings_serial > 0).then_some(pav_core::present::DisplayRequest {
+                    serial: self.settings_serial,
+                    fullscreen: self.settings.fullscreen,
+                    vsync: self.settings.vsync,
+                    quality: match self.settings.quality {
+                        settings::Quality::Low => pav_core::present::DisplayQuality::Low,
+                        settings::Quality::Medium => pav_core::present::DisplayQuality::Medium,
+                        settings::Quality::High | settings::Quality::Ultra => pav_core::present::DisplayQuality::High,
+                    },
+                    render_scale: self.settings.render_scale,
+                    dynamic: self.settings.dynamic_res,
+                }),
             },
         })
     }
@@ -1820,6 +1959,114 @@ impl Freeway {
         self.heat.clear();
         self.police.clear(sim);
         self.put_player(sim, world::SPAWN, std::f32::consts::FRAC_PI_2);
+    }
+
+    /// Why the pause menu cannot save here (None: it can — the protagonist is at their own
+    /// safehouse, on no mission and not wanted).
+    fn save_here(&self, sim: &Sim) -> Option<&'static str> {
+        if self.missions.run.is_some() {
+            return Some("Not during a mission");
+        }
+        if self.heat.stars > 0 {
+            return Some("Not while the police are after you");
+        }
+        let home = self.city.as_ref().zip(protagonists::def().ok()).and_then(|(c, d)| {
+            let p = d.protagonist.get(self.crew.current)?;
+            shops::save_point(c, p)
+        });
+        match home {
+            Some(h) if h.distance(Self::feet(sim)) < SAFEHOUSE_REACH => None,
+            _ => Some("Only at your safehouse"),
+        }
+    }
+
+    /// The pause map's blips: the landmarks, then the missions (to pick up, or where the one
+    /// under way goes next).
+    fn map_blips(&self, sim: &Sim) -> Vec<Blip> {
+        let mut out = self.city.as_deref().map(world::blips).unwrap_or_default();
+        out.extend(self.mission_map_blips(sim));
+        out
+    }
+
+    /// The pause menu's BRIEF: what to do now (the mission's objective, or free roam's next
+    /// story mission), the latest results and the newest texts; six rows at most.
+    fn brief(&self) -> TextCard {
+        let mut lines = Vec::new();
+        let short = |t: &str, n: usize| -> String {
+            if t.chars().count() <= n {
+                t.to_string()
+            } else {
+                format!("{}…", t.chars().take(n - 1).collect::<String>().trim_end())
+            }
+        };
+        let run = self.missions.run.as_ref().and_then(|r| Some((r, missions::get(&r.key).ok()?)));
+        let heading = match run {
+            Some((r, d)) => {
+                lines.push(d.text.clone());
+                if let Some(o) = d.step.get(r.step).and_then(|s| s.objective.as_deref()) {
+                    lines.push(format!("~y~Now:~s~ {o}"));
+                }
+                d.title.to_uppercase()
+            }
+            None => {
+                lines.push("Paloma Bay is yours to explore: downtown, the docks, the hills.".into());
+                // (The story's next, not the Proving Grounds' test missions.)
+                let next = missions::all()
+                    .into_iter()
+                    .find(|d| !d.activity && d.district != "dev" && self.missions.open(d) && d.blip.is_some());
+                match next {
+                    Some(d) => {
+                        let who = protagonists::def()
+                            .ok()
+                            .and_then(|c| c.protagonist.iter().find(|p| p.key == d.protagonist).map(|p| p.short.clone()))
+                            .unwrap_or_default();
+                        lines.push(format!("~y~Next:~s~ {} — {who}'s letter on the map.", d.title));
+                    }
+                    None => {
+                        lines.push("Hold ~btn:l1~ for the weapon wheel, ~btn:down~ to switch, ~btn:up~ for the phone.".into())
+                    }
+                }
+                "FREE ROAM".into()
+            }
+        };
+        for l in self.missions.log.iter().rev().take(2) {
+            lines.push(l.clone());
+        }
+        for m in self.phone.messages.iter().take(2) {
+            lines.push(format!("~b~{}:~s~ {}", m.from, short(&m.body, 64)));
+        }
+        lines.truncate(6);
+        TextCard { heading, lines }
+    }
+
+    /// The pad's rumble from what just happened to the player: their car's crashes (by the
+    /// impulse) and blasts near them.
+    fn rumble_from(&mut self, sim: &Sim, events: &[SimEvent]) {
+        let car = self.drive.vehicle();
+        let feet = Self::feet(sim);
+        let mut want: Option<(f32, f32, f32)> = None;
+        for e in events {
+            let r = match e {
+                SimEvent::Crash { vehicle, impulse, .. } if Some(*vehicle) == car && *impulse > 2500.0 => {
+                    let k = ((impulse - 2500.0) / 20000.0).clamp(0.15, 1.0);
+                    Some((k, k * 0.6, 0.18 + k * 0.25))
+                }
+                SimEvent::Explosion { pos, radius } if pos.distance(feet) < radius * 4.0 => {
+                    let k = (1.0 - pos.distance(feet) / (radius * 4.0)).clamp(0.2, 1.0);
+                    Some((k, k * 0.8, 0.5))
+                }
+                _ => None,
+            };
+            if let Some(r) = r
+                && want.is_none_or(|w| r.0 > w.0)
+            {
+                want = Some(r);
+            }
+        }
+        if let Some((low, high, secs)) = want {
+            let serial = self.rumble.map_or(1, |r| r.serial + 1);
+            self.rumble = Some(pav_core::present::Rumble { serial, low, high, secs });
+        }
     }
 
     /// A protagonist found at a life spot plays its idle until they move.

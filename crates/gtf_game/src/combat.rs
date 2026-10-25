@@ -272,6 +272,9 @@ pub struct Combat {
     pub power: f32,
     pub tough: f32,
     pub assist_cone: f32,
+    /// The aim assist setting (0 = off, 1 = full): how wide its cone and how hard its pull.
+    #[serde(default = "one_f")]
+    pub assist_strength: f32,
     pub shove: f32,
     /// Damage the player took since the game last looked (the Overdrive meter fills on it).
     pub taken: f32,
@@ -308,6 +311,7 @@ impl Default for Combat {
             power: 1.0,
             tough: 1.0,
             assist_cone: 1.0,
+            assist_strength: 1.0,
             shove: 1.0,
             taken: 0.0,
         }
@@ -652,6 +656,8 @@ impl Combat {
             }
         }
         if dead {
+            // (A body neither stops bullets nor blocks the way.)
+            sim.set_solid(id, false);
             self.kills += 1;
             self.kill = 1.0;
             self.hp.remove(&id.0);
@@ -697,8 +703,9 @@ impl Combat {
         pose.shoulder = crate::camera::AIM_SHOULDER * pose.side;
         pose.lift = crate::camera::AIM_LIFT;
         pose.target += Vec3::Y * (crate::camera::AIM_LIFT - cam.lift);
-        match self.sight(sim, s, range, 12.0 * self.assist_cone, 35.0) {
-            Some(chest) => look_at(&mut pose, chest, 1.0),
+        let k = self.assist_strength.clamp(0.0, 1.0);
+        match self.sight(sim, s, range, 12.0 * self.assist_cone * k, 35.0).filter(|_| k > 0.0) {
+            Some(chest) => look_at(&mut pose, chest, k),
             None => {
                 let ahead = pose.target + Vec3::new(pose.yaw.sin(), 0.0, -pose.yaw.cos()) * 20.0;
                 look_at(&mut pose, ahead, 1.0);
@@ -710,8 +717,11 @@ impl Combat {
 
     /// While aiming: the view drifts toward a person close to the reticle (within 4°).
     fn magnetism(&mut self, sim: &Sim, s: &Shooter, range: f32, cam: &mut OrbitCam, dt: f32) {
-        if let Some(chest) = self.sight(sim, s, range, 4.0, 4.0) {
-            look_at(cam, chest, 1.0 - (-6.0 * dt).exp());
+        let k = self.assist_strength.clamp(0.0, 1.0);
+        if k > 0.0
+            && let Some(chest) = self.sight(sim, s, range, 4.0 * k, 4.0)
+        {
+            look_at(cam, chest, (1.0 - (-6.0 * dt).exp()) * k);
         }
     }
 

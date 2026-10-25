@@ -219,6 +219,7 @@ pub fn loading_page() -> UiModel {
         heading: "THE FREEWAY JOB".into(),
         tip: "Tip: ~btn:r1~ while driving locks the handbrake for tight turns.".into(),
         progress: 0.62,
+        tag: None,
     };
     UiModel { screen: Some(screen("loading", "", ScreenBody::Loading(card), Backdrop::Solid)), ..Default::default() }
 }

@@ -78,6 +78,8 @@ fn every_content_file_loads_and_validates() {
         }
     };
     load("weapons.toml", gtf_game::combat::def().map(|_| ()));
+    load("attract.toml", gtf_game::attract::def().and_then(|d| d.check(&city)));
+    load("frontend.toml", gtf_game::cards::def().and_then(|d| d.check()));
     load("world.toml", gtf_game::daytime::def().map(|_| ()));
     load("enemies.toml", gtf_game::enemies::def().map(|_| ()));
     load("peds.toml", gtf_game::peds::def().map(|_| ()));
@@ -103,9 +105,11 @@ fn every_content_file_loads_and_validates() {
     // And every TOML file under content/freeway is one of these (no stray file goes unread).
     let known = [
         "activities.toml",
+        "attract.toml",
         "dev_district.toml",
         "district.toml",
         "enemies.toml",
+        "frontend.toml",
         "peds.toml",
         "protagonists.toml",
         "radio.toml",

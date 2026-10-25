@@ -165,7 +165,8 @@ fn continue_loads_the_newest_save() {
     t.run(30, &InputFrame::default());
     assert_eq!(game(&t).front.page, gtf_game::frontend::Page::Main);
     tap(&mut t, pad::SOUTH);
-    t.run(10, &InputFrame::default());
+    // (Through the loading card.)
+    t.run(60 * 3, &InputFrame::default());
     assert_eq!(game(&t).front.page, gtf_game::frontend::Page::Play);
     assert_eq!(game(&t).money, 350 + 100 + 400, "the newer save (slot 3) was loaded");
 }

@@ -846,6 +846,8 @@ impl Freeway {
 
     /// MISSION FAILED, for `reason`.
     fn fail(&mut self, run: &mut Run, reason: String, events: &mut Vec<SimEvent>) {
+        let title = super::get(&run.key).map(|d| d.title.clone()).unwrap_or_default();
+        self.mission_log(format!("~r~Failed~s~ {title}: {reason}"));
         run.phase = Phase::Failed { t: 0.0 };
         run.reason = reason;
         run.fails += 1;
@@ -898,6 +900,13 @@ impl Freeway {
             r.medal = run.medal;
         }
         self.missions.passed += 1;
+        let medal = match run.medal {
+            Some(Medal::Gold) => " (gold)",
+            Some(Medal::Silver) => " (silver)",
+            Some(Medal::Bronze) => " (bronze)",
+            None => "",
+        };
+        self.mission_log(format!("~g~Passed~s~ {}{medal}", def.title));
         run.phase = Phase::Passed { t: 0.0 };
         self.crew.allowed = None;
         events.push(sound("mission.pass", 1.0, 1.0));
@@ -1101,6 +1110,64 @@ impl Freeway {
         self.missions.run = Some(run);
     }
 
+    /// A line for the mission log (the newest few are kept).
+    fn mission_log(&mut self, line: String) {
+        self.missions.log.push(line);
+        let n = self.missions.log.len();
+        if n > 8 {
+            self.missions.log.drain(..n - 8);
+        }
+    }
+
+    /// Restart Checkpoint (the pause menu): back to the last checkpoint, as a retry would.
+    pub fn restart_checkpoint(&mut self, sim: &mut Sim, events: &mut Vec<SimEvent>) {
+        let Some(mut run) = self.missions.run.take() else { return };
+        if let Ok(def) = super::get(&run.key)
+            && run.phase == Phase::Play
+        {
+            self.missions.retries += 1;
+            self.restore(sim, &def, &mut run, events);
+        }
+        self.missions.run = Some(run);
+    }
+
+    /// Whether the pause menu may restart a checkpoint now.
+    pub fn may_restart(&self) -> bool {
+        self.missions.run.as_ref().is_some_and(|r| r.phase == Phase::Play && r.checkpoint.is_some())
+    }
+
+    /// The pause map's mission blips: the missions to pick up (free roam), else where the one
+    /// under way goes next.
+    pub(crate) fn mission_map_blips(&self, sim: &Sim) -> Vec<Blip> {
+        let mut out = Vec::new();
+        if self.missions.run.is_none() {
+            for (key, p) in self.open_missions() {
+                let Ok(d) = super::get(&key) else { continue };
+                let color = if d.activity { Color::hex(ACTIVITY_PINK) } else { self.protagonist_color(&d.protagonist) };
+                out.push(Blip {
+                    pos: flat(p),
+                    icon: d.blip.as_ref().map_or(BlipIcon::Letter('?'), |b| b.map_icon()),
+                    color,
+                    label: Some(d.title.clone()),
+                    clamp: true,
+                    height: 0,
+                    pulse: false,
+                });
+            }
+        } else if let Some(w) = self.mission_waypoint(sim) {
+            out.push(Blip {
+                pos: w,
+                icon: BlipIcon::Objective,
+                color: Color::hex("#ffc145"),
+                label: Some("Objective".into()),
+                clamp: true,
+                height: 0,
+                pulse: true,
+            });
+        }
+        out
+    }
+
     /// Quits the mission (from the fail card or the pause menu): the player is left where they
     /// are (a death or arrest is seen through first).
     pub fn quit_mission(&mut self, sim: &mut Sim) {
@@ -1109,6 +1176,26 @@ impl Freeway {
             && let Some(city) = self.city.clone()
         {
             self.respawn(sim, &city);
+        }
+    }
+
+    /// `mission skip [n]`: on to the next checkpoint `n` times, as the fail card's Skip goes
+    /// (tests; the attract loop's heist excerpt starts at the stand-off).
+    pub(crate) fn skip_checkpoints(&mut self, sim: &mut Sim, n: usize, events: &mut Vec<SimEvent>) {
+        let Some(mut run) = self.missions.run.take() else { return };
+        let Ok(def) = super::get(&run.key) else {
+            self.missions.run = Some(run);
+            return;
+        };
+        for _ in 0..n {
+            run.phase = Phase::Play;
+            self.skip(sim, &def, &mut run, events);
+            if self.missions.run.is_some() || run.phase != Phase::Play {
+                break;
+            }
+        }
+        if self.missions.run.is_none() {
+            self.missions.run = Some(run);
         }
     }
 
@@ -1910,6 +1997,7 @@ impl Freeway {
             || self.crew.switch.is_some()
             || self.mode.starts_with("mission/")
             || self.street_busy()
+            || self.attract.on
         {
             return;
         }

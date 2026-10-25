@@ -142,3 +142,40 @@ pub fn lot_blips() -> Vec<Blip> {
         blip(60.0, -40.0, BlipIcon::Letter('M'), "#3d8bff", "Mack"),
     ]
 }
+
+/// "Colourblind-safe colours" (PLAN §5.9): the radar's, the map's and the markers' reds turn
+/// orange and their greens sky blue, so nothing hangs on telling red from green.
+pub fn colorblind(ui: &mut pav_core::present::UiModel) {
+    use pav_core::present::ScreenBody;
+    fn safe(c: Color) -> Color {
+        let [r, g, b] = c.0;
+        let (hi, lo) = (r.max(g).max(b), r.min(g).min(b));
+        if hi - lo < 0.04 {
+            return c;
+        }
+        let d = hi - lo;
+        let hue = if hi == r {
+            60.0 * ((g - b) / d).rem_euclid(6.0)
+        } else if hi == g {
+            60.0 * ((b - r) / d + 2.0)
+        } else {
+            60.0 * ((r - g) / d + 4.0)
+        };
+        if !(25.0..335.0).contains(&hue) {
+            Color([hi, hi * 0.32, lo * 0.2])
+        } else if (75.0..165.0).contains(&hue) {
+            Color([lo * 0.5, hi * 0.5, hi])
+        } else {
+            c
+        }
+    }
+    if let Some(m) = ui.hud.as_mut().and_then(|h| h.minimap.as_mut()) {
+        m.blips.iter_mut().for_each(|b| b.color = safe(b.color));
+        m.cones.iter_mut().for_each(|c| c.color = safe(c.color));
+        m.circles.iter_mut().for_each(|c| c.color = safe(c.color));
+    }
+    ui.markers.iter_mut().for_each(|m| m.color = safe(m.color));
+    if let Some(ScreenBody::Map(m)) = ui.screen.as_mut().map(|s| &mut s.body) {
+        m.blips.iter_mut().for_each(|b| b.color = safe(b.color));
+    }
+}

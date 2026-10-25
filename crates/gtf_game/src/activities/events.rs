@@ -727,7 +727,7 @@ impl Freeway {
             && !self.drive.busy()
             && !self.bot.escape
             && !self.traffic.cars.iter().any(|a| a.pilot)
-            && self.front.page == crate::frontend::Page::Play
+            && self.front.page.plays()
             && self.view.is_none()
             && self.mode != "tour"
     }

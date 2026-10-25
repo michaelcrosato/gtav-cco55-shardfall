@@ -80,7 +80,9 @@ impl Default for OrbitCam {
 /// How the player turns the camera (from the game's settings).
 #[derive(Clone, Copy, Debug)]
 pub struct Look {
+    /// Across and up-and-down (1 = the reference speed).
     pub sensitivity: f32,
+    pub sensitivity_y: f32,
     pub invert_y: bool,
     /// Swing back behind the player's movement after a while without look input.
     pub recentre: bool,
@@ -88,7 +90,7 @@ pub struct Look {
 
 impl Default for Look {
     fn default() -> Self {
-        Look { sensitivity: 1.0, invert_y: false, recentre: true }
+        Look { sensitivity: 1.0, sensitivity_y: 1.0, invert_y: false, recentre: true }
     }
 }
 
@@ -150,9 +152,9 @@ impl OrbitCam {
         // A stick turns at up to 150°/s, faster near full tilt (aim curve).
         let curve = |v: f32| v.signum() * v.abs().powf(1.6);
         self.yaw += curve(r.x) * 2.6 * look.sensitivity * dt;
-        self.elevation -= curve(r.y) * 1.7 * look.sensitivity * dt * inv;
+        self.elevation -= curve(r.y) * 1.7 * look.sensitivity_y * dt * inv;
         self.yaw += m.x * 0.0024 * look.sensitivity;
-        self.elevation += m.y * 0.0019 * look.sensitivity * inv;
+        self.elevation += m.y * 0.0019 * look.sensitivity_y * inv;
         let turned = r.length() > 0.12 || m != Vec2::ZERO;
         self.idle = if turned { 0.0 } else { self.idle + dt };
         // Back behind a moving player once the player has left the camera alone for a while.
@@ -375,9 +377,9 @@ impl ChaseCam {
         if !ride.heli {
             self.look += curve(r.x) * 2.6 * look.sensitivity * dt;
         }
-        self.pitch -= curve(r.y) * 1.2 * look.sensitivity * dt * inv;
+        self.pitch -= curve(r.y) * 1.2 * look.sensitivity_y * dt * inv;
         self.look += m.x * 0.0024 * look.sensitivity;
-        self.pitch += m.y * 0.0019 * look.sensitivity * inv;
+        self.pitch += m.y * 0.0019 * look.sensitivity_y * inv;
         let turned = (!ride.heli && r.x.abs() > 0.12) || r.y.abs() > 0.12 || m != glam::Vec2::ZERO;
         self.idle = if turned { 0.0 } else { self.idle + dt };
         if self.idle > CHASE_RETURN {
@@ -423,11 +425,20 @@ impl ChaseCam {
         }
     }
 
-    pub fn intent(&self, ride: &Ride) -> CameraIntent {
+    /// The view: the chase view, or the cinematic shot under way unless `blocked` says a wall
+    /// stands between the car and the shot's eye (the chase view then).
+    pub fn intent_clear(&self, ride: &Ride, blocked: &dyn Fn(Vec3, Vec3) -> bool) -> CameraIntent {
+        let c = self.intent(ride);
+        if self.shot().is_some() && blocked(ride.center + Vec3::Y * 0.5, c.eye) {
+            return self.base(ride);
+        }
+        c
+    }
+
+    fn base(&self, ride: &Ride) -> CameraIntent {
         let fwd = ride.forward();
         let right = Vec3::new(-fwd.z, 0.0, fwd.x);
-        let h = ride.half;
-        let base = CameraIntent {
+        CameraIntent {
             eye: self.target + self.back(ride) * self.reach,
             target: self.target + fwd * 1.5,
             up: (Vec3::Y + right * self.roll).normalize(),
@@ -436,7 +447,14 @@ impl ChaseCam {
             far: 1500.0,
             cut: false,
             shake: 0.0,
-        };
+        }
+    }
+
+    pub fn intent(&self, ride: &Ride) -> CameraIntent {
+        let fwd = ride.forward();
+        let right = Vec3::new(-fwd.z, 0.0, fwd.x);
+        let h = ride.half;
+        let base = self.base(ride);
         let Some((shot, t)) = self.shot() else { return base };
         let c = ride.center;
         let (eye, target, fov) = match SHOTS[shot].0 {
@@ -464,6 +482,16 @@ pub fn drone(center: Vec3, t: f32, radius: f32, height: f32) -> CameraIntent {
         cut: false,
         shake: 0.0,
     }
+}
+
+/// The title's shot (PLAN §5.9): a slow drone off the Mirador Hills over Los Mirados toward
+/// downtown's towers, drifting east toward the freeway and back over three minutes (so it never
+/// cuts), `t` seconds in.
+pub fn title(t: f32) -> CameraIntent {
+    let k = 1.0 - (t * 0.035).cos();
+    let eye = Vec3::new(-260.0 + k * 45.0, 60.0 - k * 3.0, -520.0 + k * 12.0);
+    let target = Vec3::new(100.0 + k * 90.0, 0.0, -180.0 + k * 10.0);
+    CameraIntent { eye, target, up: Vec3::Y, fov: 46.0, near: 0.5, far: 2500.0, cut: false, shake: 0.0 }
 }
 
 #[cfg(test)]

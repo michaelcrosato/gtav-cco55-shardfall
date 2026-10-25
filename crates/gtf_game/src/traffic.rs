@@ -228,6 +228,9 @@ pub struct Traffic {
     pub cars: Vec<Agent>,
     /// A mission's share of the usual moving traffic (None: all of it).
     pub thin: Option<f32>,
+    /// The graphics quality's share of the traffic (none: all of it).
+    #[serde(default)]
+    pub crowd: Option<f32>,
     /// Parking spot index → its parked car.
     pub parked: BTreeMap<u32, EntityId>,
     /// Landmark lot place index (`City::lots`) → its vehicle.
@@ -808,6 +811,12 @@ impl Traffic {
         self.cars.iter().any(|a| a.pilot && a.arrived)
     }
 
+    /// Whether the player's car on autopilot is waiting its turn (a light, a person, a queue),
+    /// not stuck.
+    pub fn pilot_waiting(&self) -> bool {
+        self.cars.iter().any(|a| a.pilot && a.held)
+    }
+
     /// A parked car taken from its spot (the player got in): no longer kept at the curb.
     pub fn unpark(&mut self, car: EntityId) {
         let before = self.parked.len() + self.lots.len();
@@ -1222,8 +1231,11 @@ impl Traffic {
             }
         }
         // Moving traffic: the hour's share of the cap.
-        let want =
-            (d.density.max as f32 * crate::peds::time_share(m.hour, d.density.night) * self.thin.unwrap_or(1.0)).round() as usize;
+        let want = (d.density.max as f32
+            * crate::peds::time_share(m.hour, d.density.night)
+            * self.thin.unwrap_or(1.0)
+            * self.crowd.unwrap_or(1.0))
+        .round() as usize;
         let buses = self.cars.iter().filter(|a| a.bus.is_some()).count();
         let loop_ok = self.bus_loop.as_ref().is_some_and(|b| !b.lanes.is_empty());
         if loop_ok && buses < d.bus.count {

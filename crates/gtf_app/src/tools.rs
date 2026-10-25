@@ -60,9 +60,9 @@ pub static TOOLS: &[Tool] = &[
     },
     Tool {
         name: "soak",
-        help: "Runs Paloma Bay unattended (PLAN §7.5): mode traffic (autopilot cruising), peds (standing), roam (the bot drives, gets heat every minute of calm and evades); reports anomaly counters, heat episodes, ms/tick, entity counts.",
+        help: "Runs Paloma Bay unattended (PLAN §7.5): mode traffic (autopilot cruising), peds (standing), roam (the bot drives, gets heat every minute of calm and evades), attract (the attract loop: stalled vignettes, plays per vignette, entity counts and memory per loop); reports anomaly counters, heat episodes, ms/tick, entity counts.",
         args: &[
-            arg("mode", "string", "traffic, peds or roam (default traffic)"),
+            arg("mode", "string", "traffic, peds, roam or attract (default traffic)"),
             arg("seconds", "number", "game seconds to run (default 120)"),
             arg("seed", "integer", "scene seed (default 1)"),
             arg("time", "string", "time of day to start at, HH:MM (default 12:00)"),
@@ -135,11 +135,14 @@ fn t_peds(s: &mut Session, a: &Args) -> Result<Output> {
 
 fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
     let mode = text(a, "mode").unwrap_or("traffic").to_string();
-    if !matches!(mode.as_str(), "traffic" | "peds" | "roam") {
-        bail!("soak: mode is traffic, peds or roam (attract arrives with the attract mode)");
+    if !matches!(mode.as_str(), "traffic" | "peds" | "roam" | "attract") {
+        bail!("soak: mode is traffic, peds, roam or attract");
     }
     let seconds = a.get("seconds").and_then(Value::as_f64).unwrap_or(120.0).clamp(5.0, 7200.0);
     let seed = a.get("seed").and_then(Value::as_u64).unwrap_or(1);
+    if mode == "attract" {
+        return soak_attract(s, a, seconds, seed);
+    }
     let mut args = Args::new();
     args.insert("scene".into(), json!("freeway/roam"));
     args.insert("seed".into(), json!(seed));
@@ -258,6 +261,110 @@ fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
         "entities": [fewest, most],
         "player_travelled_m": travelled.round(),
     })))
+}
+
+/// `soak mode=attract`: the attract loop on its own for `seconds` (PLAN §7.5). Reports the
+/// vignettes that stalled, how often each was played, each vignette's entity count 8 s in on its
+/// first and its latest play, and the process's memory at the start of each loop; flat means
+/// within 10% (the memory from the second loop on: the first visits every place for the first
+/// time).
+fn soak_attract(s: &mut Session, a: &Args, seconds: f64, seed: u64) -> Result<Output> {
+    let mut args = Args::new();
+    args.insert("scene".into(), json!("freeway/attract"));
+    args.insert("seed".into(), json!(seed));
+    pav_tools::call(s, "load", &args)?;
+    let shots = text(a, "shots").map(str::to_string);
+    let ticks = (seconds * 60.0) as u64;
+    let (mut nan, mut fell, mut slowest, mut total_ms) = (0u32, 0u32, 0.0f64, 0.0f64);
+    // Per vignette: plays, and the entities 8 s in on its first and its latest play.
+    let mut plays: std::collections::BTreeMap<String, (u32, usize, usize)> = Default::default();
+    let mut memory: Vec<u64> = Vec::new();
+    let (mut loops, mut ready, mut counted) = (u32::MAX, false, false);
+    let mut shot = 0u32;
+    for _ in 0..ticks {
+        let clock = std::time::Instant::now();
+        s.sim.step(&pav_core::InputFrame::default());
+        let ms = clock.elapsed().as_secs_f64() * 1000.0;
+        total_ms += ms;
+        slowest = slowest.max(ms);
+        s.sim.drain_events();
+        let g = freeway(s)?;
+        let st = &g.attract;
+        if !st.on {
+            bail!("soak: the attract loop ended by itself");
+        }
+        if st.loops != loops {
+            loops = st.loops;
+            memory.push(resident_kib());
+        }
+        let id = g.attract_vignette().unwrap_or_default();
+        if st.ready && !ready {
+            plays.entry(id.clone()).or_default().0 += 1;
+            counted = false;
+        }
+        ready = st.ready;
+        if st.ready && st.t >= 8.0 && !counted {
+            counted = true;
+            let n = s.sim.state.entities.iter().count();
+            let e = plays.entry(id.clone()).or_default();
+            if e.1 == 0 {
+                e.1 = n;
+            }
+            e.2 = n;
+            for e in s.sim.state.entities.iter() {
+                if !e.pos.is_finite() {
+                    nan += 1;
+                } else if e.pos.y < -40.0 {
+                    fell += 1;
+                }
+            }
+            // A picture of each vignette (8 s in), as long as `shots` asks.
+            if let Some(prefix) = &shots {
+                shot += 1;
+                let mut c = Args::new();
+                c.insert("out".into(), json!(format!("{prefix}_{shot:03}_{id}.png")));
+                c.insert("hud".into(), json!(true));
+                c.insert("width".into(), json!(1280));
+                c.insert("height".into(), json!(720));
+                pav_tools::call(s, "capture", &c)?;
+            }
+        }
+    }
+    let g = freeway(s)?;
+    let st = &g.attract;
+    let stalls = st.anomalies.len();
+    let n = gtf_game::attract::def()?.vignette.len();
+    let flat = |a: usize, b: usize| (a as f64 - b as f64).abs() <= (a as f64 * 0.1).max(4.0);
+    let vignettes: serde_json::Map<String, Value> = plays
+        .iter()
+        .map(|(id, (p, first, last))| {
+            (id.clone(), json!({ "plays": p, "entities_first": first, "entities_last": last, "flat": flat(*first, *last) }))
+        })
+        .collect();
+    let every_twice = plays.len() == n && plays.values().all(|(p, _, _)| *p >= 2);
+    let entities_flat = plays.values().all(|(_, first, last)| flat(*first, *last));
+    let base = memory.get(1).copied().unwrap_or(0);
+    let peak = memory.iter().skip(1).copied().max().unwrap_or(0);
+    let memory_flat = base == 0 || (peak as f64) <= base as f64 * 1.1;
+    let ok = stalls == 0 && every_twice && entities_flat && memory_flat && nan == 0 && fell == 0;
+    Ok(Output::Json(json!({
+        "mode": "attract", "seconds": seconds, "seed": seed, "ok": ok,
+        "limits": "vignette_stalls 0, every vignette played at least twice, each vignette's entity count and the memory (from the second loop) flat within 10%, NaN 0, fell through 0",
+        "vignette_stalls": stalls, "anomalies": st.anomalies, "played": st.played, "loops": st.loops,
+        "vignettes": vignettes, "every_vignette_twice": every_twice, "entities_flat": entities_flat,
+        "memory_kib_per_loop": memory, "memory_flat": memory_flat,
+        "nan_positions": nan, "fell_through_world": fell,
+        "ms_per_tick": (total_ms / ticks.max(1) as f64 * 1000.0).round() / 1000.0,
+        "slowest_tick_ms": (slowest * 100.0).round() / 100.0,
+    })))
+}
+
+/// The process's resident memory in KiB (Linux; 0 elsewhere).
+fn resident_kib() -> u64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| l.split_whitespace().nth(1)?.parse().ok()))
+        .unwrap_or(0)
 }
 
 fn t_vehicle_feel(_s: &mut Session, a: &Args) -> Result<Output> {

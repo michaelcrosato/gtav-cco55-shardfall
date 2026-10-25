@@ -992,6 +992,8 @@ pub struct Record {
 #[serde(default)]
 pub struct Missions {
     pub run: Option<Run>,
+    /// What became of the missions lately (the pause menu's BRIEF shows the newest).
+    pub log: Vec<String>,
     pub records: BTreeMap<String, Record>,
     /// Choices kept after the mission that made them (the heist approach).
     pub story: BTreeSet<String>,

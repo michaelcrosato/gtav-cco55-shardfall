@@ -417,7 +417,8 @@ fn passed_missions_can_be_replayed_from_the_pause_menu() {
         .missions
         .records
         .insert("dev_test2".into(), missions::Record { passed: true, ..Default::default() });
-    // Options, the GAME tab (where the menu opens), down to Replay Mission.
+    // Options, the GAME tab (where the menu opens), down to Replay Mission (past Save Game, which
+    // waits for a safehouse, and Load Game).
     s.step(&press(pad::START));
     s.step(&InputFrame::default());
     let items = |s: &Sim| {
@@ -426,9 +427,11 @@ fn passed_missions_can_be_replayed_from_the_pause_menu() {
         (m.items.iter().map(|i| i.id.clone()).collect::<Vec<_>>(), m.focus)
     };
     let (ids, _) = items(&s);
-    assert_eq!(ids[..3], ["resume", "replay", "load"], "{ids:?}");
-    s.step(&press(pad::DOWN));
-    s.step(&InputFrame::default());
+    assert_eq!(ids[..4], ["resume", "save", "load", "replay"], "{ids:?}");
+    for _ in 0..2 {
+        s.step(&press(pad::DOWN));
+        s.step(&InputFrame::default());
+    }
     s.step(&press(pad::SOUTH));
     s.step(&InputFrame::default());
     let screen = s.present().unwrap().ui.screen.unwrap();

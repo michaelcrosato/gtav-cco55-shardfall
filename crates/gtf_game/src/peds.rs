@@ -195,6 +195,9 @@ pub struct Peds {
     pub despawned: u32,
     pub stuck: u32,
     pub misses: u32,
+    /// The graphics quality's share of the crowds (none: all of them).
+    #[serde(default)]
+    pub crowd: Option<f32>,
 }
 
 /// What the population manager needs to know about the moment.
@@ -673,7 +676,8 @@ impl Peds {
         }
         self.list = kept;
         let share = area_share(m.city, here, d) * time_share(m.hour, d.night);
-        let target = ((d.max as f32 * share).round() as usize).min(d.max);
+        let cap = ((d.max as f32) * self.crowd.unwrap_or(1.0)).round() as usize;
+        let target = ((cap as f32 * share).round() as usize).min(cap);
         // A new scene fills its streets at once, in view too (from 20 m out); afterwards people
         // arrive out of view in the spawn band, a couple per pass.
         let fill = self.spawned == 0;
