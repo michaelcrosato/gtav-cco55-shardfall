@@ -52,6 +52,27 @@ cost at cache reads 0.1, cache writes 1.25, visible output 5; hidden reasoning i
 
 ## Games
 
+### Grand Theft Freeway-BX, from Grand Theft Auto V (2013; PS3, Xbox 360, later PS4, Xbox One, PC, PS5, Xbox Series) — 2026-10-25
+- **Result:** an open-world slice in its own repository (`michaelcrosato/gtav-cco55-shardfall`,
+  the engine vendored at `0098196`): Paloma Bay (about 1 km²) generated from a district file with
+  21 parts-built landmarks and interiors, day and night and six weathers; on foot (cover, aim
+  assist, melee, vault, swim) and 15 vehicles from data including a bus, an armoured truck and
+  a flyable helicopter; traffic on a lane graph and crowds on a walk map; five stars of police;
+  eight story missions and a two-way heist in a mission language bots finish on three seeds;
+  activities, radio, a 10-foot UI, an attract loop; a single-file HTML (14 MB) and a Windows
+  `.exe`.
+- **Agent:** Claude (Anthropic) at max effort, in Claude Code cloud sessions (one planning, five
+  building); about 36,000 lines of game code and 30,000 of engine changes in 42 `engine:`
+  commits.
+- **Verdict (agent's):** once games could live in their own crates and hand the engine their
+  presentation as data (E1-E4), the engine stopped being in the way: the game never touched
+  the tick loop again, and the same frame drives the window, the browser, captures and tests.
+  What had to be built for a city: region providers for streaming (the engine streamed only its
+  pavilion), an urban kit (`pav_world`), a 10-foot UI (`pav_ui`), vehicles that pitch and roll,
+  a sound bank, music and voices. The headless tools carried every check. The browser build is
+  render-bound on software (SwiftShader draws a frame every several seconds). Full write-up:
+  `docs/gtf/ENGINE_ANALYSIS.md` in that repository.
+
 ### Capital Strike, from Jungle Strike (1993; SNES, Genesis) — 2026-10-12
 - **Result:** one mission over Washington. Gun, rockets, homing missiles, flares and a dash;
   armour, fuel and ammo; winch rescues; a motorcade escort; SAMs, AA guns, tanks, gunships and a

@@ -5,14 +5,17 @@ Definition of Done evidence, log decisions and open issues. Keep "Now" current �
 resumed or compacted session reads first.
 
 ## Now
-- **Phase (2026-10-25, session 5):** M0-M7 done; **M8 is under way** (the attract director,
-  the settings, then the rest of the frontend).
-  - **Done in sessions 4-5:** D1 (wasm clippy clean); the story missions m1-m3, s1-s3, h0 and
-    h1 (Loud and Smart); the radio; the landmarks and interiors; **every activity** (the
-    Pretzel Run, 5 stunt jumps, 2 hold-ups, vigilante, 2 random events, 15 Lost Shields and
-    the gold Kaze); completion and the STATS cards; helicopter bodies and people's looks; the
-    §7.8 suites; landmark captures; the M7 acceptance run (milestone entry below).
-  - **Next:** M8 (Remaining work → M8), then M9 and M10.
+- **Phase (2026-10-25, session 5):** M0-M8 done; **M9 is under way** (the first polish batch
+  is in: `6d0797b`-`2164b80`), then M10.
+  - **Done in sessions 4-5:** D1 (wasm clippy clean); every story mission and activity, the
+    radio, the landmarks and interiors, completion (M7); the frontend, the settings, About,
+    the attract director and touch mode (M8: D8 and D9 done); M9's gameplay gaps (the bat and
+    heavy melee, vault, fall damage, first-time tips, traffic that reacts, scenario points,
+    the yelp, rounds that burst tyres), camera shake, reverb, rain splashes, the browser's
+    perf line and Low on software adapters.
+  - **Next:** M9's second batch (vehicle effects, Auto quality, the FPS readout's true time),
+    then the art, audio and performance passes and the bug bash (Remaining work → M9), then
+    M10.
   - Read `HANDOFF.md` first, then this file. **Remaining work** (below the milestones) is the
     checklist.
 - **Missions and activities (2026-10-25):** the bot wins every story mission, the race and both
@@ -117,8 +120,36 @@ resumed or compacted session reads first.
       - **Checks (release, at `bd2b6db`):** every workspace crate's tests pass (pav_core 313,
         gtf_game 147 with 25 long ones ignored, pav_view 47, pav_tools with the rest 202; run
         crate by crate to fit the disk, Log), and wasm clippy is clean.
-- [ ] **M8 Frontend and attract** — title, menus, settings, About, loading cards, attract director,
-      touch = attract only.
+- [x] **M8 Frontend and attract** — title, menus, settings, About, loading cards, attract director,
+      touch = attract only. *Acceptance (2026-10-25):*
+      - **Tests:** `tests/frontend.rs` (16: boot → title → menu → loading card → free roam,
+        settings applied, About's pages, the pause tabs, save and restart, pointer focus) and
+        `tests/attract.rs` (8: idle starts it, any device's input ends it, touch screens never
+        leave it and show only the gear, each vignette sets up and plays, a new vignette starts
+        from an empty world, the card's prompt without the FPS readout).
+      - **Attract soak** (release `gtf soak mode=attract seconds=1800`, 30 minutes each): seeds
+        1 and 2 clean — no stall, nothing fell through the world, no NaN, every vignette played
+        6-7 times (48 and 46 plays), the entities per complete loop flat (seed 1: 561-583, seed
+        2: 570-593) and the memory flat from the second loop (252-260 MiB), 0.78-0.81 ms a tick
+        (`out/soak/attract_s1.json`, `attract_s2.json`). Lost chases end the pursuit vignette
+        (the protagonist out of the car, or boxed in by the police for 6 s) instead of counting
+        as stalls.
+      - **Browser checks** (`scripts/web-check.mjs` on `dist/GrandTheftFreeway-BX.html?perf=1`,
+        headless Chromium on SwiftShader at 0.1-0.3 frames a second): **desktop** — boot, the title
+        at 175 s, the attract loop after its idle at 686 s (the dock fight), Space back to the
+        title at 825 s; **mobile** (844×390, touch) — the attract loop straight from boot at
+        179 s, taps leave it playing (`attract: a touch; the loop plays on`), the gear opens its
+        overlay (sound, graphics, the frame-rate readout off, About, close) at 382 s; no panic,
+        never the main menu (`out/m8/web_desktop.txt`, `web_mobile.txt`, the screenshots looked
+        at). The perf line is logged throughout; the browser's sim time is measured in M10's
+        final run with nothing else running.
+      - **Captures with the HUD**, every frontend screen looked at (`out/m8/front/`: boot,
+        title, main menu, the five settings pages, About's five pages, the four intro cards,
+        play, the pause tabs, a loading card; `out/m8/attract/`: each vignette twice, the cut,
+        the touch gear, its overlay and About). Fixed after looking: the main menu was never
+        drawn, settings labels cut off, a "→" in a font without it, the title's bare slope,
+        cine shots inside walls, the stunt banner carried into the next vignette, the switch
+        vignette standing off-road, "DEMO" shown as a hint.
 - [ ] **M9 Polish** — art, animation, audio mix, UX against the 10-foot rules, accessibility,
       performance, bug bash.
 - [ ] **M10 Release** — builds (native, Windows `.exe`, `dist/GrandTheftFreeway-BX.html`), docs,
@@ -257,47 +288,49 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
       quay end let cars into the sea (a view of it now, `quay_dead_end`). Art notes for M9 are
       in Open issues.
 
-**M8 frontend and attract**
-- [ ] **Screens.** The title is a drone orbit over downtown; PLAN wants the hills at golden hour.
-      Also needed: a new-game intro, and loading cards that use the engine's halftone and
-      painterly filters (the game does not use them yet). Pause → Game lacks Save and Restart
-      checkpoint, Map lacks its filter and snap, and Brief lacks the log and texts.
-- [ ] **Settings.** Add aim-assist strength, separate X/Y sensitivity, sprint hold/toggle, the
-      default station, the quality preset, render scale, dynamic resolution, v-sync, brightness,
-      subtitle size and colourblind blips. Nothing reads these existing toggles yet: `subtitles`,
-      `reduce_shake`, `high_contrast`, `vibration` and the `dialogue` volume.
-- [ ] **About and credits.** Show the full §1 Source Information block (engine versions, the
-      environment, the model wording) and credit the fonts and the motion libraries. Fix the line
-      that says everything is generated.
-- [ ] **The attract director.** Today a 10 s idle only logs "attract would start". Build:
-      - `content/freeway/attract.toml` with the 7 vignettes of §5.8, each with its bots, shot
-        lists and captions;
-      - the logo and prompt overlay, exit at once on any input, stall handling, and a population
-        reset per vignette;
-      - `gtf soak mode=attract` (rejected today), the 30-minute soak and `tests/attract.rs`.
-- [ ] **Touch.** Start in attract and never leave it. Handle the `gear` button with its overlay
-      (`pav_ui` draws it; the game ignores it) and hide the HUD. Pass the `web-check.mjs`
-      desktop and mobile flows.
+**M8 frontend and attract** (done 2026-10-25; the milestone entry has the evidence)
+- [x] **Screens** (`dad4cd7`): the title is a live shot from the Mirador Hills at golden hour;
+      New Game plays an intro card per protagonist and one of the three (the painterly look),
+      then a loading card (halftone) over the still world; Pause → Game has Save (near the bed,
+      no mission, no stars) and Restart checkpoint; the Map has its filters and snaps to the
+      player; Brief has the mission log and the texts.
+- [x] **Settings** (`5185f23`, `dad4cd7`): five pages — AUDIO (master, music, effects, dialogue,
+      the default station), DISPLAY (fullscreen, quality Low-Ultra, render scale, dynamic
+      resolution, v-sync, brightness, the FPS readout), HUD (scale, safe area), CONTROLS (aim
+      assist strength, X and Y sensitivity, invert Y, sprint hold or toggle, vibration, button
+      glyphs), ACCESSIBILITY (subtitles and their size, colourblind blips, reduce camera shake,
+      high contrast, weapon-wheel slow motion, camera recentring); each is read by the game or
+      the host (`tests/frontend.rs`).
+- [x] **About and credits** (`dad4cd7`, M9): five pages with the full §1 Source Information
+      block, the fonts' and the motion libraries' credits (Quaternius, Mesh2Motion, 100STYLE,
+      CMU); the wording no longer says every asset is generated.
+- [x] **The attract director** (`725c06c`, `dad4cd7`, M9): seven vignettes in `attract.toml`
+      shuffled each loop, a cut through black with a caption card, the logo, caption and
+      prompt, exit at once on any device's input (typed tool commands excepted), stall
+      handling and lost chases, a population reset per vignette, `freeway/attract`,
+      `tests/attract.rs`, `gtf soak mode=attract`.
+- [x] **Touch:** attract only; the gear button and its overlay (About, sound, graphics, the FPS
+      readout); no HUD, captions or touch controls; the browser checks (desktop and mobile).
 
 **M9 polish**
-- [ ] **Gameplay.** Bullets don't burst tyres (only spike strips do), and traffic never turns its
-      headlights on at night. Missing:
-      - vault, the bat and a heavy melee attack;
-      - near-miss swerves and angry drivers getting out;
-      - scenario points beyond benches, and the siren yelp;
-      - a sky-cam that reaches 300 m in ≤ 3 s with its grid overlay (today 170 m in 3.6 s).
-- [ ] **Audio.** Add reverb zones (the game never sets `AudioScene.reverb`). Mix pass.
-      (Ducking landed with the radio: 8 dB under subtitled dialogue, 12 dB in menus.)
-- [ ] **Visuals.** Add camera shake (every `shake` is 0.0) that honours `reduce_shake`, rain
-      splashes on the ground and neon. Art pass at every time of day and weather.
-- [ ] **Performance.**
-      - The browser `?perf=1` console line with sim ms per tick is missing.
-      - The game has no quality presets (Low to Ultra, with population scaling); the engine's
-        Low/Medium/High exist only in its own egui menu. Dynamic resolution runs only on touch.
-      - `gtf perf` doesn't check particles, shadowed lights or active entities.
-      - Downtown must sit well under budget.
-- [ ] **Bug bash.** Clear the Open issues. Run the bots on 5 seeds. Test the edge cases: water,
-      falling, interiors, switching mid-chase, and saving during heat (refused).
+- [x] **Gameplay** (2026-10-25; tests in `combat.rs`, `player.rs`, `traffic.rs`, `driving.rs`,
+      `protagonists.rs`, `combat`'s unit tests; Decisions → M9): rounds burst tyres and break
+      lamps; traffic lights up after dark; vault (running at a low wall) and fall damage; the
+      bat in the fists' slot and a heavy hook on a held ○; near-miss swerves and angry drivers
+      getting out (calm free roam); scenario points as data (benches, stalls, umbrellas, the
+      net, tables); the siren's yelp; the sky-cam at 300 m in 3 s with its grid; first-time
+      tips; the helicopter's and the police car's control help; "Lose the cops." while wanted.
+- [ ] **Audio.** Reverb by place is in (`AudioScene.reverb`: indoors, under decks, the Ditch,
+      downtown). Mix pass (levels, no clipping) to check with `audio_capture`.
+- [ ] **Visuals.** Camera shake (honouring `reduce_shake`), rain splashes and brighter neon are
+      in; the art pass at every time of day and weather with captures remains.
+- [ ] **Performance.** The browser's `?perf=1` line (sim 0.1-4.5 ms a tick in SwiftShader), the
+      quality presets Low-Ultra with population scaling and desktop dynamic resolution (M8),
+      Low on software adapters, and `gtf perf`'s shadowed lights, particles and entities are
+      in; downtown well under budget remains to be measured.
+- [ ] **Bug bash.** Clear the Open issues. Run the bots on 5 seeds. Edge cases: water (swim;
+      `driving.rs` sinks a car), falling (fall damage), interiors (`landmarks.rs`), switching
+      mid-chase (refused: `protagonists.rs`), saving during heat (refused: `economy.rs`).
 
 **M10 release**
 - [ ] **Builds.** `scripts/build-windows.sh` doesn't zip the `.exe`. `pack_single_html.py`
@@ -321,8 +354,8 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 | D5 Heat | ◐ | M5: `tests/heat.rs` (reporting, arrest, Wasted, respray, car swap, evasion), police never spawn in view, 3★ night captures |
 | D6 Missions and activities | ✔ | M6: the mission system end to end (`tests/missions.rs`, `docs/gtf/MISSIONS.md`). 2026-10-24: the eight story missions with the heist both ways; the bot wins each on seeds 1-3 (`play bot=true seeds=3`; ignored `story_*` tests). 2026-10-25: every activity (race, 5 jumps, 2 hold-ups, vigilante, 2 random events, 15 Lost Shields), each won by the bot on seeds 1-3 (`activity_*`, `activities.rs`, `activities_street.rs`); completion and STATS cards. Economy and saves from M6 (`tests/save.rs`: a round trip, an old save, a refused newer or broken one). M7 acceptance at `bd2b6db`: 27/27 story runs, 9/9 activity missions, 9/9 street activities, all first time; the whole game by the bots to 98.0% completion (`tests/completion.rs`) |
 | D7 UI | ◐ | M1 kit + M6 screens: intro card, objectives, subtitles, fail card, results, switch wheel, phone (9 apps), shop menus, save slots, captured with HUD (`out/m6/`); the 10-foot review is M9 |
-| D8 Frontend | ☐ | |
-| D9 Attract mode | ☐ | |
+| D8 Frontend | ✔ | 2026-10-25 (M8): boot splash → title (a live shot of the Mirador Hills) → main menu (Continue, New Game, Free Roam, Settings, About, Quit) → intro and loading cards (painterly and halftone looks); settings on five pages (audio, display and quality, HUD, controls, accessibility), each read by the game or the host; About on five pages with the §1 Source Information block and the fonts' and motion libraries' credits. `tests/frontend.rs` (16); every screen captured with the HUD and looked at (`out/m8/front/`) |
+| D9 Attract mode | ✔ | 2026-10-25 (M8): 10 s without input on the title or a menu page starts the loop; the seven §5.8 vignettes (`attract.toml`: golden cruise with the radio, the 3★ pursuit with the SPPD helicopter, the dock gunfight in cover, the switch, big air, city life, the job's getaway), shuffled per loop, cut through black with a caption card; any device's input returns to the title at once; touch screens play it only, with the gear the only thing over the world. `tests/attract.rs` (8); 30-minute soaks on seeds 1 and 2 with no stall, fall or NaN and flat entities and memory (`out/soak/attract_s1.json`, `attract_s2.json`); the browser flows on desktop and phone (`out/m8/web_*`); captures `out/m8/attract/` looked at |
 | D10 Audio | ☐ | Radio part done 2026-10-24: 5 music stations + SPNN talk, DJ cards, scanner chatter, the radio −6 dB under the effects and ducked 8 dB (dialogue) / 12 dB (menus); `cargo test -p pav_audio`, `-p gtf_game --test radio`; captures `out/radio/`. SFX, loops and the mix pass remain (M9). |
 | D11 Visuals (incl. FPS readout) | ☐ | |
 | D12 Performance | ◐ | `gtf perf view=all` (release) within every budget with the population, 2026-10-18 |
@@ -626,8 +659,121 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
     one. The air unit lights its lamps at night and its bar while it pursues.
   - A protagonist's `cap` is a baseball cap. Beards are a quarter as likely with long, bun or
     ponytail hair.
+- 2026-10-25 — **M8: the frontend and the attract loop.**
+  - **Attract corner:** the UI kit's attract layout puts the logo top left with the caption
+    under it (PLAN draws it bottom left). "DEMO" leads the caption; "PRESS ANY BUTTON" breathes
+    at the bottom right without a button glyph (as a hint it showed the on-foot map's ✕ key,
+    SHIFT, in the browser). The FPS readout is hidden while the loop plays: it sat on the
+    logo.
+  - **What counts as a stall:** a bot without 4 m of headway for 6 s, unless something else is
+    playing it: a light or a queue the autopilot waits in, a random event's own bot, a switch's
+    sky-cam, a mission's cutscene, aiming in a fight, the aftermath of a fight won or a chase
+    shaken off (5 s). A vignette may set its own (the chase: 10 s, backing out of tight spots).
+    A cruise's `goal` must be reached (missing it is an anomaly); `toward` only heads somewhere
+    (the autopilot keeps to planned roads: cruising with no goal once ran it into a closed
+    lane's end).
+  - **Vignettes end early** when their goal is reached, the stunt run is over, the fight is won
+    or the chase shaken off (5 s later), the mission is no longer in play, or the protagonist is
+    wasted or busted (3 s later). A chase is also over when it is lost: the protagonist out of
+    the car, or the car boxed in for 6 s with the police within 30 m (the soak's last two
+    stalls were these). Only a stall with nobody to blame counts as an anomaly.
+  - **The soak's flatness** sums the vignettes' entity counts per complete loop and holds every
+    loop within 10% of the first: one sample of a vignette varies with the traffic round it
+    (the switch saw 48 then 58), a leak grows loop after loop.
+  - **The heist excerpt starts at the jump** (`mission skip 5`): Mack at the truck at 4★, the
+    sky-cam to Dez in the Okami Kaze, the broken ramp, losing the police. Skipping four
+    checkpoints from the start left the truck and the bags 130 m apart once in five (skip is
+    built for one checkpoint after a real fail).
+  - **The dock fight** is in the open yard south of Harbor Gate Freight's warehouse (on Harbor
+    Gate Road the gang stood behind the warehouse wall), with eight gang members who know where
+    Mack is (`enemies alert`).
+  - **Quality presets:** Low, Medium and High are the host's presets; Ultra is the host's High
+    with 1.2× the traffic and crowds (Low 0.55, Medium 0.8, High 1.0). Until the player changes
+    a setting the host keeps its own (phones and tablets start at Medium with dynamic
+    resolution).
+  - **Settings pages:** five (AUDIO, DISPLAY, HUD, CONTROLS, ACCESSIBILITY) so none passes seven
+    items; "camera recentres" moved to Accessibility.
+  - **Title shot:** from the Mirador Hills over Los Mirados toward downtown's towers, drifting
+    east. The drone over Route 404's north end put a bare slope across half the picture. The
+    clock holds at golden hour while the menus are up.
+  - **The main menu was never drawn:** its card had asked for the attract corner layout
+    (`small_logo`), which draws no menu, since M1; it uses the kit's title-with-menu layout now.
+  - **Bodies are not solid** (`Sim::set_solid`): a fallen standing body stopped bullets and
+    sight lines (the dock fight's bot stood before one, unable to shoot past it).
+  - **Rumble:** the player's crashes (by impulse) and blasts near them; off with Vibration, and
+    never in the attract loop.
+  - **About** is five pages (GAME, SOURCE, ENGINE, MADE BY, CREDITS) so each keeps to six rows;
+    "→" reads "then" (the UI font has no arrow).
+  - **The UI Gallery** left the player's menus; `freeway/gallery` and the Proving Grounds keep
+    it.
+  - **Save from the pause menu** within 30 m of the protagonist's bed, on no mission and with no
+    stars (the bed's own menu opens).
+  - **Loading cards** hold the world still behind them (a still picture under the filter);
+    the ground streams in at once when the card starts.
+
+- 2026-10-25 — **M9, gameplay and city (first batch):**
+  - **Traffic minds the player's driving in calm free roam only** (`Freeway::traffic_minds`:
+    no mission, street job, attract loop or stars). There, a driver the player runs into gets
+    out (40% square up, 35% film, 25% leave; never a mission's car, a bus or a pilot), and a
+    near miss (the meter's own test: another vehicle within an arm's length at a closing speed
+    over 12 m/s) makes a calm driver stop short (1.2 s) or swerve away with the horn, half and
+    half. In `dev_test`'s race a driver standing in the road was run over and the bot busted.
+  - **The bat** takes the fists' slot once owned (the wheel keeps eight slots): weapons.toml
+    lists it after the eight (`combat::BAT`), Bang Bang Bros. sells it for $100, the HUD and the
+    wheel name it. **Heavy melee:** ○ held 0.45 s after the jab swings `heavy` once a hold (the
+    fists' Melee_Hook): 2.2× damage, 2.6× knock-back, 0.3 m more reach, lands at 0.36 s.
+  - **Vault:** running (over 3 m/s, on the ground) at something between knee and chest height
+    (0.5-1.4 m rays) presses jump; the ledge grab (already on) climbs what the jump falls short
+    of. People are taller than the chest ray, so the player never vaults a person.
+  - **Scenario points** are data (`peds.toml` `[[scenario]]`): benches (three seats), the food
+    stalls (eating), beach umbrellas (meditating, asleep), the volleyball net (cheering),
+    picnic and café tables; 30% of lingering people pick the nearest free one within 30 m.
+    Which clip they play there goes by who they are, not by the sim's random generator: one
+    more draw per arrival reshuffled every chase after it, and the 3★ evasion test fell from
+    3+ of 5 to 0 of 5 (the bot is sensitive to the order of events; Open issues).
+  - **Sirens:** L3 tapped in a police car cycles wail, yelp, off; a patrol's siren yelps within
+    30 m of the listener (closing in) and wails further out.
+  - **Rounds** burst the tyre they hit (within its radius + 0.12 m) or break the lamp (within
+    0.3 m); traffic drives with lights on after dark and in rain, storm and fog, as the player.
+  - **Camera shake** (honouring Reduce camera shake): 0.18 a shot, the rumble's low motor on
+    crashes and blasts, dying away at e^-6t. **Reverb** by place: indoors 0.45, under a deck or
+    roof 0.32, in the Ditch 0.3, downtown 0.14, else 0.05.
+  - **Sky-cam:** 300 m up, 3.0 s in all (0.9 rise, 1.1 cross, 1.0 drop), with a map grid every
+    50 m 60 m over the ground and the picture greyed while it is high (PLAN §5.6.2).
+  - **Fell through:** ambient people below -30 m are removed by the per-tick sweep (the soaks
+    found a few in the switch vignette each 30 minutes; the cause was not reproduced in two
+    traced loops).
+- 2026-10-25 — **M9, engine (first batch):**
+  - `SimEvent::Fx` was declared (E4) but nothing drew it: `pav_view::fx::event_bursts` now
+    draws a game's preset bursts (a dozen particles at scale 1), and a `splash` preset makes
+    the game's rain splashes (positions from a hash of the tick, not the sim's generator).
+  - **Auto quality is Low on a software adapter** (SwiftShader, lavapipe, WARP: `DeviceType::Cpu`)
+    with a quarter-megapixel render target and dynamic resolution; the browser check's title
+    drew a frame every few seconds at High.
+  - `gtf perf` reports and budgets shadowed lights (≤ 4), particles (≤ 30,000) and entities
+    (≤ 450) beside the old figures (PLAN §6.9).
+  - Neon tubes are thicker (11 cm on landmarks, 5.5 cm half-depth on shop bands) and the tube
+    that lights the wall glows 1.6 (others stay at 0.5: above it a glow becomes a light). Road
+    paint is a worn white (#d2cec2); palm fronds a deeper green.
+  - **Fall damage:** landing faster than 12 m/s (a drop of about 2.3 m: characters fall at
+    32 m/s²) costs 12 health per m/s beyond — a 5 m drop about 70, the fastest fall (26 m/s,
+    from 10.6 m up) 168 of 200; not into water, onto a ledge or a ladder, or in a seat.
+  - **First-time tips** (`tips.rs`): the first time the player is wanted, swims, holds a gun,
+    has a full ability meter or stands unarmed a while, the help box says what to do, once a
+    game (the save keeps which were shown).
+  - **The HTML's header comment** carries the Source Information block
+    (`scripts/gtf-source-information.txt`, `pack_single_html.py --header`).
 
 ## Open issues
+- **The evasion bot is sensitive to the order of events:** one extra random draw elsewhere
+  reshuffled the chases and the 3★ test fell to 0 of 5 (the getaway car boxed in by cars pulled
+  over for the sirens, then shot at). It passes as committed; a sturdier unstick (shove through,
+  bail out sooner) would make it robust.
+- **SwiftShader draws the browser build at 0.1 frames a second** (frame 9-16 s at 960x540, even
+  at Low on the software adapter); the sim keeps to 0.1-4.5 ms a tick. The browser checks
+  wait on log lines with long timeouts; a real GPU is unaffected.
+- **VFX not done:** exhaust puffs, dust trails on dirt, heat haze on the freeway at noon
+  (PLAN §5.11's list; the rest are in).
 - Roam soak (900 s, seed 1): one car gave up stuck at a dead-end keyhole turnaround (limit 0);
   roam AI crashes 0-3 per 900 s with buses turning at junctions the most common. M9 polish.
   (Since session 5 the avenue's quay end is closed off like the map's edge; re-check in M9's
@@ -638,17 +784,15 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
   with a goal are held to it), so on a winding route the bot rarely closes in and a long chase
   is what costs a run (seeds 1-3 win since the placed-car rule; seed 6 of 1-8 ran out level 3's
   clock in session 5's first measure). M9: hold runners to the turn speed too, or ram sooner.
-- **Free roam's tip while wanted:** at 4★ the bottom line still says "Explore Paloma Bay. Hold
-  L1 for the weapon wheel." just above the dispatch subtitle; PLAN's HUD shows "Lose the cops."
-  there (M9 UX pass).
+- ~~**Free roam's tip while wanted**~~ fixed in M9: free roam's objective reads "Lose the
+  cops." while wanted, and the first time the police are after you a tip says how.
 - **Art notes from the landmark captures (M9 art pass):** at night the palms' fronds glow
   lime green as if lit, the crosswalk paint reads near white, and the shop signs' neon barely
   shows; traffic drives without headlights (Remaining work).
-- **Helicopters (the looks helper):** the helicopter HUD shows a car's control prompts; the
-  canopy is opaque, so its crew cannot be seen; the searchlight's spot on the ground was not
-  identified in a capture (only its origin moved to the body's lamp).
-- **The UI Gallery** sits in the main menu and the pause menu's Game tab: a developer's page in
-  the player's menus (M8: keep it reachable from About instead, or for `freeway/gallery`).
+- **Helicopters (the looks helper):** the canopy is opaque, so its crew cannot be seen; the
+  searchlight's spot on the ground was not identified in a capture (only its origin moved to
+  the body's lamp). (Fixed in M9: the helicopter's own control help replaces a car's.)
+- ~~**The UI Gallery** in the player's menus~~ fixed in M8 (`freeway/gallery` only).
 - DualSense button mapping through gilrs on the user's Windows machine (a user check).
 - Dense traffic can lock a junction box into a queue that never clears (why missions thin
   traffic). M7/M9: give way by arrival order inside the box, or let the tail re-route.
@@ -665,8 +809,8 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
 - **Earlier evidence is not on disk.** `out/` is ignored by Git and containers reset, so the
   M0-M6 captures, filmstrips and soak JSON cited above are gone. M10's final verification
   re-runs the D1-D13/D16 commands and looks at fresh captures.
-- **About screen wording:** it says every model, sound and song is generated, but the walk
-  clips come from motion libraries. Fix with M8's About and credits. (The billboard now reads
+- ~~**About screen wording**~~ fixed in M8: the credits name the motion libraries (and, since
+  M9, the CMU database). (The billboard now reads
   FREEWAY FM 104.04 and the Big Wheel exists: both fixed by the landmarks merge.)
 - **Bot test time:** each story mission takes the bot 1-5 minutes of game time, so the
   `story_*` tests are ignored (run them in release, in parallel).
@@ -823,3 +967,17 @@ and the DoD table. PLAN stays the source of truth: this list says what is missin
     ignored; pav_core 313 passed; gtf_game 147 passed, 25 ignored (the long bot suites, run
     above); pav_view 47 passed, 1 ignored. `cargo clippy -p pav_app -p gtf_app --target
     wasm32-unknown-unknown -- -D warnings` clean.
+- 2026-10-25 — **M8 done** (`5185f23`, `725c06c`, `dad4cd7`, and the fixes in `b77fe2e`): the
+  title, menus, settings, About, intro and loading cards, the attract director with its seven
+  vignettes, touch = attract only. Acceptance in the milestone entry: `frontend.rs` 16,
+  `attract.rs` 8, 30-minute attract soaks clean on seeds 1 and 2, the desktop and phone browser
+  flows. The soaks found two pursuit stalls (boxed in; out of the car) and a switch vignette
+  whose entity count wandered between plays: a lost chase now ends the vignette, and the soak
+  judges entities per complete loop.
+- 2026-10-25 — **M9, first batch** (`6d0797b`, `589bca1`, `3365175`, `b77fe2e`, `2164b80`;
+  Decisions → M9). Checks before the push (release): gtf_game 171 passed, 0 failed, 26
+  ignored (the long bot suites); pav_app, pav_view, pav_ui, pav_world and pav_render 109
+  passed, 0 failed; pav_tools's lib and 22 suites one at a time 119 passed, 0 failed; clippy
+  `-D warnings` clean on every touched crate; fmt clean. The scenario points' first version
+  drew one more random number per arrival and the 3★ evasion test fell to 0 of 5: the clip
+  now goes by who sits there.
