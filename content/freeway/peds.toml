@@ -2,6 +2,13 @@
 # A look is drawn from the archetype's palettes and proportions (each archetype gives dozens of
 # distinct people); walks and idles are motion clips (the `clips` tool lists them); `pace` is the
 # walking speed in m/s; `zones` lists where an archetype appears (empty: everywhere).
+# `wear` is what they wear beyond the clothes' colours (gtf_game::looks::Wear, PLAN.md §6.8.4):
+# `hair` weights by style (buzz, short, long, bun, ponytail, curly, afro, bald, none; empty: a
+# mix of them all) and `hair_color` its palette (empty: natural colours); `beard` the chance of
+# each style (stubble, mustache, goatee, full), a quarter as likely with long or tied-back hair;
+# `accessories` the chance of each: headwear (ballcap, beanie, hardhat, helmet, hood: at most
+# one; a hood is the shirt's colour), sunglasses, a bag (backpack, shoulder_bag: at most one),
+# badge, vest, tie; `hats`, `bags`, `vests`, `ties` their palettes (empty: defaults).
 
 [density]
 max = 60                  # hard cap on people around the player
@@ -11,6 +18,35 @@ despawn = 150.0           # leave when farther than this and out of view
 night = 0.35              # share of the day's crowd still out at 03:00
 # Crowd by zone, as a share of `max` (zones not listed: 0.3).
 zones = { downtown = 1.0, commercial = 0.85, beach = 0.8, park = 0.6, residential = 0.4, hills = 0.2, industrial = 0.2, docks = 0.2, corridor = 0.3, wild = 0.05, shops = 0.9, lot = 0.4, missions = 0.5, range = 0.2, pad = 0.1, yard = 0.2 }
+
+# Everyone in the game is built on these proportions (metres; heights and builds then vary
+# them): believable ones (PLAN.md §5.11), a smaller head on a longer neck and longer legs than
+# the engine's default biped, standing 1.72 m before each person's height.
+[body]
+head_radius = 0.13
+neck = 0.12
+torso_length = 0.47
+torso_radius = 0.165
+shoulder_width = 0.21
+hip_width = 0.1
+leg_length = 0.9
+arm_length = 0.62
+limb_radius = 0.065
+eyes_to_camera = 0.3
+
+# SPPD officers on foot: dark navy uniforms, a cap and a badge (the service pistol comes from
+# weapons.toml).
+[police]
+skin = ["#f1c9a5", "#e0ac83", "#c68a62", "#8d5a3b", "#6b4428"]
+shirt = "#1d2b4f"
+pants = "#141a2b"
+shoes = "#0d0d0f"
+height = [1.68, 1.92]
+build = [1.0, 1.2]
+wear.hair = { short = 3, buzz = 2.5, bald = 0.6, bun = 0.8, ponytail = 0.5 }
+wear.beard = { mustache = 0.12, stubble = 0.06 }
+wear.accessories = { ballcap = 1.0, sunglasses = 0.3, badge = 1.0 }
+wear.hats = ["#16203a"]
 
 [[archetype]]
 id = "local"
@@ -24,6 +60,9 @@ build = [0.9, 1.15]
 walks = ["STYLE100/Neutral_Walk", "STYLE100/HandsInPockets_Walk", "MESH2MOTION/Walk_Female", "QUATERNIUS/Walk_Loop", "STYLE100/ArmsBySide_Walk"]
 idles = ["MESH2MOTION/Idle_A", "MESH2MOTION/Idle_Subtle", "MESH2MOTION/Idle_FoldArms", "MESH2MOTION/Idle Listening"]
 pace = [1.25, 1.55]
+wear.hair = { short = 3, buzz = 1.2, long = 1.5, ponytail = 1, bun = 0.6, curly = 1, afro = 0.4, bald = 0.5 }
+wear.beard = { stubble = 0.08, full = 0.06, goatee = 0.05, mustache = 0.03 }
+wear.accessories = { ballcap = 0.18, beanie = 0.04, sunglasses = 0.2, backpack = 0.08, shoulder_bag = 0.12 }
 
 [[archetype]]
 id = "tourist"
@@ -38,6 +77,11 @@ build = [0.95, 1.25]
 walks = ["STYLE100/LookUp_Walk", "STYLE100/Neutral_Walk", "STYLE100/BigSteps_Walk"]
 idles = ["MESH2MOTION/Idle_TalkingPhone", "MESH2MOTION/Idle Listening", "MESH2MOTION/Idle_A"]
 pace = [1.0, 1.3]
+wear.hair = { short = 3, long = 2, ponytail = 1.2, bun = 0.6, buzz = 0.8, curly = 0.6, bald = 0.6 }
+wear.hair_color = ["#2b1d14", "#3a271b", "#5a3b24", "#7a5434", "#b88a4a", "#d9c08a", "#e3d4a8", "#8a3f22"]
+wear.beard = { stubble = 0.06, full = 0.04, mustache = 0.03 }
+wear.accessories = { ballcap = 0.4, sunglasses = 0.6, backpack = 0.3, shoulder_bag = 0.15 }
+wear.hats = ["#f2f2ee", "#ff595e", "#1982c4", "#ffca3a", "#3a5a40", "#e9d8a6"]
 
 [[archetype]]
 id = "jogger"
@@ -53,6 +97,9 @@ walks = []
 idles = ["MESH2MOTION/Idle_ShakeOff"]
 pace = [3.2, 4.2]
 run = true
+wear.hair = { ponytail = 3, short = 2, buzz = 1.5, bun = 0.6, curly = 0.4 }
+wear.accessories = { ballcap = 0.25, sunglasses = 0.4 }
+wear.hats = ["#f8f9fa", "#212529", "#ef476f", "#118ab2"]
 
 [[archetype]]
 id = "businessperson"
@@ -67,6 +114,11 @@ build = [0.95, 1.1]
 walks = ["MESH2MOTION/Walk_Formal", "STYLE100/Rushed_Walk", "STYLE100/OnPhoneRight_Walk", "STYLE100/Proud_Walk"]
 idles = ["MESH2MOTION/Idle_TalkingPhone", "MESH2MOTION/Idle_FoldArms"]
 pace = [1.4, 1.7]
+wear.hair = { short = 4, bun = 1.6, long = 1, buzz = 0.8, bald = 0.7, ponytail = 0.4 }
+wear.beard = { stubble = 0.06, full = 0.04 }
+wear.accessories = { sunglasses = 0.12, shoulder_bag = 0.35, tie = 0.55 }
+wear.bags = ["#111111", "#3e2723", "#2b2d42"]
+wear.ties = ["#7a1f2b", "#1d3557", "#6a4c93", "#2a9d8f", "#c9ada7"]
 
 [[archetype]]
 id = "beachgoer"
@@ -81,6 +133,11 @@ build = [0.85, 1.15]
 walks = ["STYLE100/Strutting_Walk", "STYLE100/Neutral_Walk", "STYLE100/Elated_Walk"]
 idles = ["MESH2MOTION/Idle_A", "MESH2MOTION/Idle_Talking"]
 pace = [1.0, 1.3]
+wear.hair = { long = 3, short = 2, ponytail = 1.5, bun = 1, curly = 1, buzz = 0.6, afro = 0.3 }
+wear.hair_color = ["#d9c08a", "#e3d4a8", "#b88a4a", "#7a5434", "#3a271b", "#1c1714"]
+wear.beard = { stubble = 0.06, full = 0.03 }
+wear.accessories = { sunglasses = 0.65, ballcap = 0.15, shoulder_bag = 0.2 }
+wear.bags = ["#ffbe0b", "#e76f51", "#2a9d8f", "#f1faee"]
 
 [[archetype]]
 id = "worker"
@@ -95,6 +152,10 @@ build = [1.05, 1.3]
 walks = ["STYLE100/Heavyset_Walk", "STYLE100/Neutral_Walk", "MESH2MOTION/Walk_Large"]
 idles = ["MESH2MOTION/Idle_FoldArms", "MESH2MOTION/Idle_A"]
 pace = [1.2, 1.45]
+wear.hair = { short = 3, buzz = 3, bald = 1, curly = 0.6, ponytail = 0.4 }
+wear.beard = { stubble = 0.15, full = 0.15, mustache = 0.08, goatee = 0.06 }
+wear.accessories = { hardhat = 0.55, ballcap = 0.2, beanie = 0.08, sunglasses = 0.1, vest = 0.35 }
+wear.vests = ["#c8f03c"]
 
 [[archetype]]
 id = "influencer"
@@ -109,6 +170,10 @@ build = [0.85, 1.0]
 walks = ["STYLE100/Strutting_Walk", "STYLE100/OnPhoneLeft_Walk", "MESH2MOTION/Walk_Female"]
 idles = ["MESH2MOTION/Idle_TalkingPhone"]
 pace = [1.1, 1.35]
+wear.hair = { long = 4, bun = 1.5, ponytail = 1.5, short = 0.8, curly = 0.6 }
+wear.hair_color = ["#1c1714", "#3a271b", "#d9c08a", "#e3d4a8", "#e86aa0", "#b06ab3", "#4a7ad8"]
+wear.accessories = { sunglasses = 0.55, shoulder_bag = 0.45, ballcap = 0.1 }
+wear.bags = ["#f8f9fa", "#ffafcc", "#212529", "#cdb4db"]
 
 [[archetype]]
 id = "elder"
@@ -122,6 +187,11 @@ build = [0.95, 1.2]
 walks = ["STYLE100/Old_Walk", "STYLE100/BentForward_Walk"]
 idles = ["MESH2MOTION/Idle_Subtle", "MESH2MOTION/Idle Listening"]
 pace = [0.8, 1.05]
+wear.hair = { short = 2, bald = 2, bun = 1, buzz = 0.6, curly = 0.4 }
+wear.hair_color = ["#8f8a84", "#b0aba5", "#cfcac4", "#e6e2dc", "#6e655c"]
+wear.beard = { mustache = 0.12, full = 0.1, stubble = 0.04 }
+wear.accessories = { ballcap = 0.12, sunglasses = 0.15, shoulder_bag = 0.12 }
+wear.hats = ["#e9d8a6", "#6b705c", "#2b2d42", "#f4f1de"]
 
 [[archetype]]
 id = "security"
@@ -136,3 +206,7 @@ build = [1.05, 1.3]
 walks = ["STYLE100/Proud_Walk", "STYLE100/ArmsBehindBack_Walk"]
 idles = ["MESH2MOTION/Idle_FoldArms"]
 pace = [1.1, 1.3]
+wear.hair = { buzz = 3, short = 2, bald = 1 }
+wear.beard = { goatee = 0.12, stubble = 0.1, mustache = 0.06 }
+wear.accessories = { ballcap = 0.35, sunglasses = 0.35, badge = 1.0 }
+wear.hats = ["#14213d"]

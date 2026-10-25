@@ -123,6 +123,9 @@ impl VigilanteDef {
         if self.level.is_empty() {
             errs.push("vigilante: no levels".into());
         }
+        if let Err(e) = self.look.wear.check() {
+            errs.push(format!("vigilante: look wear: {e}"));
+        }
         let weapons = crate::combat::def().ok();
         for (i, l) in self.level.iter().enumerate() {
             for k in &l.kinds {

@@ -18,7 +18,7 @@ use pav_core::entity::EntityId;
 use pav_core::frame::SimEvent;
 use pav_core::input::pad;
 use pav_core::present::*;
-use pav_core::puppet::{BodyPlan, PuppetDef};
+use pav_core::puppet::PuppetDef;
 use pav_core::rng::Rng;
 use pav_core::sim::Sim;
 use pav_core::{Color, games::Outcome};
@@ -53,7 +53,8 @@ const DROP_NEAR: f32 = 14.0;
 /// A robber left this far behind for this long (s) gives up.
 const BEHIND_FOR: f32 = 8.0;
 
-/// Clothes for people an activity puts in the street (`look` tables): each picked at random.
+/// Clothes for people an activity puts in the street (`look` tables): each picked at random,
+/// and what they wear (`wear`: hoods, beanies, sunglasses... as `crate::looks::Wear`).
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LookDef {
@@ -65,6 +66,8 @@ pub struct LookDef {
     pub pants: Vec<String>,
     #[serde(default)]
     pub shoes: Vec<String>,
+    #[serde(default)]
+    pub wear: crate::looks::Wear,
 }
 
 fn pick(v: &[String], rng: &mut Rng) -> Option<String> {
@@ -72,9 +75,10 @@ fn pick(v: &[String], rng: &mut Rng) -> Option<String> {
 }
 
 impl LookDef {
-    /// Someone dressed from the palettes (a missing palette keeps the biped's own).
+    /// Someone dressed from the palettes (a missing palette keeps the biped's own) on the game's
+    /// biped; what they wear from a fork of `rng` (`crate::looks`).
     pub fn puppet(&self, rng: &mut Rng) -> PuppetDef {
-        let mut p = PuppetDef::preset(BodyPlan::Biped);
+        let mut p = crate::looks::person();
         if let Some(c) = pick(&self.skin, rng) {
             p.skin = c;
         }
@@ -92,6 +96,7 @@ impl LookDef {
         p.torso_radius *= build;
         p.hip_width *= build;
         p.idle_clip = "MESH2MOTION/Idle_A".into();
+        self.wear.dress(&mut p, rng);
         p
     }
 }
@@ -191,6 +196,9 @@ impl EventDef {
         }
         if self.title.is_empty() {
             errs.push(format!("event {}: no title", self.id));
+        }
+        if let Err(e) = self.look.wear.check() {
+            errs.push(format!("event {}: look wear: {e}", self.id));
         }
         errs
     }

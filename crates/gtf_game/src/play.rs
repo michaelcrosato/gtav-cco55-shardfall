@@ -394,7 +394,8 @@ impl Freeway {
             .entities
             .iter()
             .filter_map(|e| {
-                let v = e.vehicle.as_ref()?;
+                // Cars pull over for sirens on the road, not for a helicopter's light bar.
+                let v = e.vehicle.as_ref().filter(|v| v.def.kind != pav_core::vehicle::VehicleKind::Helicopter)?;
                 v.state.siren_on.then(|| (e.pos, e.rot * Vec3::Z))
             })
             .collect();

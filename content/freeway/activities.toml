@@ -215,6 +215,10 @@ skin = ["#f1c9a5", "#e0ac83", "#c68e62", "#a26a42", "#7a4b2a", "#4f3220"]
 shirt = ["#26262b", "#3b2f2f", "#2f3b4a", "#4a3b24", "#5a1f24", "#1f3a2a"]
 pants = ["#1d2430", "#2a2a2a", "#3a3a40", "#20304a"]
 shoes = ["#111111", "#2a2a2a", "#e6e6e6"]
+wear.hair = { buzz = 2, short = 2, curly = 1, long = 0.6, afro = 0.3, bald = 0.4 }
+wear.beard = { stubble = 0.15, goatee = 0.1, mustache = 0.05 }
+wear.accessories = { hood = 0.45, beanie = 0.2, ballcap = 0.15, sunglasses = 0.15 }
+wear.hats = ["#1f1f24", "#3b2f2f", "#5a1f24", "#20304a"]
 
 [[vigilante.level]]
 cars = 1
@@ -328,8 +332,13 @@ wait = "Hey, wait for me!"
 thanks = "Nice driving. Here's your cut."
 gone = "Forget it, I'll find another ride."
 
-[event.look]   # a dark hoodie and a cash-stuffed sweat
+[event.look]   # a dark hoodie, a beanie or a cap, the cash in a backpack
 skin = ["#f1c9a5", "#e0ac83", "#c68e62", "#a26a42", "#7a4b2a"]
 shirt = ["#1f1f24", "#2b2b30", "#30242a"]
 pants = ["#1d2430", "#2a2a2a"]
 shoes = ["#111111", "#2a2a2a"]
+wear.hair = { buzz = 2, short = 2, curly = 1, long = 0.5 }
+wear.beard = { stubble = 0.2, goatee = 0.1 }
+wear.accessories = { hood = 0.5, beanie = 0.3, ballcap = 0.15, sunglasses = 0.25, backpack = 0.45 }
+wear.hats = ["#1f1f24", "#2b2b30"]
+wear.bags = ["#1f1f24", "#3e2723"]

@@ -14,19 +14,42 @@ use glam::{Vec2, Vec3};
 use pav_core::entity::EntityId;
 use pav_core::input::buttons;
 use pav_core::present::CameraIntent;
-use pav_core::puppet::{BodyPlan, PuppetDef};
+use pav_core::puppet::PuppetDef;
 use pav_core::rng::Rng;
 use pav_core::{InputFrame, Sim};
 use pav_world::City;
 use pav_world::walk::Walk;
 use serde::{Deserialize, Serialize};
 
+use crate::looks::{Body, Wear};
+
 /// `peds.toml`.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PedsDef {
     pub density: Density,
+    /// The proportions everyone in the game is built on (`crate::looks::Body`).
+    #[serde(default)]
+    pub body: Body,
+    /// SPPD officers on foot (`police::uniform`).
+    #[serde(default)]
+    pub police: Option<Officers>,
     pub archetype: Vec<Archetype>,
+}
+
+/// The SPPD's uniform: skin tones, the uniform's colours and what officers wear with it.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Officers {
+    pub skin: Vec<String>,
+    pub shirt: String,
+    pub pants: String,
+    pub shoes: String,
+    /// Standing height (m) and build (1 = average).
+    pub height: [f32; 2],
+    pub build: [f32; 2],
+    #[serde(default)]
+    pub wear: Wear,
 }
 
 /// How many people, where and when.
@@ -67,6 +90,9 @@ pub struct Archetype {
     pub pace: [f32; 2],
     #[serde(default)]
     pub run: bool,
+    /// Hair, beards, headwear and accessories (`crate::looks::Wear`).
+    #[serde(default)]
+    pub wear: Wear,
 }
 
 /// The game's pedestrians (cached; re-read when the file changes during native hot reload).
@@ -87,6 +113,13 @@ pub fn def() -> Result<Arc<PedsDef>> {
         if a.skin.is_empty() || a.shirt.is_empty() || a.pants.is_empty() || a.shoes.is_empty() {
             return Err(anyhow!("content/freeway/peds.toml: '{}' needs skin, shirt, pants and shoes", a.id));
         }
+        a.wear.check().map_err(|e| anyhow!("content/freeway/peds.toml: '{}' wear: {e}", a.id))?;
+    }
+    if let Some(o) = &d.police {
+        if o.skin.is_empty() {
+            return Err(anyhow!("content/freeway/peds.toml: [police] needs skin"));
+        }
+        o.wear.check().map_err(|e| anyhow!("content/freeway/peds.toml: [police] wear: {e}"))?;
     }
     let d = Arc::new(d);
     *cache = Some((text.into_owned(), d.clone()));
@@ -96,8 +129,6 @@ pub fn def() -> Result<Arc<PedsDef>> {
 /// The walking speed the movement tuning gives with FOCUS held, and the running speed.
 const WALK: f32 = crate::player::WALK;
 const RUN: f32 = crate::player::RUN;
-/// Standing height of the default biped (m).
-const BIPED_HEIGHT: f32 = 1.75;
 /// People farther than this from the player go low detail (no character controller), and come
 /// back to full detail nearer than `LOD_NEAR`.
 const LOD_FAR: f32 = 30.0;
@@ -202,25 +233,34 @@ fn pick<'a>(v: &'a [String], rng: &mut Rng) -> &'a str {
     &v[rng.below(v.len() as u32) as usize]
 }
 
-/// A look drawn from an archetype.
-pub fn look(a: &Archetype, rng: &mut Rng) -> PuppetDef {
-    let mut p = PuppetDef::preset(BodyPlan::Biped);
-    p.skin = pick(&a.skin, rng).into();
-    p.shirt = pick(&a.shirt, rng).into();
-    p.pants = pick(&a.pants, rng).into();
-    p.shoes = pick(&a.shoes, rng).into();
-    p.scale *= rng.range(a.height[0], a.height[1]) / BIPED_HEIGHT;
-    let build = rng.range(a.build[0], a.build[1]);
+/// Scales `p` (the game's biped) to stand `height` m tall and widens it by `build`.
+pub fn shape(p: &mut PuppetDef, body: &Body, height: f32, build: f32) {
+    p.scale *= height / body.height();
     p.torso_radius *= build;
     p.hip_width *= build;
     p.shoulder_width *= build.sqrt();
     p.limb_radius *= build.sqrt();
+}
+
+/// A look drawn from an archetype: the clothes' colours, height, build, walk and idle from
+/// `rng`; hair and accessories from a fork of it (`crate::looks`).
+pub fn look(a: &Archetype, rng: &mut Rng) -> PuppetDef {
+    let body = crate::looks::body();
+    let mut p = body.biped();
+    p.skin = pick(&a.skin, rng).into();
+    p.shirt = pick(&a.shirt, rng).into();
+    p.pants = pick(&a.pants, rng).into();
+    p.shoes = pick(&a.shoes, rng).into();
+    let height = rng.range(a.height[0], a.height[1]);
+    let build = rng.range(a.build[0], a.build[1]);
+    shape(&mut p, &body, height, build);
     if !a.walks.is_empty() {
         p.walk_clip = pick(&a.walks, rng).into();
     }
     if !a.idles.is_empty() {
         p.idle_clip = pick(&a.idles, rng).into();
     }
+    a.wear.dress(&mut p, rng);
     p
 }
 
