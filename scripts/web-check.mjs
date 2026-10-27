@@ -8,15 +8,17 @@
 //        [--shot-timeout MS]   (a screenshot waits for a frame: 120000 by default, SwiftShader is slow)
 //
 // Each step runs after the initial wait, in order, with a screenshot after it (step-<n>.png).
-// until: polls once a second until a console line logged AFTER the step started contains TEXT
-// (TEXT may contain colons; the timeout is the last field); on timeout the run fails and stops.
+// until: polls once a second until a console line logged since the last press, tap or wait step
+// began (or since the until step itself, when none came before it) contains TEXT — so a line a
+// press caused while its screenshot was taken counts, a line from boot does not. TEXT may
+// contain colons; the timeout is the last field; on timeout the run fails and stops.
 // --expect: the console must contain TEXT somewhere by the end (exit 1 if not); --forbid: it must
 // not. SwiftShader renders roughly 0.5-2 frames per second here and the browser build runs at most
 // 8 sim ticks per frame (it drops time when behind), so game time runs far below real time: poll
 // with `until:` and generous timeouts. Example (attract mode, PLAN.md §7.4):
 //   node scripts/web-check.mjs dist/GrandTheftFreeway-BX.html --wait 20000 \
 //     --step "until:frontend: attract:240000" --step "press:Space:0" --step "until:frontend: title:120000"
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 const PLAYWRIGHT = process.env.PLAYWRIGHT_MODULE || '/opt/node22/lib/node_modules/playwright/index.mjs';
@@ -57,11 +59,17 @@ const context = mobile
 const page = await context.newPage();
 const logs = [];
 const stamp = () => (performance.now() / 1000).toFixed(1).padStart(6);
-page.on('console', m => logs.push(`${stamp()} [${m.type()}] ${m.text()}`));
-page.on('pageerror', e => logs.push(`${stamp()} [pageerror] ${e.message}`));
+// (Each line also goes to console.live.log as it comes: long runs can be watched.)
+const live = join(out, 'console.live.log');
+writeFileSync(live, '');
+const note = line => { logs.push(line); appendFileSync(live, line + '\n'); };
+page.on('console', m => note(`${stamp()} [${m.type()}] ${m.text()}`));
+page.on('pageerror', e => note(`${stamp()} [pageerror] ${e.message}`));
 
 let n = 0;
 let ok = true;
+// Where the last action step's lines begin (until: steps read from here).
+let mark = -1;
 page.on('crash', () => logs.push(`${stamp()} [crash] the page crashed`));
 // A crashed page (out of memory, a lost GPU) still leaves its console log and the reason.
 try {
@@ -77,14 +85,15 @@ for (const s of steps) {
     const cut = body.lastIndexOf(':');
     const wanted = cut > 0 ? body.slice(0, cut) : body;
     const timeout = cut > 0 ? Number(body.slice(cut + 1)) : 60000;
-    const from = logs.length;
+    const from = mark >= 0 ? mark : logs.length;
+    mark = -1;
     const t0 = Date.now();
     let found = false;
     while (Date.now() - t0 < timeout) {
       if (logs.slice(from).some(l => l.includes(wanted))) { found = true; break; }
       await page.waitForTimeout(1000);
     }
-    await page.screenshot({ path: join(out, `step-${n}.png`) });
+    await page.screenshot({ path: join(out, `step-${n}.png`), timeout: shotTimeout });
     if (!found) {
       console.error(`step ${n}: no console line containing "${wanted}" within ${timeout} ms`);
       ok = false;
@@ -92,6 +101,7 @@ for (const s of steps) {
     }
     continue;
   }
+  mark = logs.length;
   if (kind === 'press') {
     const [key, ms] = rest;
     await page.keyboard.press(key);
@@ -106,7 +116,7 @@ for (const s of steps) {
     console.error(`unknown step ${s}`);
     process.exit(2);
   }
-  await page.screenshot({ path: join(out, `step-${n}.png`) });
+  await page.screenshot({ path: join(out, `step-${n}.png`), timeout: shotTimeout });
 }
 } catch (e) {
   logs.push(`${stamp()} [crash] ${String(e.message).split('\n')[0]}`);

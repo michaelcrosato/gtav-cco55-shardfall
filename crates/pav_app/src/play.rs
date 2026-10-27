@@ -25,6 +25,7 @@ pub struct PlayShell {
     save_serial: u64,
     settings_serial: u64,
     rumble_serial: u64,
+    display_serial: u64,
     started: bool,
     /// The pointer is held for mouse look.
     pub grabbed: bool,
@@ -51,6 +52,7 @@ impl Default for PlayShell {
             save_serial: 0,
             settings_serial: 0,
             rumble_serial: 0,
+            display_serial: 0,
             started: false,
             grabbed: false,
             clicked: false,
@@ -122,6 +124,13 @@ impl PlayShell {
         Some((r.low, r.high, r.secs))
     }
 
+    /// New display settings the game asks for.
+    pub fn display(&mut self, app: &AppRequests) -> Option<pav_core::present::DisplayRequest> {
+        let d = app.display.as_ref().filter(|d| d.serial != self.display_serial)?;
+        self.display_serial = d.serial;
+        Some(d.clone())
+    }
+
     /// Keeps new saves and settings. Returns true when the game asks to quit.
     pub fn requests(&mut self, app: &AppRequests) -> bool {
         if let Some(s) = app.save.as_ref().filter(|s| s.serial != self.save_serial) {
@@ -140,12 +149,13 @@ impl PlayShell {
         app.quit
     }
 
-    /// Smooths the frame time (seconds) for the readout.
+    /// Smooths the frame time (seconds) for the readout: over about a third of a second, so a
+    /// slow device's few frames a second read true at once.
     pub fn frame_time(&mut self, dt: f32) {
         if dt <= 0.0 {
             return;
         }
-        let k = 0.05;
+        let k = (dt * 3.0).clamp(0.05, 1.0);
         self.frame_ms += (dt * 1000.0 - self.frame_ms) * k;
         self.fps = 1000.0 / self.frame_ms.max(0.1);
     }

@@ -26,6 +26,10 @@ use crate::materials::{self, MaterialTable};
 use pav_core::material::Library;
 use pav_core::props::doc::MapMode;
 
+/// How far outside the view (m) a vehicle or person is still built: its shadow at a low sun
+/// and a headlight's pool can reach into the picture.
+const UNSEEN_MARGIN: f32 = 8.0;
+
 choice_enum! {
     pub enum StyleOverride { PerObject => "per object", Flat => "flat", Cel => "cel", Lit => "lit" }
 }
@@ -1261,7 +1265,7 @@ impl ViewBuilder {
                 let mut lights = Vec::new();
                 let mut night_lights = Vec::new();
                 let mut list = Vec::with_capacity(chunk.blocks.len());
-                for b in chunk.blocks.iter().filter(|b| b.alive) {
+                for b in chunk.blocks.iter().filter(|b| b.alive && !b.has(block_flags::HIDDEN)) {
                     // Blocks are world-mapped with seed 0, so neighbours (4 m floor tiles) join;
                     // a material laid on the block's own faces (a facade) is seeded by its place.
                     let at = b.center().to_array().map(f32::to_bits);
@@ -1342,7 +1346,8 @@ impl ViewBuilder {
                 // the night lights, which each frame dims by the street-light level.
                 let mut baked = Scene { street_lights: 1.0, ..Scene::default() };
                 let mut prop_lights = Vec::new();
-                let mut generated = GeneratedMeshes { built: std::mem::take(&mut self.generated.built), sent: HashSet::new() };
+                let mut generated =
+                    GeneratedMeshes { built: std::mem::take(&mut self.generated.built), sent: HashSet::new(), synced: (0, 0) };
                 for (index, p) in chunk.props.iter().enumerate() {
                     let Some(parts) = p.parts() else { continue };
                     let id = baked_id(*key, index);
@@ -1543,7 +1548,12 @@ impl ViewBuilder {
             self.rain = None;
         }
 
-        // Dynamic objects.
+        // Dynamic objects. Vehicles and people the camera cannot see are not built (the renderer
+        // would cull them, but building them costs the CPU): a game keeps a hundred cars and as
+        // many people round the player, most behind the camera, round a corner or in the fog.
+        // The margin keeps the shadows and headlight pools of those just out of view.
+        let planes = crate::play::frustum(scene.camera.proj * scene.camera.view);
+        let fog = (scene.fog.enabled, scene.fog.center, scene.fog.end);
         let cam_fwd = scene.camera.forward;
         let now = self.now as f32;
         let mut live = Vec::new();
@@ -1573,6 +1583,18 @@ impl ViewBuilder {
             if let Some(s) = &o.soft {
                 emit_soft(&mut scene, &o, s, settings.style);
                 continue;
+            }
+            let reach = match (&o.vehicle, &o.puppet) {
+                (Some(v), _) => v.half.length(),
+                (None, Some(_)) if Some(o.id) != curr.player => 1.2,
+                _ => 0.0,
+            };
+            if reach > 0.0 {
+                let d = o.pos - fog.1;
+                let fogged = fog.0 && Vec3::new(d.x, 0.0, d.z).length() > fog.2 + reach + 10.0;
+                if fogged || !crate::play::sphere_visible(&planes, o.pos, reach + UNSEEN_MARGIN) {
+                    continue;
+                }
             }
             match &o.puppet {
                 Some(p) => {
@@ -1930,9 +1952,12 @@ fn emit_puppet(scene: &mut Scene, def: &PuppetDef, o: &RenderObject, p: &PuppetF
     }
     let (parts, span) = pav_core::puppet::pose_ex(def, &p.state, p.rig.as_ref(), feet, cam_fwd);
     if let (false, Some((hand, tip))) = (def.weapon.asset.is_empty(), span) {
-        held_asset(scene, &def.weapon.asset, hand, tip, o.id.0);
+        held_asset(scene, &def.weapon.asset, hand, tip, o.rot * Vec3::Z, o.id.0);
     }
-    for part in parts {
+    // Far off, parts under a pixel across (at 1080 lines) are left out — eyes, sunglasses,
+    // badges, straps first: distant people cost fewer primitives (low detail).
+    let tiny = puppet_detail(&scene.camera, o.pos);
+    for part in parts.into_iter().filter(|p| p.ra.max(p.rb) >= tiny) {
         scene.sdfs.push(SdfInstance {
             a: part.a,
             b: part.b,
@@ -1948,15 +1973,42 @@ fn emit_puppet(scene: &mut Scene, def: &PuppetDef, o: &RenderObject, p: &PuppetF
     }
 }
 
+/// The radius (m) below which a puppet part at `at` is under a pixel across at 1080 lines for
+/// `cam` (0 for an orthographic camera: every part draws).
+fn puppet_detail(cam: &rs::CameraData, at: Vec3) -> f32 {
+    if cam.ortho {
+        return 0.0;
+    }
+    at.distance(cam.eye) / (cam.proj.y_axis.y.abs().max(1e-3) * 1080.0)
+}
+
 /// A library prop held in the hand (a look's `weapon.asset`): its `grip` socket at `hand`, the
-/// socket's +y toward `tip`, at the prop's own size.
-fn held_asset(scene: &mut Scene, name: &str, hand: Vec3, tip: Vec3, id: u32) {
+/// socket's +y toward `tip` and its +z as near straight up as that allows (a gun's top up,
+/// whichever way the holder faces; held straight up or down, +z toward the holder's `forward`),
+/// at the prop's own size.
+fn held_asset(scene: &mut Scene, name: &str, hand: Vec3, tip: Vec3, forward: Vec3, id: u32) {
     let Ok(parts) = pav_core::props::resolve_parts(name, 0) else { return };
     let (grip, turn) = parts.sockets.get("grip").map_or((Vec3::ZERO, Quat::IDENTITY), |s| (s.pos, s.rot));
-    let rot = Quat::from_rotation_arc((turn * Vec3::Y).normalize_or(Vec3::Y), (tip - hand).normalize_or(Vec3::Y));
+    let rot = held_turn(turn, (tip - hand).normalize_or(Vec3::Y), forward);
     let at = crate::assets::Placement::at(hand - rot * grip).rot(rot).id(id);
     // Names were checked when the look was read; a prop this build lacks is not drawn.
     let _ = crate::assets::emit_asset(scene, name, at, 0, &Default::default());
+}
+
+/// The turn that lays a held prop along `along`: its grip socket's +y (`turn` is the socket's
+/// own) onto `along` and the socket's +z as near world up as that allows — `forward` when the
+/// prop points straight up or down.
+fn held_turn(turn: Quat, along: Vec3, forward: Vec3) -> Quat {
+    let sy = (turn * Vec3::Y).normalize_or(Vec3::Y);
+    let sz = (turn * Vec3::Z - sy * (turn * Vec3::Z).dot(sy)).normalize_or(Vec3::Z);
+    let up = if (Vec3::Y - along * along.y).length() > 0.25 { Vec3::Y } else { forward };
+    let up = (up - along * up.dot(along)).normalize_or(Vec3::ZERO);
+    if up == Vec3::ZERO {
+        return Quat::from_rotation_arc(sy, along);
+    }
+    let from = glam::Mat3::from_cols(sy.cross(sz), sy, sz);
+    let to = glam::Mat3::from_cols(along.cross(up), along, up);
+    Quat::from_mat3(&(to * from.transpose())).normalize()
 }
 
 /// Adds one object's instances to the scene (props are drawn by `ViewBuilder::emit_prop`).
@@ -2029,6 +2081,9 @@ pub(crate) struct GeneratedMeshes {
     pub(crate) built: HashMap<u64, Arc<MeshData>>,
     /// Keys this frame's scene already carries.
     pub(crate) sent: HashSet<u64>,
+    /// (frame serial, how many of the scene's custom meshes `sent` has seen): the asset path's
+    /// running tally.
+    pub(crate) synced: (u64, usize),
 }
 
 impl GeneratedMeshes {
@@ -2487,6 +2542,19 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
+
+    #[test]
+    fn a_held_gun_keeps_its_top_up_whichever_way_it_points() {
+        for along in [Vec3::Z, Vec3::X, Vec3::new(-0.6, 0.2, 0.77).normalize(), Vec3::new(0.3, -0.5, -0.81).normalize()] {
+            let r = held_turn(Quat::IDENTITY, along, Vec3::Z);
+            assert!((r * Vec3::Y).distance(along) < 1e-4, "+y along the weapon: {along}");
+            let top = r * Vec3::Z;
+            assert!(top.y > 0.5 && top.dot(along).abs() < 1e-4, "top up: {top} for {along}");
+        }
+        // Hanging straight down: the top toward the holder's front.
+        let r = held_turn(Quat::IDENTITY, Vec3::NEG_Y, Vec3::X);
+        assert!((r * Vec3::Z).distance(Vec3::X) < 1e-4);
+    }
     use pav_core::EntityId;
     use pav_core::props::{self, Doc, PropAsset, PropDef};
     use pav_core::shape::Visual;
@@ -2700,5 +2768,41 @@ mod tests {
             generated_total += keys.len();
         }
         assert!(generated_total > 0, "the fixtures use generated shapes");
+    }
+
+    #[test]
+    fn far_people_leave_out_parts_under_a_pixel() {
+        let gear = pav_core::puppet::GearLook { badge: "#d4af37".into(), glasses: "#111111".into(), ..Default::default() };
+        let def = PuppetDef { gear, ..Default::default() };
+        let cam = Scene::default().camera;
+        let draw = |distance: f32| {
+            let mut scene = Scene::default();
+            let frame = PuppetFrame { state: Default::default(), feet_offset: 0.9, def: None, rig: None, tint: None };
+            let o = RenderObject {
+                id: EntityId(9),
+                pos: cam.eye + cam.forward * distance,
+                rot: Quat::IDENTITY,
+                visual: Visual::new(Shape::Sphere { radius: 0.0 }, Color::WHITE),
+                prop: None,
+                puppet: Some(frame.clone()),
+                pulse: -1.0,
+                soft: None,
+                vehicle: None,
+                cone: None,
+                scenery: false,
+            };
+            emit_puppet(&mut scene, &def, &o, &frame, cam.forward, StyleOverride::PerObject);
+            scene.sdfs
+        };
+        // At 140 m (45° of view) a pixel is about 0.1 m across: the sunglasses and the badge go.
+        let (near, far) = (draw(8.0), draw(140.0));
+        let parts = pav_core::puppet::pose(&def, &Default::default(), None, Vec3::ZERO, cam.forward);
+        assert_eq!(near.len(), parts.len(), "near, every part");
+        let small = parts.iter().filter(|p| p.ra.max(p.rb) < 0.05).count();
+        assert!(small >= 2 && far.len() <= parts.len() - small, "far: {} of {} ({small} small)", far.len(), parts.len());
+        assert!(far.iter().all(|s| s.ra.max(s.rb) >= 0.05), "the head, torso and limbs stay");
+        // An orthographic view draws every part at any distance.
+        let ortho = rs::CameraData { ortho: true, ..cam };
+        assert_eq!(puppet_detail(&ortho, cam.eye + cam.forward * 400.0), 0.0);
     }
 }

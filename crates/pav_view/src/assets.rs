@@ -73,7 +73,12 @@ impl Placement {
 struct Frame {
     style: StyleOverride,
     materials: Arc<Mutex<MaterialTable>>,
+    /// Tells one frame from the next (the meshes already in a frame's scene are tallied once).
+    serial: u64,
 }
+
+/// The last frame scope's serial.
+static FRAME_SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 thread_local! {
     static FRAME: RefCell<Option<Frame>> = const { RefCell::new(None) };
@@ -84,7 +89,8 @@ pub(crate) struct FrameScope(Option<Frame>);
 
 impl FrameScope {
     pub(crate) fn new(style: StyleOverride, materials: Arc<Mutex<MaterialTable>>) -> Self {
-        Self(FRAME.replace(Some(Frame { style, materials })))
+        let serial = FRAME_SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        Self(FRAME.replace(Some(Frame { style, materials, serial })))
     }
 }
 
@@ -170,18 +176,8 @@ pub fn emit_asset_tweaked(
     let parts = def.variant_with(&params, seed);
     let mut cache = MESHES.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let meshes = cache.get_or_insert_with(GeneratedMeshes::default);
-    if meshes.built.len() > KEEP {
-        meshes.built.clear();
-    }
-    meshes.sent = scene
-        .custom_meshes
-        .iter()
-        .filter_map(|(key, _)| match key {
-            MeshKey::Custom(key) => Some(*key),
-            _ => None,
-        })
-        .collect();
     let frame = FRAME.with_borrow(Clone::clone);
+    sync_sent(meshes, scene, frame.as_ref().map_or(0, |f| f.serial));
     let style = frame.as_ref().map_or(StyleOverride::PerObject, |frame| frame.style);
     let mut table = frame.as_ref().and_then(|frame| frame.materials.try_lock().ok());
     let library = Library::current();
@@ -210,7 +206,31 @@ pub fn emit_asset_tweaked(
             None => emit_prim(scene, meshes, part, &o, at.scale, style, color, material),
         }
     }
+    meshes.synced.1 = scene.custom_meshes.len();
     Ok(())
+}
+
+/// Brings the asset path's tally of the generated meshes the scene already carries up to date:
+/// within a frame only the meshes added since the last call are looked at (a frame with a
+/// hundred cars draws five hundred assets); outside one (no frame scope), all of them.
+fn sync_sent(meshes: &mut GeneratedMeshes, scene: &Scene, serial: u64) {
+    if meshes.built.len() > KEEP {
+        meshes.built.clear();
+    }
+    let n = scene.custom_meshes.len();
+    let (last, done) = meshes.synced;
+    let from = if serial != 0 && last == serial && done <= n {
+        done
+    } else {
+        meshes.sent.clear();
+        0
+    };
+    for (key, _) in &scene.custom_meshes[from..] {
+        if let MeshKey::Custom(key) = key {
+            meshes.sent.insert(*key);
+        }
+    }
+    meshes.synced = (serial, n);
 }
 
 /// A stand-in object at `pos`, turned `rot`, for drawing parts with `emit_prim`.
@@ -244,20 +264,10 @@ fn draw_parts(
 ) {
     let mut cache = MESHES.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let meshes = cache.get_or_insert_with(GeneratedMeshes::default);
-    if meshes.built.len() > KEEP {
-        meshes.built.clear();
-    }
-    // A generated mesh goes into the scene once, however many things draw it.
-    meshes.sent = scene
-        .custom_meshes
-        .iter()
-        .filter_map(|(key, _)| match key {
-            MeshKey::Custom(key) => Some(*key),
-            _ => None,
-        })
-        .collect();
     // Outside a frame (or while the view holds its table) parts draw in their colours alone.
     let frame = FRAME.with_borrow(Clone::clone);
+    // A generated mesh goes into the scene once, however many things draw it.
+    sync_sent(meshes, scene, frame.as_ref().map_or(0, |f| f.serial));
     let style = frame.as_ref().map_or(StyleOverride::PerObject, |frame| frame.style);
     let mut table = frame.as_ref().and_then(|frame| frame.materials.try_lock().ok());
     let library = Library::current();
@@ -274,6 +284,7 @@ fn draw_parts(
         }
         emit_prim(scene, meshes, part, &o, scale, style, color, material);
     }
+    meshes.synced.1 = scene.custom_meshes.len();
 }
 
 /// Draws the imported figure `name` (`LIB/kaykit_adventurers/knight`, `pav_core::figure`)

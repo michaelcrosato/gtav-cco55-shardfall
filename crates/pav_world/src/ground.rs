@@ -130,7 +130,8 @@ pub fn role(grid: &Grid, c: IVec2) -> Role {
 
 pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut Out) {
     let cs = grid.cell;
-    let white = Color::hex("#e8e5da");
+    // (A worn white: fresh white paint reads as lit under the street lights.)
+    let white = Color::hex("#d2cec2");
     let yellow = Color::hex("#e2b53c");
     for z in 0..grid.h {
         for x in 0..grid.w {
@@ -368,6 +369,21 @@ impl MeshBuf {
             self.i.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
         } else {
             self.i.extend_from_slice(&[base, base + 2, base + 1, base, base + 3, base + 2]);
+        }
+    }
+
+    /// A triangle of one colour facing along `n`.
+    pub(crate) fn tri(&mut self, v: [Vec3; 3], n: Vec3, c: [f32; 3]) {
+        let base = self.p.len() as u32;
+        for p in v {
+            self.p.push(p.to_array());
+            self.n.push(n.to_array());
+            self.c.push(c);
+        }
+        if (v[1] - v[0]).cross(v[2] - v[0]).dot(n) >= 0.0 {
+            self.i.extend_from_slice(&[base, base + 1, base + 2]);
+        } else {
+            self.i.extend_from_slice(&[base, base + 2, base + 1]);
         }
     }
 }

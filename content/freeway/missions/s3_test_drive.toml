@@ -1,0 +1,107 @@
+# s3 Test Drive (PLAN.md §5.7): the third heist setup. Dez takes the Okami Kaze out of Luxe
+# Motors without paying, loses the two stars the alarm brings, and stashes it by the Harbor
+# Spur's broken construction ramp: the getaway car. Teaches glass, the chase and stunts.
+
+key = "s3_test_drive"
+title = "Test Drive"
+protagonist = "dez"
+text = "The getaway car is in a showroom. Go test drive it."
+contact = "mack"
+blip = { letter = "H", at = "spot:s3_start" }
+start = "spot:s3_start"
+unlock = ["m3_overdrive"]
+time = { at = "11:30", lock = true }
+weather = "clear"
+reward = { cash = 1200, text = ["mack", "An Okami Kaze. Matte black. You test drove it all the way to the docks. I'm proud of you, kid. - M"] }
+names = { salesman = "SALESMAN" }
+
+[[medals]]
+id = "clean"
+text = "Stash it with less than 20% damage"
+vehicle_health_over = { actor = "kaze", value = 0.8 }
+
+[[medals]]
+id = "fast"
+text = "Finish within 3:30"
+time_under = 210.0
+
+[[spawn]]
+id = "kaze"
+vehicle = "okami_kaze"
+at = "spot:luxe_showroom"
+paint = 0
+blip = "target"
+name = "Okami Kaze"
+
+[[spawn]]
+id = "salesman"
+ped = "businessperson"
+at = "at:76,-139"
+yaw = 180.0
+name = "Salesman"
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "The getaway car is the Okami Kaze in the Luxe Motors showroom. Take it for a test drive.", seconds = 3.6 },
+  { who = "dez", text = "How long a test drive?", seconds = 1.6 },
+  { who = "mack", text = "Forever, ideally.", seconds = 1.6 },
+]
+on_start = [{ traffic = 0.4 }]
+
+[[step]]
+kind = "goto"
+target = "actor:kaze"
+radius = 5.0
+objective = "Go to the ~y~Okami Kaze~s~."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "salesman", text = "Ah, a discerning customer! Shall we discuss financing?", seconds = 2.6 },
+  { who = "dez", text = "I'm more of a cash-in-the-wind guy.", seconds = 2.0 },
+]
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:kaze"
+checkpoint = true
+objective = "Get in the ~y~Okami Kaze~s~."
+on_done = [{ behaviour = { actor = "salesman", act = "cower" } }, { unblip = "kaze" }, { heat = 2 }]
+
+[[step]]
+kind = "drive_to"
+target = "spot:luxe_front"
+radius = 12.0
+objective = "Out through the ~y~window~s~."
+help = "~btn:r2~ hard: the showroom glass gives way to a car with some speed."
+
+[[step]]
+kind = "lose_heat"
+stars = 0
+checkpoint = true
+objective = "The alarm called the police. Lose the ~b~cops~s~."
+help = "The Okami Kaze is the fastest car in Paloma Bay. Use it."
+
+[[step]]
+kind = "deliver"
+target = "spot:s3_stash"
+vehicle = "kaze"
+radius = 10.0
+checkpoint = true
+objective = "Stash the car by the ~b~broken freeway ramp~s~ at the docks."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "dez", text = "Test drive complete. I'll take it.", seconds = 1.8 },
+  { who = "mack", text = "We'll take it. Leave it under the ramp. Nobody looks at a ramp to nowhere.", seconds = 3.2 },
+]
+
+[[fail]]
+when = { destroyed = "kaze" }
+reason = "The Okami Kaze was wrecked."
+
+[[fail]]
+when = { abandoned = { actor = "kaze", distance = 150.0 } }
+reason = "You abandoned the Okami Kaze."

@@ -3,7 +3,8 @@
 # Serve that folder over HTTP (e.g. `python3 -m http.server -d target/web`) and open it in Chrome or Edge.
 # --single-file writes only target/web/<title>.html (shardfall.html): one page with the glue and gzipped wasm inside
 #   that runs from file:// or any host (scripts/pack_single_html.py; also --title, --description, --theme-color,
-#   --scene NAME for the start scene when the address names none, --out PATH).
+#   --scene NAME for the start scene when the address names none, --header FILE for a comment at the top,
+#   --out PATH).
 # --package NAME --bin NAME build another app binary (default: pav_app's shardfall), e.g. a game
 #   built on the engine (scripts/build-gtf-web.sh); the JS glue keeps the name shardfall.js inside.
 # Needs: rustup target add wasm32-unknown-unknown
@@ -23,10 +24,10 @@ while (($#)); do
 		if [[ $1 == --package ]]; then package=$2; else bin=$2; fi
 		shift
 		;;
-	--title | --description | --theme-color | --scene | --out)
+	--title | --description | --theme-color | --scene | --header | --out)
 		(($# > 1)) || { echo "build-web.sh: $1 needs a value" >&2; exit 2; }
 		value=$2
-		[[ $1 == --out && $value != /* ]] && value=$caller/$value
+		[[ ($1 == --out || $1 == --header) && $value != /* ]] && value=$caller/$value
 		pack+=("$1" "$value")
 		shift
 		;;

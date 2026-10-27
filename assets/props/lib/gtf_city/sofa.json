@@ -1,0 +1,13 @@
+{"format":2,"name":"sofa","unit":"cm",
+"description":"A three-seat fabric sofa, 2.2 m: slate grey cushions facing +z, a back, rolled arms, short dark feet.",
+"tags":["sofa","couch","living","seat","furniture"],
+"category":"furniture",
+"materials":{
+"fabric":{"color":"#5d6b7a","roughness":0.9},
+"wood":{"color":"#3a2a20"}},
+"parts":{
+"arm":{"type":"rounded_box","size":[18,30,88],"radius":6,"pos":[101,55,0],"mat":"fabric","mirror":"x"},
+"back":{"type":"rounded_box","size":[220,50,20],"radius":6,"pos":[0,65,-34],"mat":"fabric"},
+"base":{"type":"box","size":[220,30,88],"pos":[0,25,0],"mat":"fabric"},
+"cushion":{"type":"rounded_box","size":[64,14,70],"radius":4,"pos":[0,47,6],"mat":"fabric","array":{"count":3,"step":[66,0,0]}},
+"foot":{"type":"box","size":[6,10,6],"pos":[100,5,38],"mat":"wood","mirror":["x","z"]}}}

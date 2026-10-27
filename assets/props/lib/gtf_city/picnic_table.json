@@ -1,0 +1,11 @@
+{"format":2,"name":"picnic_table","unit":"cm",
+"description":"A weathered wooden picnic table, 1.8 m, with its two benches attached (along +z and -z).",
+"tags":["picnic","table","bench","park","wood"],
+"category":"furniture",
+"materials":{
+"wood":{"base":"MAT/oak_planks","color":"#9a7a56"}},
+"parts":{
+"bench":{"type":"box","size":[180,5,28],"pos":[0,44.5,58],"mat":"wood","mirror":"z"},
+"leg":{"type":"box","size":[8,9],"from":[70,3.25,70],"to":[70,72,-2],"mat":"wood","mirror":["x","z"]},
+"rail":{"type":"box","size":[8,6,150],"pos":[70,40,0],"mat":"wood","mirror":"x"},
+"top":{"type":"box","size":[180,5,76],"pos":[0,74.5,0],"mat":"wood"}}}

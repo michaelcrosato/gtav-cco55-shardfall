@@ -1,0 +1,20 @@
+{"format":2,"name":"gas_pump","unit":"cm",
+"description":"A fuel dispenser, 2.3 m: white body on a kerbed plinth, red brand header, lit screens and a nozzle each side.",
+"tags":["gas","pump","fuel","station","dispenser"],
+"category":"town",
+"materials":{
+"body":{"base":"MAT/gtf/painted_metal","color":"#f0efe9"},
+"brand":{"base":"MAT/gtf/painted_metal","color":"#d23a2c"},
+"dark":{"color":"#202326"},
+"plinth":{"base":"MAT/gtf/concrete","color":"#c9c6bf"},
+"price":{"color":"#ffb347","look":"unlit","emissive":0.45},
+"screen":{"color":"#9fe3ff","look":"unlit","emissive":0.45}},
+"parts":{
+"body":{"type":"box","size":[92,170,46],"pos":[0,101,0],"mat":"body"},
+"header":{"type":"box","size":[98,36,52],"pos":[0,204,0],"mat":"brand"},
+"holster":{"type":"box","size":[14,32,10],"pos":[38,112,27],"mat":"dark","mirror":["x","z"]},
+"hose":{"type":"cylinder","radius":2.2,"from":[38,98,31],"to":[46,24,36],"mat":"dark","mirror":["x","z"]},
+"nozzle":{"type":"box","size":[6,22],"from":[38,122,33],"to":[38,104,40],"mat":"dark","mirror":["x","z"]},
+"plinth":{"type":"box","size":[120,16,76],"pos":[0,8,0],"mat":"plinth"},
+"price":{"type":"box","size":[60,12,2],"pos":[0,176,23.5],"mat":"price","mirror":"z"},
+"screen":{"type":"box","size":[42,28,2],"pos":[0,150,23.5],"mat":"screen","mirror":"z"}}}

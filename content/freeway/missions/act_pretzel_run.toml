@@ -1,0 +1,162 @@
+# The Pretzel Run (PLAN.md §5.6.11): a street race, three laps clockwise round east Paloma Bay —
+# east down Sunset Row, up the Pretzel onto Route 404, off at Harbor Gate, west along the harbor
+# road over The Ditch and north up the avenue through downtown — against three racers, for a
+# bet ($500 or $1,000; winning pays double). Whoever is played races, in a Kaze on the grid.
+
+key = "act_pretzel_run"
+title = "The Pretzel Run"
+protagonist = ""
+activity = true
+text = "Three laps round the Pretzel, Sunset Row and downtown. Bring cash."
+blip = { icon = "race", at = "at:112,-229" }
+unlock = ["m1_repo_man"]
+names = { r1_driver = "VINNIE", r2_driver = "DIAMOND", r3_driver = "LUCKY" }
+
+[[medals]]
+id = "fast"
+text = "Win within 5:00"
+time_under = 300.0
+
+[[medals]]
+id = "clean"
+text = "Finish with the Kaze above 75%"
+vehicle_health_over = { actor = "my_car", value = 0.75 }
+
+# The grid on Sunset Row, eastbound: the player's Kaze on the front row beside Diamond, Vinnie
+# and Lucky behind.
+[[spawn]]
+id = "my_car"
+vehicle = "okami_kaze"
+at = "at:124,-237.7"
+yaw = 90.0
+paint = 1
+blip = "vehicle"
+name = "Your Kaze"
+
+[[spawn]]
+id = "r1_driver"
+ped = "local"
+at = "at:108,-233.8"
+
+[[spawn]]
+id = "r1"
+vehicle = "bravura_stallion"
+at = "at:108,-233.8"
+yaw = 90.0
+paint = 0
+driver = "r1_driver"
+blip = "enemy"
+name = "Vinnie"
+
+[[spawn]]
+id = "r2_driver"
+ped = "local"
+at = "at:124,-233.8"
+
+[[spawn]]
+id = "r2"
+vehicle = "okami_kaze"
+at = "at:124,-233.8"
+yaw = 90.0
+paint = 2
+driver = "r2_driver"
+blip = "enemy"
+name = "Diamond"
+
+[[spawn]]
+id = "r3_driver"
+ped = "local"
+at = "at:108,-237.7"
+
+[[spawn]]
+id = "r3"
+vehicle = "bravura_stallion"
+at = "at:108,-237.7"
+yaw = 90.0
+paint = 3
+driver = "r3_driver"
+blip = "enemy"
+name = "Lucky"
+
+[[step]]
+kind = "choose"
+on_start = [{ traffic = 0.1 }, { heat_cap = 0 }]
+options = [
+  { id = "small", title = "Bet $500", cost = 500, lines = ["Win: $1,000 back.", "Vinnie, Diamond and Lucky put up the rest."] },
+  { id = "big", title = "Bet $1,000", cost = 1000, lines = ["Win: $2,000 back.", "Diamond says you won't."] },
+  { id = "none", title = "No bet", lines = ["Just the bragging rights."] },
+]
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:my_car"
+objective = "Get in your ~b~Kaze~s~ on the grid."
+
+[[step]]
+kind = "wait"
+seconds = 1.0
+objective = "~y~3~s~"
+
+[[step]]
+kind = "wait"
+seconds = 1.0
+objective = "~y~2~s~"
+
+[[step]]
+kind = "wait"
+seconds = 1.0
+objective = "~y~1~s~"
+
+[[step]]
+kind = "race"
+laps = 3
+racers = ["r1", "r2", "r3"]
+gates = [
+  "at:300,-235.7",       # Sunset Row, eastbound
+  "at:453.5,-200",       # onto the Pretzel's southbound entrance
+  "deck:463,-25",        # Route 404, southbound
+  "at:453.6,150",        # off at the foot of the Harbor Gate exit
+  "at:330,182.2",        # the harbor road, westbound
+  "at:150,182.2",        # over The Ditch
+  "at:50.3,60",          # the avenue, northbound
+  "at:50.3,-120",        # through downtown
+  "at:150,-235.7",       # the line on Sunset Row
+]
+checkpoint = true
+objective = "~g~GO!~s~ Three laps: through the ~y~gates~s~ ahead of the field."
+help = "The racers drive like they stole their cars. Up the Pretzel, off at Harbor Gate, back up the avenue."
+fail = [{ when = { destroyed = "my_car" }, reason = "Your Kaze was wrecked." }]
+
+# The pot.
+[[step]]
+kind = "branch"
+flag = "big"
+to = "pay_big"
+otherwise = "check_small"
+
+[[step]]
+kind = "branch"
+label = "check_small"
+flag = "small"
+to = "pay_small"
+otherwise = "end"
+
+[[step]]
+kind = "set"
+label = "pay_big"
+on_start = [{ cash = 2000 }, { note = { title = "Pretzel Run", body = "Diamond pays up: $2,000." } }]
+
+[[step]]
+kind = "branch"
+flag = "big"
+to = "end"
+
+[[step]]
+kind = "set"
+label = "pay_small"
+on_start = [{ cash = 1000 }, { note = { title = "Pretzel Run", body = "The pot: $1,000." } }]
+
+[[step]]
+kind = "dialogue"
+label = "end"
+lines = [{ who = "r2_driver", text = "Same time next week. Bring more money.", seconds = 2.4 }]

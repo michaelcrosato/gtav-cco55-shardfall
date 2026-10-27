@@ -1,0 +1,152 @@
+# m2 Midlife Crisis (PLAN.md §5.7): Mack sells his success course outside the Freeway Diner, the
+# buyer turns out to be a Ditch Kings collector, and the deal goes bad: a brawl, a shootout on
+# Sunset Row, then two stars to lose. Teaches cover, aiming, the weapon wheel and heat evasion.
+
+key = "m2_midlife"
+title = "Midlife Crisis"
+protagonist = "mack"
+text = "A buyer for Mack's course. What could go wrong?"
+contact = "dez"
+blip = { letter = "M", at = "spot:mack_diner" }
+start = "spot:m2_start"
+unlock = ["m1_repo_man"]
+time = { at = "19:10", lock = true }
+weather = "clear"
+reward = { cash = 2000, text = ["roxy", "Heard Sunset Row got loud. Was that you, old man? I've got a job that needs loud. Pier, tomorrow. - R"] }
+names = { rex = "REX", thug = "THUG" }
+
+[[medals]]
+id = "aim"
+text = "Three head shots"
+headshots = 3
+
+[[medals]]
+id = "fast"
+text = "Finish within 4:00"
+time_under = 240.0
+
+[[medals]]
+id = "tough"
+text = "Finish with half your health or more"
+health_over = 0.5
+
+[[spawn]]
+id = "rex"
+ped = "businessperson"
+at = "spot:m2_meet"
+name = "Rex"
+blip = "target"
+
+[[spawn]]
+id = "thug"
+enemy = "gang"
+at = "at:378,-259"
+behaviour = "guard"
+health = 60.0
+later = true
+
+[[spawn]]
+id = "g1"
+enemy = "gang"
+at = "at:356,-221"
+weapon = "p9"
+health = 45.0
+later = true
+
+[[spawn]]
+id = "g2"
+enemy = "gang"
+at = "at:384,-221"
+weapon = "p9"
+health = 45.0
+later = true
+
+[[spawn]]
+id = "g3"
+enemy = "gang"
+at = "at:396,-262"
+weapon = "p9"
+health = 45.0
+later = true
+
+[[spawn]]
+id = "g4"
+enemy = "gang"
+at = "at:402,-222"
+weapon = "pump"
+health = 50.0
+later = true
+
+[[spawn]]
+id = "mack_car"
+vehicle = "daimon_titan"
+at = "spot:m2_car"
+name = "Titan"
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Twelve Steps to Your Final Form. Two hundred pages. One buyer.", seconds = 3.0 },
+  { who = "mack", text = "Rex. Says he's in collections. Sounds like a growth mindset.", seconds = 3.0 },
+]
+on_start = [{ traffic = 0.35 }, { heat_cap = 0 }, { give = { weapon = "p9", ammo = 60 } }]
+
+[[step]]
+kind = "goto"
+target = "actor:rex"
+radius = 3.0
+objective = "Meet ~y~Rex~s~ outside the Freeway Diner."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "rex", text = "Mack Kincaid. You owe the Ditch Kings for a seminar. A refund, plus feelings.", seconds = 3.4 },
+  { who = "mack", text = "My course has a strict no-refund chapter. Chapter one.", seconds = 2.8 },
+  { who = "rex", text = "Then we do chapter two. Teach him.", seconds = 2.0 },
+]
+on_done = [{ spawn = "thug" }, { behaviour = { actor = "thug", act = "fight" } }, { behaviour = { actor = "rex", act = "flee" } }, { unblip = "rex" }]
+
+[[step]]
+kind = "kill"
+targets = ["thug"]
+checkpoint = true
+objective = "Deal with the ~r~thug~s~."
+help = "~btn:east~ throws a punch. Hold ~btn:l2~ to aim a gun, ~btn:r2~ fires."
+
+[[step]]
+kind = "survive"
+waves = [["g1", "g2"], ["g3", "g4"]]
+checkpoint = true
+objective = "Take down the ~r~Ditch Kings~s~."
+help = "~btn:r1~ takes cover behind a car or a wall. Hold ~btn:l1~ for the weapon wheel."
+on_start = [{ despawn = "rex" }]
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:mack_car"
+objective = "Get in your ~b~Titan~s~."
+on_start = [{ blip = { actor = "mack_car", kind = "vehicle" } }]
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Sirens. Of course. Someone in the diner has a phone and opinions.", seconds = 3.0 },
+]
+on_start = [{ unblip = "mack_car" }, { heat_cap = 5 }, { heat = 2 }]
+
+[[step]]
+kind = "lose_heat"
+stars = 0
+checkpoint = true
+objective = "Lose the ~b~cops~s~."
+help = "Get out of the search area on the map and stay out of the police's sight until the stars stop flashing."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Note to self. Chapter thirteen: never sell to a man called Rex.", seconds = 3.2 },
+]
+
+[[fail]]
+when = { died = "player" }
+reason = "Mack was taken out."

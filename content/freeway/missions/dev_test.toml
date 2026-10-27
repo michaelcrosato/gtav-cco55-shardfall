@@ -1,0 +1,161 @@
+# A test mission for the Proving Grounds (`freeway/mission/dev_test`, `gtf play cmd="mission start
+# dev_test"`): the driving half of the step kinds — cutscene, set, goto, enter_vehicle, dialogue,
+# drive_to, follow, race, escape, lose_heat, deliver, wait. `dev_test2` has the rest. Every step
+# has a bot policy; `gtf play bot=true seeds=3` must pass it.
+
+key = "dev_test"
+title = "Test Drive I"
+protagonist = "dez"
+district = "dev"
+text = "Every driving step kind, end to end."
+start = "at:-30,-26"
+blip = { letter = "T", at = "spot:test_start" }
+time = { at = "12:00", lock = true }
+weather = "clear"
+reward = { cash = 500 }
+names = { mack = "MACK", goon = "GOON" }
+
+[[medals]]
+id = "fast"
+text = "Finish within 6:00"
+time_under = 360.0
+
+[[medals]]
+id = "clean"
+text = "Keep the car above 70%"
+vehicle_health_over = { actor = "car", value = 0.7 }
+
+[[spawn]]
+id = "car"
+vehicle = "bravura_stallion"
+at = "lane_near:-44,-6"
+paint = 1
+blip = "vehicle"
+name = "Stallion"
+
+[[spawn]]
+id = "lead_driver"
+ped = "local"
+at = "spot:t1_lead"
+later = true
+
+[[spawn]]
+id = "lead"
+vehicle = "zephyr_wagon"
+at = "spot:t1_lead"
+driver = "lead_driver"
+later = true
+name = "Wagon"
+
+[[spawn]]
+id = "rival_driver"
+ped = "local"
+at = "spot:t1_rival"
+later = true
+
+[[spawn]]
+id = "rival"
+vehicle = "fenwick_commuter"
+at = "spot:t1_rival"
+driver = "rival_driver"
+later = true
+name = "Rival"
+
+[[spawn]]
+id = "goon_driver"
+ped = "worker"
+at = "spot:t1_goon"
+later = true
+
+[[spawn]]
+id = "goon"
+vehicle = "daimon_titan"
+at = "spot:t1_goon"
+driver = "goon_driver"
+later = true
+blip = "enemy"
+
+[[step]]
+kind = "cutscene"
+shots = [
+  { anchor = "actor:car", offset = [-5.0, 2.5, 7.0], to = [-3.0, 2.0, 5.0], look = "actor:car", seconds = 2.5 },
+  { anchor = "player", offset = [1.4, 1.7, 2.6], look = "player", fov = 38.0, seconds = 2.0 },
+]
+lines = [
+  { who = "mack", text = "Kid. The blue Stallion. Test it like you stole it.", seconds = 2.5 },
+  { who = "dez", text = "That's literally my job.", seconds = 2.0 },
+]
+
+[[step]]
+kind = "set"
+on_start = [{ flag = "briefed" }, { traffic = 0.35 }, { help = "Missions put a blue marker on what you need and a line on the road to it." }]
+
+[[step]]
+kind = "goto"
+target = "actor:car"
+radius = 6.0
+objective = "Go to the ~b~Stallion~s~."
+
+[[step]]
+kind = "enter_vehicle"
+target = "actor:car"
+checkpoint = true
+objective = "Get in the ~b~Stallion~s~."
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Head for the yard. Mind the paint.", seconds = 2.2 },
+]
+
+[[step]]
+kind = "drive_to"
+target = "lane_near:64,72"
+vehicle = "car"
+radius = 8.0
+objective = "Drive to the ~y~yard~s~."
+
+[[step]]
+kind = "follow"
+target = "actor:lead"
+distance = 110.0
+checkpoint = true
+objective = "Follow the ~b~wagon~s~."
+on_start = [{ spawn = "lead" }, { behaviour = { actor = "lead", act = "goto:lane_near:120,30" } }]
+
+[[step]]
+kind = "race"
+gates = ["lane_near:120,-60", "lane_near:40,-56"]
+racers = ["rival"]
+checkpoint = true
+objective = "Beat the ~r~rival~s~ through the ~y~gates~s~."
+on_start = [{ despawn = "lead" }, { spawn = "rival" }]
+
+[[step]]
+kind = "escape"
+pursuers = ["goon"]
+distance = 90.0
+checkpoint = true
+objective = "Lose the ~r~goon~s~."
+on_start = [{ despawn = "rival" }, { spawn = "goon" }]
+
+[[step]]
+kind = "lose_heat"
+objective = "Lose the ~r~heat~s~."
+on_start = [{ despawn = "goon" }, { dispatch = false }, { heat = 1 }]
+on_done = [{ dispatch = true }]
+
+[[step]]
+kind = "deliver"
+target = "lane_near:60,120"
+vehicle = "car"
+radius = 9.0
+objective = "Leave the ~b~Stallion~s~ at the ~y~drop~s~."
+
+[[step]]
+kind = "wait"
+seconds = 1.0
+
+[[fail]]
+when = { destroyed = "car" }
+reason = "The Stallion was wrecked."

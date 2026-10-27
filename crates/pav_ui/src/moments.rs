@@ -100,7 +100,7 @@ impl Cx<'_> {
         self.rich_prefixed(
             lead.as_deref().map(|l| (l, speaker_col)),
             &s.text,
-            self.bold(size::LABEL),
+            self.bold(size::LABEL * self.subtitle_scale),
             color::TEXT,
             Some(self.px(SUBTITLE_WRAP)),
         )
@@ -110,6 +110,12 @@ impl Cx<'_> {
     pub fn paint_subtitle(&self, rich: &crate::markup::Rich, bottom: f32) {
         let wrap = self.px(SUBTITLE_WRAP);
         let top = bottom - rich.size.y;
+        if self.contrast {
+            // High contrast: the words on a plate of their own, not only a shadow.
+            let pad = vec2(self.px(18.0), self.px(8.0));
+            let r = Rect::from_center_size(pos2(self.screen.center().x, top + rich.size.y * 0.5), rich.size + pad * 2.0);
+            self.backplate(r, 10.0);
+        }
         self.paint_rich(rich, pos2(self.screen.center().x - wrap * 0.5, top), wrap, Align::Center, Fx::Shadow);
     }
 

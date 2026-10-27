@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use glam::Vec3;
 use pav_world::City;
-use pav_world::lanes::{LaneGraph, LaneKind, Light};
+use pav_world::lanes::{LaneGraph, LaneKind, Light, Turn};
 
 fn city() -> City {
     let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../content/freeway/district.toml")).unwrap();
@@ -209,4 +209,59 @@ fn the_proving_grounds_build_with_a_signalised_crossroads() {
     assert!(g.junctions.iter().filter(|j| j.signal.is_some()).count() >= 1);
     assert_eq!(c.def.jump.len(), 2);
     assert!(c.def.sign.len() >= 8, "a sign per station");
+}
+
+#[test]
+fn the_freeway_runs_both_ways_and_turns_round_short_of_its_closed_north_end() {
+    let c = city();
+    let g = &c.lanes;
+    // The deck is open both ways (only the spur past the last exit is closed, and its ramps).
+    let deck: Vec<_> = g.lanes.iter().filter(|l| l.kind == LaneKind::Freeway).collect();
+    let open = deck.iter().filter(|l| !l.closed).count();
+    assert!(open * 3 >= deck.len() * 2, "{open} of {} freeway lanes open", deck.len());
+    let ramps = g.lanes.iter().filter(|l| l.kind == LaneKind::Ramp && l.points.iter().any(|p| p.y > 10.0));
+    for r in ramps {
+        assert!(!r.closed, "a freeway ramp is open: {:?} -> {:?}", r.points[0], r.points.last());
+    }
+    // Three U-turns up on the deck, all short of the barrier near the map's north edge (z -640).
+    let turns: Vec<_> = g
+        .lanes
+        .iter()
+        .filter(|l| l.turn == Turn::UTurn && l.points.iter().all(|p| p.y > 10.0 && p.z < -560.0 && p.x > 400.0))
+        .collect();
+    assert_eq!(turns.len(), 3, "a U-turn from each northbound lane");
+    for t in &turns {
+        assert!(!t.closed, "the turnaround is open");
+        assert!(t.points.iter().all(|p| p.z > -625.0), "the turnaround stays clear of the barrier");
+    }
+}
+
+/// (And a U-turn stays well clear of the water: a road that ends at a quay turns round short of
+/// its barriers, as at the map's edge.)
+#[test]
+fn dead_ends_turn_round_on_the_road_and_roads_stop_short_of_the_map_edge() {
+    let c = city();
+    let g = &c.lanes;
+    let lo = c.grid.origin;
+    let hi = lo + glam::Vec2::new(c.grid.w as f32, c.grid.h as f32) * c.grid.cell;
+    for (i, l) in g.lanes.iter().enumerate() {
+        if l.closed || l.points.iter().any(|p| p.y > 2.0) {
+            continue;
+        }
+        for p in &l.points {
+            let at = glam::Vec2::new(p.x, p.z);
+            assert!(
+                at.x > lo.x + 6.0 && at.x < hi.x - 6.0 && at.y > lo.y + 6.0 && at.y < hi.y - 6.0,
+                "lane {i} ({:?}) reaches {at} by the map's edge",
+                l.turn
+            );
+            if l.turn == Turn::UTurn {
+                assert!(c.road_at(at).is_some() && !c.in_building(at, 0.0), "U-turn {i} leaves the road at {at}");
+                for d in [glam::Vec2::X, glam::Vec2::NEG_X, glam::Vec2::Y, glam::Vec2::NEG_Y] {
+                    let near = at + d * 6.0;
+                    assert!(c.grid.zone(c.grid.cell_of(near)) != Some("water"), "U-turn {i} at {at} is by the water");
+                }
+            }
+        }
+    }
 }

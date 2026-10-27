@@ -60,7 +60,7 @@ saturation = 1.08
 [[preset]]
 name = "noon"
 hour = 13.0
-sun = { color = "#fff7e8", intensity = 1.5 }
+sun = { color = "#fff7e8", intensity = 1.35 }
 sky = { zenith = "#3f78c8", horizon = "#d5dfe6", ground = "#76685a", glow = "#ffffff", clouds = 0.2, cloud = "#ffffff" }
 ambient = { sky = "#a3b8d6", ground = "#857560", level = 0.72 }
 # Bleached, a little smog on the horizon.

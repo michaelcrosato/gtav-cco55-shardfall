@@ -4,5 +4,6 @@
 fn main() -> anyhow::Result<()> {
     gtf_game::register();
     pav_tools::tools::register(gtf_app::tools::TOOLS);
+    pav_tools::tools::register_sounds(gtf_app::SOUNDS);
     pav_tools::cli::run(&gtf_app::CLI)
 }

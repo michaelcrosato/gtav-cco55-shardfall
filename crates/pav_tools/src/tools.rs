@@ -934,6 +934,27 @@ pub fn register(tools: &'static [Tool]) {
     }
 }
 
+/// A game's own sound cues (the text of its cue file), heard over the engine's in
+/// `audio_capture`.
+static SOUNDS: std::sync::RwLock<Option<&'static str>> = std::sync::RwLock::new(None);
+
+/// Gives `audio_capture` a game's sound bank, so a capture sounds as the game does.
+pub fn register_sounds(bank: &'static str) {
+    *SOUNDS.write().unwrap_or_else(|e| e.into_inner()) = Some(bank);
+}
+
+/// The engine's sound bank with the registered game's cues over it.
+fn sound_bank() -> pav_audio::Bank {
+    let mut bank = pav_audio::Bank::engine();
+    if let Some(text) = *SOUNDS.read().unwrap_or_else(|e| e.into_inner()) {
+        match pav_audio::Bank::parse(text) {
+            Ok(b) => bank.merge(b),
+            Err(e) => log::warn!("the game's sound bank: {e}"),
+        }
+    }
+    bank
+}
+
 /// Every tool: the engine's, then the registered ones.
 pub fn all() -> Vec<&'static Tool> {
     let list = REGISTERED.read().unwrap_or_else(|e| e.into_inner());
@@ -1264,7 +1285,8 @@ pub fn render_stats(s: &mut Session) -> Result<Value> {
     let heaviest: Vec<Value> = st.heaviest.iter().filter(|h| h.2 > 0).map(|h| json!([h.0, h.1, h.2])).collect();
     Ok(json!({
         "triangles": st.triangles, "batches": st.batches, "mesh_instances": st.mesh_instances,
-        "sdf": st.sdf_instances, "lights": st.lights, "materials": st.materials,
+        "sdf": st.sdf_instances, "lights": st.lights, "shadow_lights": st.shadow_lights, "particles": st.particles,
+        "materials": st.materials,
         "custom_meshes": st.custom_meshes, "mesh_kb": st.mesh_bytes.div_ceil(1024), "draw_calls": st.draw_calls,
         "regions": st.regions, "regions_drawn": st.regions_drawn, "regions_shadow": st.regions_shadow,
         "shadow_instances": st.shadow_instances, "view_ms": (gpu.view_ms * 100.0).round() / 100.0,
@@ -1816,7 +1838,7 @@ fn t_audio_capture(s: &mut Session, a: &Args) -> Result<Output> {
     }
     let listener = pav_audio::Listener { pos: s.sim.state.focus, right: glam::Vec3::X };
     let duration = n as f32 * dt + 1.5;
-    let samples = pav_audio::render_run(&ticks, dt, 1.5, 44100.0, &listener);
+    let samples = pav_audio::render_run_with(std::sync::Arc::new(sound_bank()), &ticks, dt, 1.5, 44100.0, &listener);
     let music = ticks.last().and_then(|(_, a)| a.as_ref()).and_then(|a| a.music.as_ref()).map(|m| {
         json!({ "station": m.station, "title": m.song.title, "artist": m.song.artist, "genre": m.song.genre, "bpm": m.song.bpm, "offset": (m.offset * 10.0).round() / 10.0 })
     });

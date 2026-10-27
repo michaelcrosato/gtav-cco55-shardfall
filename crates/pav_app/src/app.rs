@@ -117,6 +117,8 @@ struct Fps {
     since: Instant,
     fps: f32,
     frame_ms: f32,
+    /// When the last performance line was logged (`Settings::perf_log`).
+    logged: Instant,
 }
 
 pub struct App {
@@ -243,7 +245,7 @@ impl App {
             boot_done_at: None,
             started: Instant::now(),
             last: Instant::now(),
-            fps: Fps { frames: 0, since: Instant::now(), fps: 0.0, frame_ms: 0.0 },
+            fps: Fps { frames: 0, since: Instant::now(), fps: 0.0, frame_ms: 0.0, logged: Instant::now() },
             mouse: Mouse::default(),
             screenshot_requested: false,
             scene_name,
@@ -1015,7 +1017,9 @@ impl App {
             self.next_draw = if now > self.next_draw + step { now + step } else { self.next_draw + step };
         }
         let now = Instant::now();
-        let dt = (now - self.last).as_secs_f32().min(0.1);
+        // (The readout gets the frame's true length; the rest at most a tenth of a second.)
+        let real = (now - self.last).as_secs_f32();
+        let dt = real.min(0.1);
         self.last = now;
         self.fps.frames += 1;
         let since = self.fps.since.elapsed().as_secs_f32();
@@ -1028,7 +1032,7 @@ impl App {
 
         // Devices.
         self.input.poll_gamepad();
-        self.play.frame_time(dt);
+        self.play.frame_time(real);
         if self.play_frame.is_some() {
             // A hook game reads the whole pad itself (Options is its pause menu).
             self.input.pad.taps.clear();
@@ -1346,7 +1350,12 @@ impl App {
                 if matches!(e, pav_core::SimEvent::Step { .. }) && !self.audio_settings.footsteps {
                     continue;
                 }
-                a.play_event(e, &l, sfx);
+                // (A voice plays at the game's voice volume, everything else at its effects'.)
+                let gain = match (e, scene) {
+                    (pav_core::SimEvent::Sound { cue, .. }, Some(s)) => self.audio_settings.sfx * s.gain_for(cue),
+                    _ => sfx,
+                };
+                a.play_event(e, &l, gain);
             }
             if let Some(scene) = scene {
                 let mut loops = pav_audio::loop_targets(scene, &l);
@@ -1366,7 +1375,8 @@ impl App {
         // The look layer (Look & Filters) over the scene's own settings.
         let mut view = self.view.clone();
         self.look_ui.apply(&mut view);
-        self.prefs.quality.trim(self.touch_screen, &mut view);
+        let software = self.gfx.as_ref().is_some_and(|g| g.software);
+        self.prefs.quality.trim(self.touch_screen, software, &mut view);
         let mut scene = self.builder.build(&prev, &curr, alpha, &self.rig, w as f32 / h.max(1) as f32, &view, focus);
         // Arriving somewhere new: the screen opens with the chosen transition, on the player.
         if let Some(t0) = self.arrival {
@@ -1432,13 +1442,31 @@ impl App {
 
         // UI.
         let stats = *host.shared.stats.lock().unwrap();
+        if self.settings.perf_log && self.fps.logged.elapsed().as_secs_f32() >= 5.0 {
+            self.fps.logged = Instant::now();
+            log::info!(
+                "perf: {:.1} fps, frame {:.1} ms, sim {:.2} ms/tick at {:.0} ticks/s, {} entities, render scale {:.2}",
+                self.fps.fps,
+                self.fps.frame_ms,
+                stats.tick_ms,
+                stats.tps,
+                stats.entities,
+                self.scaler.scale
+            );
+        }
         let mut ctl = host.control();
         let ctl_before = ctl;
         let crash = host.shared.crashed.lock().unwrap().clone();
         self.panel.record_timing(dt * 1000.0, stats.tick_ms);
         let gfx = self.gfx.as_mut().unwrap();
-        let (render_scale, lights) =
-            self.scaler.update(self.prefs.quality, self.touch_screen, dt * 1000.0, gfx.size(), gfx.window.scale_factor() as f32);
+        let (render_scale, lights) = self.scaler.update(
+            self.prefs.quality,
+            self.touch_screen,
+            gfx.software,
+            dt * 1000.0,
+            gfx.size(),
+            gfx.window.scale_factor() as f32,
+        );
         gfx.renderer.render_scale = render_scale;
         gfx.renderer.max_shadow_lights = lights;
         let info = ui::OverlayInfo {
@@ -1738,6 +1766,24 @@ impl App {
             }
             if let Some((low, high, secs)) = self.play.rumble(&play.app) {
                 self.input.vibrate(low, high, secs);
+            }
+            // The game's display settings: the quality preset, the render scale and dynamic
+            // resolution, v-sync (applied with the panel's below) and full screen (a browser
+            // page leaves that to the browser).
+            if let Some(d) = self.play.display(&play.app) {
+                use pav_core::present::DisplayQuality;
+                self.prefs.quality = match d.quality {
+                    DisplayQuality::Auto => crate::quality::Quality::Auto,
+                    DisplayQuality::Low => crate::quality::Quality::Low,
+                    DisplayQuality::Medium => crate::quality::Quality::Medium,
+                    DisplayQuality::High => crate::quality::Quality::High,
+                };
+                self.scaler.user_scale = d.render_scale;
+                self.scaler.user_dynamic = d.dynamic;
+                self.app_settings.vsync = d.vsync;
+                if !cfg!(target_arch = "wasm32") && gfx.window.fullscreen().is_some() != d.fullscreen {
+                    gfx.window.set_fullscreen(d.fullscreen.then_some(winit::window::Fullscreen::Borderless(None)));
+                }
             }
             let want = play.app.mouse_look && !self.menu_open && game_input;
             // A browser locks the pointer only for a page the player just clicked (asking without

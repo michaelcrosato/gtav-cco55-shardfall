@@ -1,0 +1,14 @@
+{"format":2,"name":"floodlight_mast","unit":"cm",
+"description":"A 10 m floodlight mast for yards and depots: galvanised pole on a footing, a bar of four floods aimed at +z.",
+"tags":["floodlight","light","mast","yard","pole"],
+"category":"lighting",
+"materials":{
+"foot":{"base":"MAT/gtf/concrete","color":"#a7a39a"},
+"galv":{"base":"MAT/gtf/painted_metal","color":"#9ea4a8","metallic":0.5},
+"lamp":{"color":"#fff2d0","emissive":3}},
+"parts":{
+"bar":{"type":"box","size":[180,8,8],"pos":[0,990,10],"mat":"galv"},
+"flood":{"type":"box","size":[36,26,14],"pos":[0,975,22],"pitch":35,"mat":"galv","array":{"count":4,"step":[40,0,0]}},
+"foot":{"type":"cylinder","radius":30,"height":50,"pos":[0,25,0],"mat":"foot"},
+"lens":{"type":"box","size":[156,20,2],"pos":[0,971,29],"pitch":35,"mat":"lamp","glow":"night","light":{"color":"#ffe9c4","radius":2400,"intensity":6}},
+"pole":{"type":"cone","radius":13,"radius_end":8,"from":[0,50,0],"to":[0,1000,0],"mat":"galv"}}}

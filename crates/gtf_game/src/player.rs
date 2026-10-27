@@ -14,6 +14,8 @@ use crate::camera::OrbitCam;
 pub const RUN: f32 = 4.6;
 pub const SPRINT: f32 = 7.0;
 pub const WALK: f32 = 1.6;
+/// The stick tilted less than this walks.
+pub const WALK_TILT: f32 = 0.55;
 
 /// Sprint taps closer together than this keep the sprint going (s).
 const TAP_WINDOW: f32 = 0.4;
@@ -45,11 +47,36 @@ pub struct Foot {
     /// Seconds since sprinting stopped (stamina refills after a rest) and since the last tap.
     pub rest: f32,
     pub since_tap: f32,
+    /// Sprint set to toggle: a tap of ✕ sprints until the stick is let go (or the stamina runs
+    /// out).
+    #[serde(default)]
+    pub sprint_on: bool,
+    /// The fastest the player has fallen since leaving the ground (m/s, downward).
+    #[serde(default)]
+    pub fall: f32,
+    /// In the water last tick (a fall into it splashes).
+    #[serde(default)]
+    pub wet: bool,
 }
+
+/// Landing faster than this (m/s) hurts: about a 3.3 m drop at the game's 22 m/s² (the jump's
+/// own landing is far below it). Each m/s beyond costs this much health, so a 10 m drop costs
+/// about 135 and one of about 15 m is fatal from full health and no armour.
+pub const FALL_SAFE: f32 = 12.0;
+pub const FALL_HURT: f32 = 15.0;
 
 impl Default for Foot {
     fn default() -> Self {
-        Foot { stamina: 1.0, sprinting: false, crouched: false, rest: 9.0, since_tap: 9.0 }
+        Foot {
+            stamina: 1.0,
+            sprinting: false,
+            crouched: false,
+            rest: 9.0,
+            since_tap: 9.0,
+            sprint_on: false,
+            fall: 0.0,
+            wet: false,
+        }
     }
 }
 
@@ -60,8 +87,8 @@ impl Foot {
     }
 
     /// The player character's input this tick, and the speed boost to give the character
-    /// (`Character::haste`). `dt` is game time.
-    pub fn input(&mut self, input: &InputFrame, cam: &OrbitCam, stat: f32, dt: f32) -> (InputFrame, f32) {
+    /// (`Character::haste`). `dt` is game time; `toggle`: sprint is a toggle (the setting).
+    pub fn input(&mut self, input: &InputFrame, cam: &OrbitCam, stat: f32, toggle: bool, dt: f32) -> (InputFrame, f32) {
         let (stick, world) = crate::pad::stick_or_move(input);
         let move_dir = if world { stick } else { cam.world_move(stick) }.clamp_length_max(1.0);
         let moving = stick.length() > 0.3;
@@ -69,7 +96,17 @@ impl Foot {
         let held_x = input.pad.held & pad::SOUTH != 0 || input.held & buttons::SPRINT != 0;
         let tapped = input.pad.pressed & pad::SOUTH != 0;
         self.since_tap = if tapped { 0.0 } else { self.since_tap + dt };
-        let wants = moving && (held_x || self.since_tap < TAP_WINDOW) && !self.crouched;
+        let wants = if toggle {
+            if tapped {
+                self.sprint_on = !self.sprint_on;
+            }
+            if !moving || self.stamina <= 0.0 {
+                self.sprint_on = false;
+            }
+            moving && self.sprint_on && !self.crouched
+        } else {
+            moving && (held_x || self.since_tap < TAP_WINDOW) && !self.crouched
+        };
         let cap = Self::capacity(stat);
         if wants && self.stamina > 0.0 {
             self.sprinting = true;
@@ -100,9 +137,12 @@ impl Foot {
         if self.crouched {
             held |= buttons::CROUCH;
         }
-        // Barely tilting the stick walks.
-        if stick.length() > 0.05 && stick.length() < 0.55 && !self.sprinting {
+        // Barely tilting the stick walks: the walk band's edge is the full walk (the controller
+        // goes as fast as the stick is pushed), a lighter tilt a slower one.
+        let mut move_dir = move_dir;
+        if stick.length() > 0.05 && stick.length() < WALK_TILT && !self.sprinting {
             held |= buttons::FOCUS;
+            move_dir = (move_dir / WALK_TILT).clamp_length_max(1.0);
         }
         let haste = if self.sprinting { SPRINT / RUN - 1.0 } else { 0.0 };
         (InputFrame { move_dir, held: held | pressed, pressed, ..Default::default() }, haste)

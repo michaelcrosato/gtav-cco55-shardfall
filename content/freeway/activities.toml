@@ -1,0 +1,344 @@
+# Grand Theft Freeway-BX activities (PLAN.md §5.6.11), read by `gtf_game::activities`. The
+# Pretzel Run and the hold-ups are missions with `activity = true` (missions/). Here: the stunt
+# jumps (`[[jump]]`), the Lost Shields (`[[shield]]`), vigilante (`[vigilante]`) and the random
+# events (`[[event]]`). Each finished one counts toward completion.
+
+# ---- Stunt jumps ----
+# Through the `gate` (world x, z: a ramp's lip, a road's broken end) at `speed` m/s or more,
+# heading `heading` (degrees from north), then airborne; down inside `land` (radius `radius`)
+# is the bonus. The ramps are `[[jump]]` wedges in district.toml. `runup` is where a run at it
+# starts (bots, the attract mode, tests).
+
+[[jump]]
+id = "ditch"
+name = "The Ditch Jump"
+gate = [212.5, 211.0]
+heading = 180.0
+speed = 16.0
+land = [212.5, 250.0]
+radius = 20.0
+reward = 500
+runup = [212.5, -6.0, 100.0]
+
+[[jump]]
+id = "freeway_gap"
+name = "The Freeway Gap"
+gate = [110.0, 361.0]
+heading = 270.0
+speed = 18.0
+land = [62.0, 361.0]
+radius = 30.0
+reward = 1000
+runup = [185.0, 11.0, 360.0]
+
+[[jump]]
+id = "pier"
+name = "The Pier Ramp"
+gate = [-194.0, 330.0]
+heading = 90.0
+speed = 20.0
+land = [-140.0, 330.0]
+radius = 16.0
+reward = 500
+runup = [-330.0, 0.0, 330.0]
+
+[[jump]]
+id = "hills"
+name = "The Hills Jump"
+gate = [96.0, -582.2]
+heading = 90.0
+speed = 20.0
+land = [150.0, -582.0]
+radius = 18.0
+reward = 750
+runup = [-60.0, 27.8, -582.2]
+
+[[jump]]
+id = "containers"
+name = "The Harbor Container Ramp"
+gate = [-36.0, 360.0]
+heading = 270.0
+speed = 20.0
+land = [-82.0, 362.0]
+radius = 20.0
+reward = 750
+runup = [55.0, 0.0, 360.0]
+
+# ---- The Lost Shields ----
+# Fifteen Route 404 shields lost round the district: `at` is where the post stands (world
+# metres, on the ground, deck or roof there), `yaw` the way the sign faces (degrees from north),
+# `trivia` its card. Walking (or driving) up to one takes it; all fifteen pay $10,000 and leave
+# a gold Okami Kaze outside Dez's place.
+
+# St. Brigid's roof, by the helipad (up the ladders).
+[[shield]]
+id = "hospital_roof"
+at = [-20.0, 30.95, -74.0]
+yaw = 90.0
+trivia = "St. Brigid's keeps a helicopter on its roof because an ambulance on Route 404 at five o'clock is legally a parked car."
+
+# The top deck of Civic Center Parking.
+[[shield]]
+id = "garage_top"
+at = [-128.0, 10.35, -72.0]
+yaw = 90.0
+trivia = "Civic Center Parking was the first garage in the state with more levels than exits. Some drivers are still looking."
+
+# Behind Dez's block in Los Mirados.
+[[shield]]
+id = "dez_block"
+at = [-336.0, 0.15, -366.0]
+yaw = 180.0
+trivia = "Route 404 is named after its original budget: not found."
+
+# Mack's pool deck.
+[[shield]]
+id = "mack_pool"
+at = [-178.0, 5.95, -452.0]
+yaw = 270.0
+trivia = "Homes in the hills are sold on their ocean views. Their pools face the sea for the same reason: the other way is Route 404."
+
+# Lookout Point, in the corner by the wall.
+[[shield]]
+id = "lookout"
+at = [-269.5, 26.85, -565.0]
+yaw = 90.0
+trivia = "From Lookout Point you can see all of Route 404 at once, which is more than anyone on it has ever done."
+
+# Under Route 404 by the harbor.
+[[shield]]
+id = "under_404"
+at = [401.0, 0.15, 320.0]
+yaw = 0.0
+trivia = "The shade under Route 404 is the most sought-after real estate in Paloma Bay. The rent is the noise."
+
+# The Harbor Spur's broken end.
+[[shield]]
+id = "spur_end"
+at = [110.0, 11.0, 358.0]
+yaw = 90.0
+trivia = "The Harbor Spur ends forty feet short of the harbor. The city calls it phase one. Phase two was due in 1974."
+
+# The Ditch, under the bridge.
+[[shield]]
+id = "ditch_bridge"
+at = [202.0, -6.0, 190.0]
+yaw = 0.0
+trivia = "The Ditch was built to carry storm water. It has carried storm water four times and police chases four thousand."
+
+# The MV Pacific Star's foredeck (up the gangway).
+[[shield]]
+id = "freighter"
+at = [370.0, 9.15, 398.0]
+yaw = 270.0
+trivia = "The MV Pacific Star crossed the Pacific in eleven days. Its containers will take longer to get through the Pretzel."
+
+# Behind the racks in Harbor Gate Freight's warehouse.
+[[shield]]
+id = "warehouse"
+at = [140.0, 0.19, 305.0]
+yaw = 90.0
+trivia = "Route 404's shields are blue because red tested as \"too exciting\" with focus groups."
+
+# Behind Roxy's trailer.
+[[shield]]
+id = "roxy_lot"
+at = [105.0, 0.17, 109.0]
+yaw = 180.0
+trivia = "The Flats were named by the freeway's planners, who called the neighborhood \"flat, cheap and unlikely to complain.\""
+
+# The far corner of the SPPD impound lot.
+[[shield]]
+id = "impound"
+at = [-292.0, 0.17, 43.0]
+yaw = 315.0
+trivia = "Most cars in the SPPD impound lot were towed from the carpool lane. Most of their passengers were mannequins."
+
+# Behind the Freeway Diner, by its dumpsters.
+[[shield]]
+id = "diner_back"
+at = [400.0, 0.15, -290.0]
+yaw = 270.0
+trivia = "The Freeway Diner's sign has said EXIT NOW since 1962. Four drivers have, through the front window."
+
+# Behind a lifeguard tower on Palisade Beach.
+[[shield]]
+id = "lifeguard"
+at = [-376.0, 0.15, 377.0]
+yaw = 180.0
+trivia = "Palisade Beach lifeguards can spot a swimmer in trouble at 400 yards and a free parking space at a mile."
+
+# The end of Palisade Pier.
+[[shield]]
+id = "pier_end"
+at = [-176.0, 0.17, 476.5]
+yaw = 0.0
+trivia = "Route 404 was once planned to run out along Palisade Pier to a floating interchange. The pier said no."
+
+
+# ---- Vigilante ----
+
+# In a police car, D-pad right (keyboard E) or the phone's Jobs app starts it. Each level sends
+# suspects in getaway cars somewhere near; they drive about until the police car comes within
+# `spot` m (or its siren within twice that, or a hit), then run (`escape` m off, or well clear a
+# while, they think they have lost it and pull over). Ram or shoot a getaway car down
+# to `bail` of its health (a ram does `ram` times the crash's own damage to it) or box it in, and
+# they jump out and run on foot (unarmed) or fight (`armed` levels, as the `side` of
+# enemies.toml); a suspect down — or burnt out in the car — is a takedown, paying `pay`. The last
+# level done pays `bonus` and counts for completion; a civilian killed on duty docks `fine` (the
+# police do not come after one of their own for it). It ends on death, arrest, a time limit run
+# out, a suspect on foot getting away, or `leave` seconds out of a police car (not while chasing
+# a suspect on foot).
+[vigilante]
+title = "Vigilante"
+cars = ["sppd_interceptor", "sppd_tactical"]
+pay = 250
+bonus = 1000
+fine = 250
+leave = 60.0
+spawn = [60.0, 120.0]
+spot = 45.0
+escape = 320.0
+hide = 70.0
+bail = 0.2
+ram = 3.0
+tough = 0.5
+gap = 4.0
+hp = 30.0
+armed_hp = 50.0
+run = [4.8, 3.4]
+tire = 6.0
+side = "street"
+
+[vigilante.look]   # hoodies and dark denim
+skin = ["#f1c9a5", "#e0ac83", "#c68e62", "#a26a42", "#7a4b2a", "#4f3220"]
+shirt = ["#26262b", "#3b2f2f", "#2f3b4a", "#4a3b24", "#5a1f24", "#1f3a2a"]
+pants = ["#1d2430", "#2a2a2a", "#3a3a40", "#20304a"]
+shoes = ["#111111", "#2a2a2a", "#e6e6e6"]
+wear.hair = { buzz = 2, short = 2, curly = 1, long = 0.6, afro = 0.3, bald = 0.4 }
+wear.beard = { stubble = 0.15, goatee = 0.1, mustache = 0.05 }
+wear.accessories = { hood = 0.45, beanie = 0.2, ballcap = 0.15, sunglasses = 0.15 }
+wear.hats = ["#1f1f24", "#3b2f2f", "#5a1f24", "#20304a"]
+
+[[vigilante.level]]
+cars = 1
+riders = 1
+kinds = ["fenwick_commuter", "zephyr_wagon", "paloma_cab"]
+health = 0.45
+pace = 0.95
+time = 300.0
+call = "Stolen car"
+
+[[vigilante.level]]
+cars = 1
+riders = 2
+kinds = ["daimon_titan", "marlin_bay", "zephyr_wagon"]
+health = 0.5
+pace = 1.0
+time = 300.0
+call = "Two suspects in a stolen car"
+
+[[vigilante.level]]
+cars = 2
+riders = 1
+kinds = ["fenwick_commuter", "paloma_cab", "fenwick_courier"]
+health = 0.5
+pace = 1.0
+time = 360.0
+call = "Two getaway cars"
+
+[[vigilante.level]]
+cars = 1
+riders = 2
+armed = "p9"
+kinds = ["bravura_stallion", "daimon_titan"]
+health = 0.55
+pace = 1.05
+time = 330.0
+call = "Armed robbers"
+
+[[vigilante.level]]
+cars = 2
+riders = 2
+armed = "p9"
+kinds = ["daimon_titan", "zephyr_wagon", "marlin_bay"]
+health = 0.6
+pace = 1.1
+time = 420.0
+call = "Armed crew in two cars"
+
+# ---- Random events ----
+
+# Met in the street outside missions, not too often: each is checked every few seconds once free
+# roam has gone `after` seconds without an event (since the last one, or the start), where it
+# fits, with `chance` of happening at each check. `kind` says which it is.
+
+# A thief snatches a purse from someone near the player (on foot, where `crowd` people are
+# within 30 m in one of the `zones`) and runs (`run` m/s, slower after `tire` s; `escape` m off
+# and gone). One hit takes them down and the purse drops: walk over it, then give it back (D-pad
+# right by its owner: `reward`) or keep it (walk 60 m off with it: `keep`). Done either way.
+[[event]]
+id = "purse_snatcher"
+kind = "snatch"
+title = "Purse Snatcher"
+after = 150.0
+chance = 0.35
+zones = ["commercial", "downtown", "shops", "beach", "park"]
+crowd = 6
+reward = 150
+keep = 320
+run = [5.4, 4.2]
+tire = 10.0
+hp = 25.0
+escape = 85.0
+wait = 120.0
+speaker = "PASSER-BY"
+
+[event.lines]
+snatch = "Hey! My purse! Somebody stop him!"
+thanks = "My purse! Oh, thank you, thank you!"
+kept = "Hey! That's mine!"
+gone = "He got away..."
+
+# A robber outside a shop (`near`: the doors; the player in a car `reach` m off) begs for a
+# ride: stop by them and they get in, with `stars` on the player. Lose the police, then drop them
+# at one of the `drops` (`drop` m from the shop) for `reward`. They wait `wait` s for a ride; out
+# of the car they follow the player into the next one, but not from `escape` m behind.
+[[event]]
+id = "getaway_needed"
+kind = "getaway"
+title = "Getaway Needed"
+after = 150.0
+chance = 0.35
+near = ["landmark:gas", "landmark:grind_house", "landmark:diner", "landmark:gun_store"]
+reach = [40.0, 150.0]
+drops = [
+  "spot:dez_beach", "spot:roxy_flats", "spot:impound_lot", "spot:depot_gate",
+  "spot:cityworks_gate", "spot:diner_lot", "spot:luxe_front",
+]
+drop = [250.0, 800.0]
+stars = 2
+reward = 1200
+run = [5.2, 4.6]
+escape = 60.0
+wait = 75.0
+speaker = "ROBBER"
+
+[event.lines]
+beg = "Hey! You! I need a ride, now!"
+board = "Go, go, go! They're right behind me!"
+heat = "Lose the cops first!"
+wait = "Hey, wait for me!"
+thanks = "Nice driving. Here's your cut."
+gone = "Forget it, I'll find another ride."
+
+[event.look]   # a dark hoodie, a beanie or a cap, the cash in a backpack
+skin = ["#f1c9a5", "#e0ac83", "#c68e62", "#a26a42", "#7a4b2a"]
+shirt = ["#1f1f24", "#2b2b30", "#30242a"]
+pants = ["#1d2430", "#2a2a2a"]
+shoes = ["#111111", "#2a2a2a"]
+wear.hair = { buzz = 2, short = 2, curly = 1, long = 0.5 }
+wear.beard = { stubble = 0.2, goatee = 0.1 }
+wear.accessories = { hood = 0.5, beanie = 0.3, ballcap = 0.15, sunglasses = 0.25, backpack = 0.45 }
+wear.hats = ["#1f1f24", "#2b2b30"]
+wear.bags = ["#1f1f24", "#3e2723"]

@@ -9,9 +9,11 @@ use glam::Vec3;
 use pav_core::SimEvent;
 
 pub mod bank;
+pub mod dsp;
 pub mod fx;
 pub mod loops;
 pub mod music;
+pub mod voice;
 
 pub use bank::Bank;
 pub use loops::{LoopKind, LoopTarget};
@@ -156,8 +158,10 @@ pub struct Mixer {
     /// Reverb send (0 = dry, which also skips its cost) and room size.
     pub reverb_mix: f32,
     pub room: f32,
-    /// 0..1: ambience beds duck under dialogue and menus.
+    /// Decibels the radio and the ambience beds duck by (dialogue, menus): 0 for none.
     pub duck: f32,
+    /// The ducked level now (gliding to `duck`'s).
+    duck_gain: f32,
     pub sample_rate: f32,
     pub master: f32,
     /// The cues `SimEvent::Sound` plays (offline renders; the live output resolves cues itself).
@@ -185,6 +189,7 @@ impl Mixer {
             reverb_mix: 0.0,
             room: 0.5,
             duck: 0.0,
+            duck_gain: 1.0,
             sample_rate,
             master: 0.8,
             bank: Arc::new(Bank::engine()),
@@ -282,6 +287,7 @@ impl Mixer {
             (Some(t), Some(v)) if same(v, t) => {
                 v.target_gain = t.volume;
                 v.target_muffle = t.muffle;
+                v.set_segments(&t.segments);
                 if (v.t - t.offset as f64).abs() > 0.75 {
                     v.t = t.offset as f64;
                 }
@@ -304,8 +310,11 @@ impl Mixer {
     /// Renders into an interleaved stereo buffer (overwrites).
     pub fn render(&mut self, out: &mut [f32]) {
         let dt = 1.0 / self.sample_rate;
-        let duck = 1.0 - self.duck.clamp(0.0, 1.0) * 0.7;
+        let duck_to = dsp::db(-self.duck.clamp(0.0, 60.0));
+        let glide = 1.0 - (-dt / 0.08).exp();
         for frame in out.chunks_mut(2) {
+            self.duck_gain += (duck_to - self.duck_gain) * glide;
+            let duck = self.duck_gain;
             let (mut l, mut r) = (0.0, 0.0);
             for v in &mut self.voices {
                 let s = v.next(dt);
@@ -705,6 +714,7 @@ pub fn music_target(scene: &pav_core::present::AudioScene) -> Option<music::Musi
         offset: m.offset,
         volume: m.volume,
         muffle: m.muffle,
+        segments: m.segments.clone(),
     })
 }
 
@@ -743,7 +753,6 @@ pub fn render_events(events: &[(f32, SimEvent)], duration: f32, sample_rate: f32
     out
 }
 
-/// Writes interleaved stereo f32 samples as a 16-bit PCM WAV file.
 /// Renders a run tick by tick: each tick's events, then the loops, radio and bus its audio scene
 /// asks for (a hook game's `PlayFrame::audio`), then `tail` seconds more. Interleaved stereo.
 pub fn render_run(
@@ -753,14 +762,31 @@ pub fn render_run(
     sample_rate: f32,
     l: &Listener,
 ) -> Vec<f32> {
+    render_run_with(Arc::new(Bank::engine()), ticks, dt, tail, sample_rate, l)
+}
+
+/// [`render_run`] with its own sound bank (a game's cues over the engine's).
+pub fn render_run_with(
+    bank: Arc<Bank>,
+    ticks: &[(Vec<SimEvent>, Option<pav_core::present::AudioScene>)],
+    dt: f32,
+    tail: f32,
+    sample_rate: f32,
+    l: &Listener,
+) -> Vec<f32> {
     let mut mixer = Mixer::new(sample_rate);
+    mixer.bank = bank;
     let per = (dt * sample_rate).round().max(1.0) as usize;
     let mut out = Vec::with_capacity((ticks.len() * per + (tail * sample_rate) as usize) * 2);
     let mut buf = vec![0.0f32; per * 2];
     for (events, scene) in ticks {
-        let sfx = scene.as_ref().map_or(1.0, |s| s.effects);
         for e in events {
-            play_event(&mut mixer, e, l, sfx);
+            let gain = match (e, scene.as_ref()) {
+                (SimEvent::Sound { cue, .. }, Some(s)) => s.gain_for(cue),
+                (_, Some(s)) => s.effects,
+                (_, None) => 1.0,
+            };
+            play_event(&mut mixer, e, l, gain);
         }
         if let Some(scene) = scene {
             let mut loops = loop_targets(scene, l);
@@ -782,6 +808,7 @@ pub fn render_run(
     out
 }
 
+/// Writes interleaved stereo f32 samples as a 16-bit PCM WAV file.
 pub fn write_wav(path: &std::path::Path, samples: &[f32], sample_rate: u32) -> std::io::Result<()> {
     let data_len = (samples.len() * 2) as u32;
     let mut b = Vec::with_capacity(44 + data_len as usize);
@@ -883,7 +910,8 @@ impl AudioOut {
         let _ = self.tx.send(Cmd::Loops(targets));
     }
 
-    /// The effects bus: reverb send and room size, and how much the beds duck.
+    /// The effects bus: reverb send and room size, and the decibels the radio and the beds
+    /// duck by.
     pub fn set_bus(&self, reverb: f32, room: f32, duck: f32) {
         let _ = self.tx.send(Cmd::Bus { reverb, room, duck });
     }

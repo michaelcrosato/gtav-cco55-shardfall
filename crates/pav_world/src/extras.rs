@@ -1,5 +1,5 @@
-//! Things placed by hand in a district file: stunt ramps (wedges with exact colliders) and signs
-//! (words on a post).
+//! Things placed by hand in a district file: stunt ramps (wedges with exact colliders), signs
+//! (words on a post) and library props.
 
 use std::collections::BTreeMap;
 
@@ -53,6 +53,14 @@ pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut
         buf.quad(back, [nb; 4], [side; 4], nb);
     }
     patches(bufs, out);
+    for p in &def.prop {
+        let at = world(p.at);
+        let zone = match grid.at(grid.cell_of(at)) {
+            Some(crate::Cell::Zone(z)) => z,
+            _ => 0,
+        };
+        crate::parts::loose_prop(p, at, ground_at(def, grid, terrain, at), zone, out);
+    }
     for s in &def.sign {
         let p = world(s.at);
         let y = ground_at(def, grid, terrain, p);
@@ -73,7 +81,7 @@ pub(crate) fn build(def: &DistrictDef, grid: &Grid, terrain: &Terrain, out: &mut
             text: s.text.clone(),
             pos: Vec3::new(p.x, y + s.height + 0.6, p.y),
             size: s.size,
-            color: Color::hex("#f4f1ea"),
+            color: Color::try_hex(&s.color).unwrap_or(Color::hex("#f4f1ea")),
             mode: LabelMode::Billboard,
             facing: Default::default(),
         });

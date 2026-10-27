@@ -1,0 +1,252 @@
+# A test mission for the Proving Grounds (`freeway/mission/dev_test2`): the on-foot and story
+# half of the step kinds — dialogue, kill, collect, photograph, interact, stealth, holdup, chase,
+# goto, choose, branch, survive (the loud way), switch, parallel, defend, wait. `mission choose
+# loud` makes the bot take the loud way.
+
+key = "dev_test2"
+title = "Test Drive II"
+protagonist = "mack"
+district = "dev"
+text = "Every on-foot and story step kind, end to end."
+start = "spot:t2_start"
+blip = { letter = "T", at = "spot:test_far" }
+time = { at = "15:00", lock = true }
+reward = { cash = 800, text = ["roxy", "Nice work, old man. Same time next week?"] }
+
+[[medals]]
+id = "fast"
+text = "Finish within 5:00"
+time_under = 300.0
+
+[[medals]]
+id = "aim"
+text = "Two head shots"
+headshots = 2
+
+[[spawn]]
+id = "g1"
+enemy = "gang"
+at = "at:66,-96"
+weapon = "p9"
+behaviour = "guard"
+health = 40.0
+
+[[spawn]]
+id = "g2"
+enemy = "gang"
+at = "at:80,-92"
+weapon = "p9"
+behaviour = "guard"
+health = 40.0
+
+[[spawn]]
+id = "p1"
+pickup = "cash"
+at = "at:72,-100"
+later = true
+
+[[spawn]]
+id = "p2"
+pickup = "package"
+at = "at:88,-98"
+later = true
+
+[[spawn]]
+id = "mark"
+ped = "businessperson"
+at = "at:60,-78"
+yaw = 270.0
+later = true
+name = "Mark"
+
+[[spawn]]
+id = "watcher"
+ped = "security"
+at = "at:62,-74"
+yaw = 90.0
+later = true
+
+[[spawn]]
+id = "clerk"
+ped = "worker"
+at = "at:22,-70"
+later = true
+name = "Clerk"
+
+[[spawn]]
+id = "runner"
+ped = "jogger"
+at = "at:10,-56"
+later = true
+name = "Runner"
+
+[[spawn]]
+id = "g3"
+enemy = "gang"
+at = "at:70,100"
+weapon = "p9"
+later = true
+health = 40.0
+
+[[spawn]]
+id = "g4"
+enemy = "gang"
+at = "at:86,94"
+weapon = "p9"
+later = true
+health = 40.0
+
+[[spawn]]
+id = "roxy_body"
+protagonist = "roxy"
+at = "at:50,96"
+later = true
+
+[[spawn]]
+id = "witness"
+ped = "elder"
+at = "at:44,92"
+later = true
+blip = "ally"
+
+[[spawn]]
+id = "g5"
+enemy = "gang"
+at = "at:92,100"
+weapon = "p9"
+later = true
+health = 40.0
+
+[[step]]
+kind = "dialogue"
+lines = [
+  { who = "mack", text = "Two of the Ditch Kings on the range. Let's not make a scene.", seconds = 2.6 },
+  { who = "mack", text = "Then again.", seconds = 1.2 },
+]
+# (The range is private property: nobody calls the police.)
+on_start = [{ heat_cap = 0 }, { traffic = 0.35 }]
+
+[[step]]
+kind = "kill"
+targets = ["g1", "g2"]
+checkpoint = true
+objective = "Take out the ~r~Ditch Kings~s~."
+help = "Hold ~btn:l2~ to aim (it snaps to the nearest target) and ~btn:r2~ to fire."
+
+[[step]]
+kind = "collect"
+targets = ["p1", "p2"]
+objective = "Pick up the ~g~cash~s~ and the ~g~package~s~."
+on_start = [{ spawn = "p1" }, { spawn = "p2" }]
+
+[[step]]
+kind = "photograph"
+targets = ["mark"]
+objective = "Photograph ~y~Mark~s~ with your phone."
+help = "~btn:up~ brings up the phone; the camera is the third tile."
+on_start = [{ spawn = "mark" }]
+
+[[step]]
+kind = "interact"
+target = "at:46,-100"
+prompt = "Plant the bug"
+seconds = 1.5
+objective = "Plant the ~y~bug~s~."
+on_start = [{ despawn = "mark" }]
+
+[[step]]
+kind = "stealth"
+target = "at:28,-78"
+watchers = ["watcher"]
+checkpoint = true
+objective = "Slip past the ~r~guard~s~ to the ~y~gate~s~."
+help = "~btn:l3~ crouches: guards see half as far."
+on_start = [{ spawn = "watcher" }]
+
+[[step]]
+kind = "holdup"
+target = "actor:clerk"
+seconds = 3.0
+objective = "Hold up the ~y~clerk~s~."
+on_start = [{ despawn = "watcher" }, { spawn = "clerk" }]
+
+[[step]]
+kind = "chase"
+target = "actor:runner"
+radius = 2.5
+objective = "Catch the ~y~runner~s~."
+on_start = [{ despawn = "clerk" }, { spawn = "runner" }]
+
+[[step]]
+kind = "goto"
+target = "at:40,86"
+radius = 3.0
+checkpoint = true
+objective = "Go to the ~y~plaza~s~."
+on_start = [{ despawn = "runner" }]
+
+[[step]]
+kind = "choose"
+options = [
+  { id = "quiet", title = "Quiet", lines = ["Nobody gets hurt.", "Takes longer."] },
+  { id = "loud", title = "Loud", lines = ["Two more Ditch Kings.", "Done in a minute."] },
+]
+
+[[step]]
+kind = "branch"
+flag = "loud"
+to = "loud_way"
+
+[[step]]
+kind = "wait"
+seconds = 1.0
+objective = "Keep it quiet."
+
+[[step]]
+kind = "branch"
+flag = "quiet"
+to = "join"
+
+[[step]]
+kind = "survive"
+label = "loud_way"
+waves = [["g3", "g4"]]
+objective = "Deal with the ~r~Ditch Kings~s~."
+
+[[step]]
+kind = "switch"
+label = "join"
+to = "roxy"
+objective = "Switch to ~p~Roxy~s~ (hold ~btn:down~)."
+on_start = [{ spawn = "roxy_body" }]
+
+[[step]]
+kind = "parallel"
+checkpoint = true
+
+[[step.steps]]
+kind = "interact"
+who = "roxy"
+target = "at:70,90"
+prompt = "Rig the van"
+seconds = 1.0
+objective = "Rig the ~y~van~s~."
+
+[[step.steps]]
+kind = "goto"
+who = "mack"
+target = "at:30,100"
+radius = 3.0
+objective = "Take the ~y~corner~s~."
+
+[[step]]
+kind = "defend"
+target = "actor:witness"
+seconds = 6.0
+waves = [["g5"]]
+objective = "Keep the ~g~witness~s~ safe."
+on_start = [{ spawn = "witness" }]
+
+[[step]]
+kind = "wait"
+seconds = 1.0

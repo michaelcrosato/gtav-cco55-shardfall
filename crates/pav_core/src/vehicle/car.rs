@@ -186,7 +186,8 @@ pub(super) fn tick(
     let n_driven = driven.iter().filter(|d| **d).count().max(1) as f32;
     let engine = engine_force(&v.def, v_fwd, v.throttle);
     let coast = if v.throttle.abs() < 0.05 && v.state.engine_on { COAST * mass * gravity / n_driven } else { 0.0 };
-    let wet = 1.0 - v.state.water.clamp(0.0, 0.9);
+    // Water under the tyres takes grip away; the driver's input may add some (an ability).
+    let traction = (1.0 - v.state.water.clamp(0.0, 0.9)) * (1.0 + vi.map_or(0.0, |vi| vi.grip.clamp(0.0, 2.0)));
     let mut kicks: Vec<(Vec3, Vec3)> = Vec::with_capacity(12);
     let mut slip = 0.0f32;
     for (i, w) in wheels.iter().enumerate() {
@@ -201,7 +202,7 @@ pub(super) fn tick(
         let f = n.cross(a).normalize_or_zero();
         let vel = b.velocity_at_point(p);
         let (vl, vs) = (vel.dot(f), vel.dot(a));
-        let k = wet * if v.state.burst.get(i).copied().unwrap_or(false) { BURST_GRIP } else { 1.0 };
+        let k = traction * if v.state.burst.get(i).copied().unwrap_or(false) { BURST_GRIP } else { 1.0 };
         let mu_s = v.def.grip * k;
         let mu_l = mu_s * LONG_GRIP;
         let (fl, fs) = if (handbrake && i >= 2) || parked {
@@ -291,7 +292,8 @@ pub(super) fn tick(
         b.set_angvel(rot * l, true);
     }
 
-    // On its side or roof for three seconds (not burning): it turns back onto its wheels.
+    // On its side or roof for three seconds (not burning): it turns back onto its wheels. (Wheels
+    // touching something on its side are on a wall or a car it leans on: they count for nothing.)
     let speed = b.linvel().length();
     if s.righting {
         if up.y > 0.85 || s.wrecked {
@@ -303,7 +305,7 @@ pub(super) fn tick(
             let axis = up.cross(Vec3::Y).normalize_or(fwd);
             b.set_angvel(axis * RIGHT_SPEED, true);
         }
-    } else if up.y < 0.35 && down < 2 && speed < 3.0 {
+    } else if up.y < 0.35 && speed < 3.0 {
         s.upside += dt;
         if s.upside >= RIGHT_AFTER && !s.burning && !s.wrecked {
             s.righting = true;

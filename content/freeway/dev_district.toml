@@ -105,40 +105,138 @@ name = "incline"
 
 [[sign]]
 at = [8.0, 6.6]
-text = "SIGNALS & TRAFFIC | gtf citymap layers=lanes,signals"
+text = "SIGNALS & TRAFFIC\ngtf citymap layers=lanes,signals"
+color = "#1b1f24"
 
 [[sign]]
 at = [5.6, 4.0]
-text = "STREETS & STREAMING | gtf status, freeway/view/hills_vista"
+text = "STREETS & STREAMING\ngtf perf view=hills_vista"
+color = "#1b1f24"
+# (Above the facades and the trees: the letters read against the sky.)
+height = 9.0
 
 [[sign]]
 at = [11.0, 4.6]
-text = "COVER RANGE | gtf citymap layers=cover"
+text = "COVER RANGE\ngtf citymap layers=cover"
+color = "#1b1f24"
 
 [[sign]]
 at = [12.0, 6.6]
-text = "PEDESTRIANS & CROSSWALKS | gtf citymap layers=walk"
+text = "PEDESTRIANS & CROSSWALKS\ngtf citymap layers=walk"
+color = "#1b1f24"
+# (Above the facades and the trees: the letters read against the sky.)
+height = 9.0
 
 [[sign]]
 at = [3.5, 4.6]
-text = "PARKING | gtf citymap layers=parking"
+text = "PARKING\ngtf citymap layers=parking"
+color = "#1b1f24"
 
 [[sign]]
 at = [3.5, 8.6]
-text = "VEHICLE FEEL PAD | gtf vehicle_feel"
+text = "VEHICLE FEEL PAD\ngtf vehicle_feel"
+color = "#1b1f24"
 
 [[sign]]
 at = [6.6, 10.0]
-text = "STUNT JUMP | gtf vehicle_feel test=jump"
+text = "STUNT JUMP\ngtf vehicle_feel key=okami_kaze"
+color = "#1b1f24"
 
 [[sign]]
 at = [12.5, 11.6]
-text = "HEAT DISPATCH | gtf play cmd=heat 3"
+text = "HEAT DISPATCH\ngtf play cmd=\"wanted 3\""
+color = "#1b1f24"
 
 [[sign]]
 at = [10.5, 13.4]
-text = "MISSIONS | gtf play cmd=mission start dev_test"
+text = "MISSIONS\ngtf play cmd=\"mission start dev_test\""
+color = "#1b1f24"
 
 [[sign]]
 at = [13.0, 13.4]
-text = "UI GALLERY & AUDIO | freeway/gallery, gtf audio_capture"
+text = "UI GALLERY\ngtf capture scene=freeway/gallery hud=true"
+color = "#1b1f24"
+
+[[sign]]
+at = [12.0, 14.6]
+text = "AUDIO & RADIO\ngtf audio_capture"
+color = "#1b1f24"
+
+[[sign]]
+at = [12.5, 2.2]
+text = "COMBAT & WEAPONS\ngtf input cmd=\"give p9 60\" hold=l2 press=r2"
+color = "#1b1f24"
+
+# Named spots for the test missions and the protagonists (map cell coordinates; `yaw` degrees
+# from north).
+[[spot]]
+name = "dez_home"
+at = [3.5, 3.4]
+yaw = 180.0
+
+[[spot]]
+name = "mack_home"
+at = [11.5, 5.4]
+yaw = 180.0
+
+[[spot]]
+name = "roxy_home"
+at = [11.5, 9.4]
+yaw = 180.0
+
+[[spot]]
+name = "test_start"
+at = [10.5, 13.4]
+yaw = 180.0
+
+[[spot]]
+name = "test_car"
+at = [3.5, 5.5]
+yaw = 90.0
+
+[[spot]]
+name = "test_yard"
+at = [11.5, 10.5]
+yaw = 90.0
+
+[[spot]]
+name = "test_store"
+at = [3.5, 2.4]
+yaw = 180.0
+
+[[spot]]
+name = "test_range"
+at = [11.5, 2.0]
+yaw = 0.0
+
+[[spot]]
+name = "test_park"
+at = [11.5, 5.8]
+yaw = 0.0
+
+[[spot]]
+name = "test_far"
+at = [14.0, 14.0]
+yaw = 270.0
+
+# The first test mission's wagon, rival and goon, set facing the way the player will drive.
+[[spot]]
+name = "t1_lead"
+at = [14.0, 12.5]
+yaw = 90.0
+
+[[spot]]
+name = "t1_rival"
+at = [15.5, 3.0]
+yaw = 0.0
+
+[[spot]]
+name = "t1_goon"
+at = [5.5, 3.5]
+yaw = 270.0
+
+# The second test mission's start: on the sidewalk by the range, facing the street.
+[[spot]]
+name = "t2_start"
+at = [10.44, 4.06]
+yaw = 180.0

@@ -1,0 +1,4 @@
+{"format":1,"name":"gtf/chain_link","unit":"cm","description":"Galvanised chain-link mesh: light wire in a 7 cm grid over dark gaps, for yard fences and gates (drawn opaque).","tags":["fence","chainlink","mesh","metal","yard"],"source":{"library":"own","license":"CC0-1.0","author":"Grand Theft Freeway-BX contributors"},"color":"#b4bbbf","roughness":0.5,"metallic":0.4,
+ "layers":[
+  {"type":"tiles","size":7,"gap":1.6,"color":"#4b5357","vary":0.15}
+ ]}

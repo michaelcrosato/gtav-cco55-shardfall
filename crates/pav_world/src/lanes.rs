@@ -257,6 +257,47 @@ struct Segment {
     b: i32,
 }
 
+/// How far short of the map's edge a road that runs off it ends (m), or of the water's edge a road
+/// ends at: its turnaround and the barriers beyond it fit in between.
+const EDGE_PULL: f32 = 16.0;
+
+/// How far short of a dead end (a lot, a building) a road's lanes end (m), so the U-turn there
+/// stays on the road.
+const DEAD_PULL: f32 = 11.0;
+
+/// A turnaround a car can drive: a keyhole from the end of `p0` (heading `d0`), swinging out
+/// toward the kerb and round (4 m either side of the centre line, 8.3 m on), back in to the start
+/// of the lane the other way, `p2`.
+fn turnaround(p0: Vec3, d0: Vec3, p2: Vec3) -> Vec<Vec3> {
+    // (across from p0's side to p2's, along the way in), the ends at ±1.
+    const SHAPE: [(f32, f32); 13] = [
+        (-1.0, 0.0),
+        (-1.45, 1.5),
+        (-2.0, 3.0),
+        (-2.22, 4.5),
+        (-1.83, 6.5),
+        (-1.0, 7.8),
+        (0.0, 8.3),
+        (1.0, 7.8),
+        (1.83, 6.5),
+        (2.22, 4.5),
+        (2.0, 3.0),
+        (1.45, 1.5),
+        (1.0, 0.0),
+    ];
+    let mid = (p0 + p2) * 0.5;
+    let half = (p2 - p0) * 0.5;
+    // Across scales with the lanes' spacing up to 4 m out; along it is fixed.
+    let unit = half.normalize_or_zero();
+    let h = half.length();
+    SHAPE
+        .iter()
+        .map(|&(x, y)| {
+            mid + unit * if x.abs() <= 1.0 { x * h } else { x.signum() * (h + (x.abs() - 1.0) * (4.0 - h) / 1.22) } + d0 * y
+        })
+        .collect()
+}
+
 /// Points every ~4 m from `p` to `q` on the ground (terrain heights added).
 fn line(p: Vec2, q: Vec2, terrain: &Terrain) -> Vec<Vec3> {
     let n = ((p.distance(q) / 4.0).ceil() as usize).max(1);
@@ -312,6 +353,16 @@ impl LaneGraph {
         let mut outgoing: BTreeMap<(u32, u8), Vec<u32>> = BTreeMap::new();
         // Dead ends: the lanes arriving at a band end with no junction, and the inner lane out.
         let mut dead: Vec<(Vec<u32>, u32)> = Vec::new();
+        // Where the freeway's ramps come down to the streets (a road ending there carries on up
+        // the ramp: it is no dead end to shorten).
+        let ramp_feet: Vec<Vec2> = freeways
+            .iter()
+            .flat_map(|f| f.ramps.iter())
+            .flat_map(|r| [r.path.points.first(), r.path.points.last()])
+            .flatten()
+            .filter(|p| p.y < ROAD_Y + 2.0)
+            .map(|p| Vec2::new(p.x, p.z))
+            .collect();
         for seg in segments(grid) {
             let (lanes, parking, width) = layout(seg.class, seg.k);
             let cs = grid.cell;
@@ -331,6 +382,38 @@ impl LaneGraph {
                 junction_at.get(&(c.x, c.y)).copied()
             };
             let (ja, jb) = (beyond(seg.a - 1), beyond(seg.b + 1));
+            // A road that runs off the map stops short of its edge (where it is closed off), so
+            // its turnaround lies on the map; so does one that ends at the water's edge (a quay,
+            // closed off the same way: `edge::build`).
+            let last = if seg.ew { grid.w } else { grid.h };
+            let ramp = |end: Vec2| ramp_feet.iter().any(|r| r.distance(end) < cs);
+            let water = |cell: i32| {
+                (0..seg.k).all(|i| {
+                    let c = if seg.ew { IVec2::new(cell, seg.across0 + i) } else { IVec2::new(seg.across0 + i, cell) };
+                    grid.zone(c) == Some("water")
+                })
+            };
+            let pull_a = if ja.is_some() || ramp(p) {
+                0.0
+            } else if seg.a == 0 || water(seg.a - 1) {
+                EDGE_PULL
+            } else {
+                DEAD_PULL
+            };
+            let pull_b = if jb.is_some() || ramp(q) {
+                0.0
+            } else if seg.b + 1 == last || water(seg.b + 1) {
+                EDGE_PULL
+            } else {
+                DEAD_PULL
+            };
+            let p = p + along * pull_a;
+            let q = q - along * pull_b;
+            // Too short a stub left to turn round on (a junction right by the edge): no lanes, the
+            // junction just has no way on that side.
+            if pull_a.max(pull_b) > 0.0 && p.distance(q) < pull_a.max(pull_b) + 6.0 {
+                continue;
+            }
             // Sides of the junctions the segment enters: at its far end it enters jb from the
             // side facing back along it, and ja from the side facing forward.
             let side_b: u8 = if seg.ew { 3 } else { 0 };
@@ -376,6 +459,8 @@ impl LaneGraph {
                     incoming.entry((j, side_b)).or_default().extend(&fwd_ids);
                     outgoing.entry((j, side_b)).or_default().extend(&back_ids);
                 }
+                // A road ending where a ramp comes down carries on up it: no turnaround.
+                None if ramp(q) => {}
                 None => dead.push((fwd_ids.clone(), back_ids[0])),
             }
             match ja {
@@ -383,6 +468,7 @@ impl LaneGraph {
                     incoming.entry((j, side_a)).or_default().extend(&back_ids);
                     outgoing.entry((j, side_a)).or_default().extend(&fwd_ids);
                 }
+                None if ramp(p) => {}
                 None => dead.push((back_ids.clone(), fwd_ids[0])),
             }
             // Parking along the curbs, clear of the ends.
@@ -448,6 +534,28 @@ impl LaneGraph {
                     }
                 }
             }
+            // An approach with no way through (every other arm of the junction is gone): its
+            // lanes turn round in the box, onto the lanes leaving the same way they came.
+            for s_in in 0..4u8 {
+                let Some(ins) = incoming.get(&(j, s_in)).cloned() else { continue };
+                let Some(outs) = outgoing.get(&(j, s_in)).cloned() else { continue };
+                if ins.iter().any(|&li| !g.lanes[li as usize].next.is_empty()) {
+                    continue;
+                }
+                for &li in &ins {
+                    let lin = &g.lanes[li as usize];
+                    let target = outs[(lin.index as usize).min(outs.len() - 1)];
+                    let (p0, d0) = lin.at(lin.length);
+                    let (p2, _) = g.lanes[target as usize].at(0.0);
+                    let mut c = Lane::new(turnaround(p0, d0, p2), LaneKind::Connector, 4.0, lin.width);
+                    c.junction = Some(j);
+                    c.turn = Turn::UTurn;
+                    let cid = g.lanes.len() as u32;
+                    g.lanes.push(c);
+                    g.link(li, cid);
+                    g.link(cid, target);
+                }
+            }
             // Lights where four roads meet or a side road meets an avenue; two streets meeting in
             // a T just yield.
             let sides: Vec<bool> = (0..4u8).map(|s| incoming.contains_key(&(j, s))).collect();
@@ -475,10 +583,11 @@ impl LaneGraph {
                 jm.signal = Some(SignalPlan { offset, ..plan });
             }
         }
-        // Stop lines: signalised approaches stop 5 m back; others yield at the line.
+        // Stop lines: signalised approaches stop 8 m back (room for a bus swinging round the
+        // corner); others yield at the line.
         for l in g.lanes.iter_mut() {
             if l.kind != LaneKind::Connector && l.junction.is_some() {
-                l.stop = 5.0;
+                l.stop = 8.0;
             }
         }
         // U-turns at dead ends.
@@ -486,8 +595,7 @@ impl LaneGraph {
             for into in intos {
                 let (p0, d0) = g.lanes[into as usize].at(f32::MAX);
                 let (p2, _) = g.lanes[out as usize].at(0.0);
-                let mid = (p0 + p2) * 0.5 + d0 * 4.0;
-                let mut c = Lane::new(vec![p0, p0 + d0 * 2.5, mid, p2 + d0 * 2.5, p2], LaneKind::Connector, 4.0, 3.6);
+                let mut c = Lane::new(turnaround(p0, d0, p2), LaneKind::Connector, 4.0, 3.6);
                 c.turn = Turn::UTurn;
                 let cid = g.lanes.len() as u32;
                 g.lanes.push(c);
@@ -548,8 +656,10 @@ impl LaneGraph {
     fn freeway(&mut self, f: &FreewayGeom, grid: &Grid) {
         let deck = &f.deck;
         let n = deck.len();
-        let mut splits: Vec<usize> = vec![0, n - 1];
-        for r in &f.ramps {
+        // A closed start's lanes stop at its turnaround (and loop round there, below).
+        let turn = if f.closed_start { deck.sample_at(crate::freeway::TURNAROUND) } else { 0 };
+        let mut splits: Vec<usize> = vec![turn, n - 1];
+        for r in f.ramps.iter().filter(|r| r.deck_sample > turn) {
             splits.push(r.deck_sample);
         }
         splits.sort_unstable();
@@ -570,9 +680,7 @@ impl LaneGraph {
                     }
                     let mut lane = Lane::new(pts, LaneKind::Freeway, speed, 3.6);
                     lane.index = li as u8;
-                    // The deck's start leaves the map (traffic comes and goes there); a broken end
-                    // goes nowhere.
-                    lane.source = a == 0 && f.closed_start;
+                    // A broken end goes nowhere.
                     lane.closed = b == n - 1 && f.broken_end;
                     let id = self.lanes.len() as u32;
                     self.lanes.push(lane);
@@ -595,6 +703,30 @@ impl LaneGraph {
                     self.lanes[a as usize].right = Some(b);
                     self.lanes[b as usize].left = Some(a);
                 }
+            }
+        }
+        // The turnaround: each lane against the path loops round into its opposite number along it
+        // (concentric half circles, bulging toward the barrier).
+        if f.closed_start && turn + 1 < n {
+            let back = (deck.points[turn] - deck.points[turn + 1]).normalize_or_zero();
+            for (li, u) in LANES.iter().take(lanes_n).enumerate() {
+                let (p0, p2) = (deck.at(turn, -u, 0.0), deck.at(turn, *u, 0.0));
+                let (c, r) = ((p0 + p2) * 0.5, p0.distance(p2) * 0.5);
+                let across = (p2 - p0).normalize_or_zero();
+                let pts: Vec<Vec3> = (0..=12)
+                    .map(|k| {
+                        let t = std::f32::consts::PI * k as f32 / 12.0;
+                        c - across * r * t.cos() + back * r * t.sin()
+                    })
+                    .collect();
+                let mut lane = Lane::new(pts, LaneKind::Connector, 4.0, 3.6);
+                lane.turn = Turn::UTurn;
+                lane.index = li as u8;
+                let id = self.lanes.len() as u32;
+                self.lanes.push(lane);
+                let (from, to) = (pieces[1][li][0], pieces[0][li][0]);
+                self.link(from, id);
+                self.link(id, to);
             }
         }
         let outer = lanes_n - 1;
@@ -717,16 +849,76 @@ impl LaneGraph {
         if let (Some(&n_last), Some(&s_first)) = (north.first(), south.first()) {
             self.link(n_last, s_first);
         }
-        for (top, bottom) in &c.ramps {
-            let pts = |a: Vec3, b: Vec3| {
-                let n = ((a.distance(b) / 4.0).ceil() as usize).max(1);
-                (0..=n).map(|i| a.lerp(b, i as f32 / n as f32)).collect::<Vec<_>>()
+        for (k, (top, bottom)) in c.ramps.iter().enumerate() {
+            // Down the ramp along its surface's centre line: level for the landing, then the drop.
+            let len = Vec2::new(bottom.x - top.x, bottom.z - top.z).length();
+            let line = c.ramp_lines.get(k).cloned().unwrap_or_else(|| vec![*top, *bottom]);
+            let slope = |t: f32| {
+                // The point `t` of the way down the line (by its z, which runs evenly).
+                let z = top.z + (bottom.z - top.z) * t;
+                let i = line.iter().position(|p| (p.z - top.z).abs() >= (z - top.z).abs()).unwrap_or(line.len() - 1);
+                if i == 0 {
+                    return line[0];
+                }
+                let (a, b) = (line[i - 1], line[i]);
+                let f = if (b.z - a.z).abs() > 1e-3 { (z - a.z) / (b.z - a.z) } else { 0.0 };
+                a.lerp(b, f.clamp(0.0, 1.0))
             };
-            let mut down = Lane::new(pts(*top, *bottom), LaneKind::Ramp, 10.0, 4.0);
+            let n = ((len / 4.0).ceil() as usize).max(2);
+            let descent: Vec<Vec3> = (0..=n).map(|i| slope(i as f32 / n as f32)).collect();
+            // The landing's end, where the drop begins: the lead-ins from and to the street turn
+            // there (over the level apron).
+            let landing = slope((crate::channel::LANDING / len.max(1.0)).min(0.5));
+            let dir_down = (*bottom - *top).normalize_or(Vec3::Z);
+            // A turn from `from` (heading `fdir`) to `to` (heading `tdir`): a quadratic curve
+            // through the corner where the two headings cross.
+            let bend = |from: Vec3, fdir: Vec3, to: Vec3, tdir: Vec3| -> Vec<Vec3> {
+                let flat = |v: Vec3| Vec2::new(v.x, v.z);
+                let (p, d, q, e) = (flat(from), flat(fdir).normalize_or_zero(), flat(to), flat(tdir).normalize_or_zero());
+                let den = d.x * e.y - d.y * e.x;
+                let corner = if den.abs() > 1e-3 {
+                    let s = ((q - p).x * e.y - (q - p).y * e.x) / den;
+                    p + d * s
+                } else {
+                    (p + q) * 0.5
+                };
+                (0..=8)
+                    .map(|i| {
+                        let t = i as f32 / 8.0;
+                        let c = p * (1.0 - t) * (1.0 - t) + corner * 2.0 * t * (1.0 - t) + q * t * t;
+                        Vec3::new(c.x, from.y + (to.y - from.y) * t, c.y)
+                    })
+                    .collect()
+            };
+            // The driveway that comes in at the top, and the one that leaves it.
+            let skip = [u32::MAX];
+            let into = self.nearest_end(*top, dir_down, 18.0, &skip).or_else(|| self.nearest_end_any(*top, 18.0, &skip));
+            let out_of = self.nearest_start_any(*top, 18.0, &skip);
+            let mut down_pts = Vec::new();
+            if let Some(e) = into {
+                let l = &self.lanes[e as usize];
+                let (end, d) = l.at(l.length);
+                down_pts.extend(bend(end, d, landing, dir_down));
+                down_pts.extend(descent.iter().copied().filter(|p| (p.z - top.z).abs() > (landing.z - top.z).abs() + 0.5));
+            } else {
+                down_pts.extend(descent.iter().copied());
+            }
+            let mut up_pts: Vec<Vec3> =
+                descent.iter().rev().copied().filter(|p| (p.z - top.z).abs() > (landing.z - top.z).abs() + 0.5).collect();
+            match out_of {
+                Some(s0) => {
+                    let l = &self.lanes[s0 as usize];
+                    let (start, d) = l.at(0.0);
+                    up_pts.extend(bend(landing, -dir_down, start, d));
+                }
+                None => up_pts
+                    .extend(descent.iter().rev().copied().filter(|p| (p.z - top.z).abs() <= (landing.z - top.z).abs() + 0.5)),
+            }
+            let mut down = Lane::new(down_pts, LaneKind::Ramp, 10.0, 4.0);
             down.closed = true;
             let did = self.lanes.len() as u32;
             self.lanes.push(down);
-            let mut up = Lane::new(pts(*bottom, *top), LaneKind::Ramp, 10.0, 4.0);
+            let mut up = Lane::new(up_pts, LaneKind::Ramp, 10.0, 4.0);
             up.closed = true;
             let uid = self.lanes.len() as u32;
             self.lanes.push(up);
@@ -744,16 +936,11 @@ impl LaneGraph {
             for e in ends {
                 self.link(e, uid);
             }
-            // The driveway at the top.
-            let dir_down = (*bottom - *top).normalize_or(Vec3::Z);
             let _ = grid;
-            if let Some(e) = self.nearest_end(*top, Vec3::new(dir_down.x.signum(), 0.0, 0.0) * 0.0 + dir_down, 18.0, &[did, uid])
-            {
-                self.link(e, did);
-            } else if let Some(e) = self.nearest_end_any(*top, 18.0, &[did, uid]) {
+            if let Some(e) = into {
                 self.link(e, did);
             }
-            if let Some(s) = self.nearest_start_any(*top, 18.0, &[did, uid]) {
+            if let Some(s) = out_of {
                 self.link(uid, s);
             }
         }
@@ -791,10 +978,22 @@ impl LaneGraph {
                     continue;
                 }
                 let l = &self.lanes[i];
-                // Changing lanes is a way on (and the neighbour a way in).
-                let sides = || l.left.into_iter().chain(l.right);
-                let open_next = l.next.iter().copied().chain(sides()).any(|j| !self.lanes[j as usize].closed);
-                let open_prev = l.prev.iter().copied().chain(sides()).any(|j| !self.lanes[j as usize].closed);
+                // Changing lanes is a way on (and a way in) when a lane across does go on (come
+                // from) somewhere — two lanes side by side that both stop do not keep each other open.
+                let mut across = Vec::new();
+                for right in [false, true] {
+                    let mut at = if right { l.right } else { l.left };
+                    while let Some(j) = at.filter(|j| !across.contains(j) && *j as usize != i) {
+                        across.push(j);
+                        let x = &self.lanes[j as usize];
+                        at = if right { x.right } else { x.left };
+                    }
+                }
+                let open = |j: &u32| !self.lanes[*j as usize].closed;
+                let open_next =
+                    l.next.iter().any(open) || across.iter().any(|j| open(j) && self.lanes[*j as usize].next.iter().any(open));
+                let open_prev =
+                    l.prev.iter().any(open) || across.iter().any(|j| open(j) && self.lanes[*j as usize].prev.iter().any(open));
                 // Freeway lanes at the map edge are sources and sinks.
                 let edge = l.source;
                 if (!open_next && !(edge && l.next.is_empty())) || (!open_prev && !(edge && l.prev.is_empty())) {
@@ -855,6 +1054,39 @@ impl LaneGraph {
         best
     }
 
+    /// Like [`LaneGraph::nearest`], but only lanes passing within `rise` metres of `p`'s height
+    /// (a car under the freeway is not on the deck above it), searched a little wider.
+    pub fn nearest_level(&self, p: Vec3, rise: f32, keep: impl Fn(&Lane) -> bool) -> Option<(u32, f32, f32)> {
+        let (cx, cz) = ((p.x / INDEX_CELL).floor() as i32, (p.z / INDEX_CELL).floor() as i32);
+        let mut best: Option<(u32, f32, f32)> = None;
+        for r in 0..7 {
+            for z in cz - r..=cz + r {
+                for x in cx - r..=cx + r {
+                    if (z - cz).abs() != r && (x - cx).abs() != r {
+                        continue;
+                    }
+                    for &i in self.index.get(&(x, z)).map(|v| v.as_slice()).unwrap_or(&[]) {
+                        let l = &self.lanes[i as usize];
+                        if !keep(l) {
+                            continue;
+                        }
+                        let (along, d) = l.project(p);
+                        if (l.at(along).0.y - p.y).abs() > rise {
+                            continue;
+                        }
+                        if best.is_none_or(|b| d < b.2) {
+                            best = Some((i, along, d));
+                        }
+                    }
+                }
+            }
+            if best.is_some_and(|b| b.2 < r as f32 * INDEX_CELL) {
+                break;
+            }
+        }
+        best
+    }
+
     /// A* from the lane nearest `from` to the lane nearest `to`: the lanes in order (empty if
     /// there is no way).
     pub fn route(&self, from: Vec3, to: Vec3) -> Vec<u32> {
@@ -865,6 +1097,12 @@ impl LaneGraph {
 
     /// A* between two lanes.
     pub fn route_lanes(&self, a: u32, b: u32) -> Vec<u32> {
+        self.route_lanes_avoiding(a, b, &[])
+    }
+
+    /// A* between two lanes that never enters the lanes in `avoid` (a road found blocked): the
+    /// lanes in order, empty if there is no other way.
+    pub fn route_lanes_avoiding(&self, a: u32, b: u32, avoid: &[u32]) -> Vec<u32> {
         #[derive(PartialEq)]
         struct Node(f32, u32);
         impl Eq for Node {}
@@ -901,6 +1139,9 @@ impl LaneGraph {
             // On along the links, or across to a neighbouring lane (a lane change costs a moment).
             let changes = here.left.into_iter().chain(here.right).map(|j| (j, 1.5));
             for (j, extra) in here.next.iter().map(|&j| (j, 0.0)).chain(changes) {
+                if avoid.contains(&j) {
+                    continue;
+                }
                 let l = &self.lanes[j as usize];
                 let c = ci + l.length / l.speed.max(1.0) + extra;
                 if cost.get(&j).is_none_or(|&old| c < old) {

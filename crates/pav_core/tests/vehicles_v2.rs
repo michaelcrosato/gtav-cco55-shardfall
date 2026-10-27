@@ -1,8 +1,8 @@
 //! Vehicles v2 (`pav_core::vehicle`): cars pitch on slopes and lean in turns without tipping
-//! over, hold still on a grade, right themselves after three seconds on their roof, dent and
-//! break lamps and lose health in crashes (`SimEvent::Crash`), burn and explode, follow a
-//! game's positions while kinematic, swing doors, seat riders by seat, float then sink in water,
-//! and land a kicker jump upright. The feel tracks measure any definition.
+//! over, hold still on a grade, right themselves after three seconds on their roof or side (even
+//! leaning on a wall), dent and break lamps and lose health in crashes (`SimEvent::Crash`), burn
+//! and explode, follow a game's positions while kinematic, swing doors, seat riders by seat, float
+//! then sink in water, and land a kicker jump upright. The feel tracks measure any definition.
 
 use glam::{Quat, Vec3};
 use pav_core::color::Color;
@@ -107,7 +107,7 @@ fn roll_deg(q: Quat) -> f32 {
 }
 
 const GO: VehicleInput =
-    VehicleInput { throttle: 1.0, brake: 0.0, steer: 0.0, pitch: 0.0, handbrake: false, horn: false, siren: false };
+    VehicleInput { throttle: 1.0, brake: 0.0, steer: 0.0, pitch: 0.0, handbrake: false, horn: false, siren: false, grip: 0.0 };
 
 #[test]
 fn a_car_pitches_up_a_grade_and_holds_still_on_it() {
@@ -163,6 +163,25 @@ fn a_car_on_its_roof_rights_itself_after_three_seconds() {
     assert!(up(&sim) > 0.85, "back on its wheels: up.y {}", up(&sim));
     sim.run(60, &InputFrame::default());
     assert!(sim.vehicle_status(id).unwrap().wheels_down >= 3);
+}
+
+#[test]
+fn a_car_on_its_side_against_a_wall_rights_itself_too() {
+    // Its wheels against the wall touch something, but it is no more on its wheels for that.
+    let mut sim = world(|sim| {
+        let st = &mut sim.state;
+        st.statics.add(&mut st.physics, Block::new(Vec3::new(0.8, 0.0, -6.0), Vec3::new(1.8, 3.0, 6.0), Color::hex("#777777")));
+    });
+    let id = sim.spawn_vehicle("car", sedan(), Vec3::new(0.0, 0.95, 0.0), Quat::from_rotation_z(80f32.to_radians()), None);
+    // (Someone at the wheel: a car left alone falls asleep where it lies.)
+    let idle = VehicleInput { throttle: 0.0, ..GO };
+    hold(&mut sim, id, idle, 60);
+    let up = |sim: &Sim| (pose(sim, id).1 * Vec3::Y).y;
+    assert!(up(&sim) < 0.35, "on its side: up.y {}", up(&sim));
+    let down = sim.vehicle_status(id).unwrap().wheels_down;
+    assert!(down >= 2, "wheels against the wall: {down}");
+    hold(&mut sim, id, idle, 300);
+    assert!(up(&sim) > 0.85, "back on its wheels: up.y {}", up(&sim));
 }
 
 #[test]

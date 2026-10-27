@@ -1,0 +1,14 @@
+{"format":2,"name":"tv_stand","unit":"cm",
+"description":"A flat TV on a low walnut media cabinet; the screen faces +z with a faint blue glow.",
+"tags":["tv","television","living","cabinet","screen"],
+"category":"furniture",
+"materials":{
+"black":{"color":"#16181b"},
+"screen":{"color":"#2c4f78","look":"unlit","emissive":0.2},
+"wood":{"color":"#4a3628"}},
+"parts":{
+"cabinet":{"type":"box","size":[160,48,42],"pos":[0,24,0],"mat":"wood"},
+"neck":{"type":"box","size":[8,16,4],"pos":[0,60,-8],"mat":"black"},
+"screen":{"type":"box","size":[120,68,1],"pos":[0,104,-3],"mat":"screen"},
+"stand":{"type":"box","size":[30,4,20],"pos":[0,50,-6],"mat":"black"},
+"tv":{"type":"box","size":[126,74,5],"pos":[0,104,-6],"mat":"black"}}}

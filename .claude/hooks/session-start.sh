@@ -1,8 +1,10 @@
 #!/bin/bash
 # Cloud-session setup: native build deps, software Vulkan (lavapipe) for captures, and a
-# prebuilt `pav` for the shardfall MCP server (.mcp.json). The server connects while this
-# hook still runs: its `cargo run` waits on the build lock, so `MCP_TIMEOUT` in
-# settings.json (default 30 s) must outlast a cold build (~4.5 min on 4 cores).
+# prebuilt `pav` and `gtf`. The shardfall MCP server (.mcp.json) runs `gtf mcp` (every engine
+# tool plus the game's), which this combined build leaves fresh; `cargo run -p pav_tools --bin
+# pav` alone resolves features differently and rebuilt for over 10 minutes (session 4). The
+# server connects while this hook still runs: its `cargo run` waits on the build lock, so
+# `MCP_TIMEOUT` in settings.json (default 30 s) must outlast a cold build (~6.5 min on 4 cores).
 set -euo pipefail
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then

@@ -182,8 +182,9 @@ pub struct RenderStats {
     pub mesh_bytes: usize,
     /// Loaded `MeshKey::Custom` meshes.
     pub custom_meshes: usize,
-    /// Point lights in this frame (after the nearest-lights limit).
+    /// Point lights in this frame (after the nearest-lights limit), and those casting shadows.
     pub lights: usize,
+    pub shadow_lights: usize,
     /// Procedural material rows in the scene's table (besides row 0, none).
     pub materials: usize,
     /// Static regions in the scene, those the camera drew, and those the sun's shadow pass drew.
@@ -1718,6 +1719,7 @@ impl Renderer {
             mesh_bytes: self.meshes.values().map(|m| (m.vbuf.size() + m.ibuf.size()) as usize).sum(),
             custom_meshes: self.meshes.keys().filter(|k| matches!(k, MeshKey::Custom(_))).count(),
             lights: n_lights,
+            shadow_lights: shadow_slots,
             materials: self.materials.len.saturating_sub(1),
             heaviest,
         };

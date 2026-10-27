@@ -1,0 +1,16 @@
+{"format":2,"name":"bed","unit":"cm",
+"description":"A double bed, 1.6 m by 2.1 m: dark wood frame and headboard (-z), white sheets, blue blanket, two pillows.",
+"tags":["bed","bedroom","sleep","mattress","furniture"],
+"category":"furniture",
+"materials":{
+"blanket":{"color":"#3a5f8a"},
+"sheet":{"color":"#f2f0ea"},
+"wood":{"color":"#5a4030"}},
+"parts":{
+"blanket":{"type":"box","size":[162,8,140],"pos":[0,64,34],"mat":"blanket"},
+"fold":{"type":"box","size":[162,6,20],"pos":[0,63,-46],"mat":"sheet"},
+"frame":{"type":"box","size":[166,28,212],"pos":[0,24,0],"mat":"wood"},
+"headboard":{"type":"box","size":[172,110,8],"pos":[0,55,-107],"mat":"wood"},
+"leg":{"type":"box","size":[8,10,8],"pos":[76,5,100],"mat":"wood","mirror":["x","z"]},
+"mattress":{"type":"box","size":[158,22,202],"pos":[0,49,2],"mat":"sheet"},
+"pillow":{"type":"ellipsoid","size":[62,16,40],"pos":[37,67,-78],"mat":"sheet","mirror":"x"}}}

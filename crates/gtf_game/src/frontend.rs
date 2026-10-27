@@ -23,6 +23,10 @@ pub enum Page {
     Play,
     Pause,
     Gallery,
+    /// The game playing itself (the attract loop, `attract.rs`).
+    Attract,
+    /// The new game's intro cards, or the loading card on the way into play (`cards.rs`).
+    Loading,
 }
 
 impl Page {
@@ -36,7 +40,14 @@ impl Page {
             Page::Play => "play",
             Page::Pause => "pause",
             Page::Gallery => "gallery",
+            Page::Attract => "attract",
+            Page::Loading => "loading",
         }
+    }
+
+    /// Pages where the world plays on (and the player's things are live).
+    pub fn plays(self) -> bool {
+        matches!(self, Page::Play | Page::Attract)
     }
 
     /// Pages where nobody is playing: the idle timer runs (attract mode after 10 s).
@@ -51,11 +62,39 @@ pub const PAUSE_TABS: [&str; 5] = ["MAP", "BRIEF", "STATS", "SETTINGS", "GAME"];
 /// Seconds without input on an idle page before the attract loop starts (§5.8).
 pub const IDLE_SECONDS: f32 = 10.0;
 
+/// The pause map's blip filters (△ cycles them).
+pub const MAP_FILTERS: [&str; 4] = ["ALL", "MISSIONS", "SHOPS", "PLACES"];
+
+/// Whether the map filter `f` shows a blip of this kind (the waypoint always shows).
+pub fn map_shows(f: usize, icon: BlipIcon) -> bool {
+    use BlipIcon::*;
+    let mission = matches!(icon, Letter(_) | Objective | Heist | Activity | Race | Jump);
+    let shop = matches!(icon, Shop | Gun | Garage);
+    match f % MAP_FILTERS.len() {
+        _ if icon == Waypoint => true,
+        1 => mission,
+        2 => shop,
+        3 => !mission && !shop,
+        _ => true,
+    }
+}
+
 /// What a frontend step asks the game to do.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
     /// Start playing (free roam).
     Play,
+    /// Load the newest save and play.
+    Continue,
+    /// A fresh game.
+    NewGame,
+    /// The pause menu's replay list, Load Game, Save Game (at a safehouse), Restart Checkpoint
+    /// and Quit Mission.
+    Replay,
+    Load,
+    Save,
+    Restart,
+    QuitMission,
     /// The settings changed (keep them).
     Settings,
     Quit,
@@ -86,6 +125,11 @@ pub struct Front {
     pub waypoint: Option<Vec2>,
     /// When the last page change happened (real seconds; fades key off it).
     pub changed_at: f32,
+    /// The About page shown, and the pause map's filter (`MAP_FILTERS`).
+    #[serde(default)]
+    pub about: usize,
+    #[serde(default)]
+    pub map_filter: usize,
 }
 
 impl Default for Front {
@@ -105,10 +149,12 @@ impl Default for Front {
             idle: 0.0,
             attract_due: false,
             map_cursor: Vec2::ZERO,
-            map_zoom: 160.0,
+            map_zoom: 360.0,
             legend: false,
             waypoint: None,
             changed_at: 0.0,
+            about: 0,
+            map_filter: 0,
         }
     }
 }
@@ -121,6 +167,19 @@ pub struct Ctx<'a> {
     pub player: Vec2,
     /// Real seconds since the game started (the UI clock).
     pub now: f32,
+    /// What the pause menu's Game tab offers.
+    pub game: GameMenu,
+    /// The pause map's blips while it is open (its cursor snaps to them).
+    pub blips: Vec<Blip>,
+}
+
+/// What the pause menu's Game tab offers: Restart Checkpoint and Quit Mission on a mission, Save
+/// Game at a safehouse (else why not).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct GameMenu {
+    pub on_mission: bool,
+    pub checkpoint: bool,
+    pub save: Option<&'static str>,
 }
 
 fn item(id: &str, label: &str, enabled: bool, note: Option<&str>) -> MenuItem {
@@ -134,6 +193,8 @@ fn hint(button: PadButton, label: &str) -> Prompt {
 impl Front {
     pub fn go(&mut self, page: Page, now: f32) {
         if page != self.page {
+            // (Browser checks wait for these lines, PLAN §7.4.)
+            log::info!("frontend: {}", page.name());
             if matches!(page, Page::Settings | Page::About | Page::Gallery) {
                 self.back = self.page;
             }
@@ -152,7 +213,6 @@ impl Front {
             item("free_roam", "Free Roam", true, None),
             item("settings", "Settings", true, None),
             item("about", "About", true, None),
-            item("gallery", "UI Gallery", true, Some("Every piece of the interface")),
         ];
         if !web {
             items.push(item("quit", "Quit", true, None));
@@ -160,20 +220,28 @@ impl Front {
         items
     }
 
-    fn game_items() -> Vec<MenuItem> {
-        vec![
-            item("resume", "Resume", true, None),
-            item("gallery", "UI Gallery", true, None),
+    fn game_items(g: GameMenu) -> Vec<MenuItem> {
+        let mut v = vec![item("resume", "Resume", true, None)];
+        if g.on_mission {
+            v.push(item("restart", "Restart Checkpoint", g.checkpoint, None));
+            v.push(item("quit_mission", "Quit Mission", true, None));
+        }
+        v.extend([
+            item("save", "Save Game", g.save.is_none(), g.save),
+            item("load", "Load Game", !g.on_mission, None),
+            item("replay", "Replay Mission", !g.on_mission, Some("Missions you have passed")),
             item("title", "Quit to Title", true, None),
-        ]
+        ]);
+        v
     }
 
     fn settings_cards() -> Vec<Card> {
         let blurb = [
             "Volume of radio, effects and voices",
+            "Quality, resolution and brightness",
             "Frame rate readout and HUD size",
-            "Camera, prompts and vibration",
-            "Subtitles, shake and contrast",
+            "Aim assist, camera, sprint and prompts",
+            "Subtitles, colours, shake and contrast",
         ];
         SETTINGS_PAGES
             .iter()
@@ -221,8 +289,9 @@ impl Front {
                 self.idle += dt;
             }
             if self.idle >= IDLE_SECONDS && !self.attract_due {
+                // (The game starts the loop: `attract_start`.)
                 self.attract_due = true;
-                log::info!("attract would start: {IDLE_SECONDS} s without input on the {} page", self.page.name());
+                log::info!("attract: {IDLE_SECONDS} s without input on the {} page", self.page.name());
             }
         }
         // The pointer: focus what it is over, accept what it clicks.
@@ -252,18 +321,33 @@ impl Front {
             }
             Page::Main => {
                 let items = self.main_items(ctx.has_save, ctx.web);
+                // (Never resting on a greyed-out item: Continue without a save.)
+                if !items.get(self.main).is_some_and(|i| i.enabled) {
+                    self.main = items.iter().position(|i| i.enabled).unwrap_or(0);
+                }
                 self.main = move_focus(self.main, items.len(), dy, |i| items[i].enabled);
                 if back {
                     self.go(Page::Title, now);
                 } else if accept && items[self.main].enabled {
                     match items[self.main].id.as_str() {
-                        "continue" | "new_game" | "free_roam" => {
-                            self.go(Page::Play, now);
+                        // (Into play through the loading cards: the game moves on from them.)
+                        "continue" => {
+                            self.go(Page::Loading, now);
+                            return Some(Action::Continue);
+                        }
+                        "new_game" => {
+                            self.go(Page::Loading, now);
+                            return Some(Action::NewGame);
+                        }
+                        "free_roam" => {
+                            self.go(Page::Loading, now);
                             return Some(Action::Play);
                         }
                         "settings" => self.go(Page::Settings, now),
-                        "about" => self.go(Page::About, now),
-                        "gallery" => self.go(Page::Gallery, now),
+                        "about" => {
+                            self.about = 0;
+                            self.go(Page::About, now);
+                        }
                         "quit" => return Some(Action::Quit),
                         _ => {}
                     }
@@ -275,7 +359,7 @@ impl Front {
                     self.settings_tab = (self.settings_tab as i32 + d).rem_euclid(SETTINGS_PAGES.len() as i32) as usize;
                     self.settings = 0;
                 }
-                let items = ctx.settings.items(self.settings_tab);
+                let items = ctx.settings.items(self.settings_tab, ctx.web);
                 self.settings = move_focus(self.settings, items.len(), dy, |_| true);
                 let id = items[self.settings.min(items.len() - 1)].id.clone();
                 let change = if dx != 0 {
@@ -294,7 +378,12 @@ impl Front {
                 }
             }
             Page::About => {
-                if back || accept {
+                let n = crate::about::PAGES.len() as i32;
+                let d = (pressed(input, pad::R1) as i32 - pressed(input, pad::L1) as i32)
+                    + dx
+                    + (accept && accept_id.is_none()) as i32;
+                self.about = (self.about as i32 + d).rem_euclid(n) as usize;
+                if back {
                     let to = self.back;
                     self.go(to, now);
                 }
@@ -308,6 +397,8 @@ impl Front {
                     self.go(to, now);
                 }
             }
+            // (The loop and the cards are the game's: `attract.rs`, `cards.rs`.)
+            Page::Attract | Page::Loading => {}
             Page::Play => {
                 if pressed(input, pad::START) {
                     self.go(Page::Pause, now);
@@ -345,11 +436,28 @@ impl Front {
                         if pressed(input, pad::WEST) {
                             self.legend = !self.legend;
                         }
+                        if pressed(input, pad::NORTH) {
+                            self.map_filter = (self.map_filter + 1) % MAP_FILTERS.len();
+                        }
+                        // Let go of the stick near a blip and the cursor settles on it.
+                        if s.length() < 0.1 {
+                            let reach = self.map_zoom * 0.05;
+                            let near = ctx
+                                .blips
+                                .iter()
+                                .filter(|b| map_shows(self.map_filter, b.icon))
+                                .map(|b| b.pos)
+                                .min_by(|a, b| a.distance(self.map_cursor).total_cmp(&b.distance(self.map_cursor)));
+                            if let Some(b) = near.filter(|b| b.distance(self.map_cursor) < reach) {
+                                self.map_cursor = self.map_cursor.lerp(b, (dt * 12.0).min(1.0));
+                            }
+                        }
                         if back {
                             self.go(Page::Play, now);
                         }
                     }
-                    2 => self.stats = move_focus(self.stats, 3, dx, |_| true),
+                    // (The protagonists, then completion and the activities.)
+                    2 => self.stats = move_focus(self.stats, 5, dx, |_| true),
                     3 => {
                         self.pause = move_focus(self.pause, SETTINGS_PAGES.len(), dx + dy, |_| true);
                         if accept {
@@ -359,12 +467,31 @@ impl Front {
                         }
                     }
                     4 => {
-                        let items = Self::game_items();
-                        self.pause = move_focus(self.pause, items.len(), dy, |_| true);
-                        if accept {
-                            match items[self.pause].id.as_str() {
+                        let items = Self::game_items(ctx.game);
+                        self.pause = move_focus(self.pause, items.len(), dy, |i| items[i].enabled);
+                        if accept && items[self.pause.min(items.len() - 1)].enabled {
+                            match items[self.pause.min(items.len() - 1)].id.as_str() {
                                 "resume" => self.go(Page::Play, now),
-                                "gallery" => self.go(Page::Gallery, now),
+                                "quit_mission" => {
+                                    self.go(Page::Play, now);
+                                    return Some(Action::QuitMission);
+                                }
+                                "restart" => {
+                                    self.go(Page::Play, now);
+                                    return Some(Action::Restart);
+                                }
+                                "save" => {
+                                    self.go(Page::Play, now);
+                                    return Some(Action::Save);
+                                }
+                                "replay" => {
+                                    self.go(Page::Play, now);
+                                    return Some(Action::Replay);
+                                }
+                                "load" => {
+                                    self.go(Page::Play, now);
+                                    return Some(Action::Load);
+                                }
                                 "title" => self.go(Page::Title, now),
                                 _ => {}
                             }
@@ -389,6 +516,7 @@ impl Front {
                     self.settings_tab = n;
                     self.settings = 0;
                 }
+                Page::About if n < crate::about::PAGES.len() => self.about = n,
                 _ => {}
             }
             return;
@@ -401,7 +529,7 @@ impl Front {
                 }
             }
             Page::Settings => {
-                if let Some(i) = find(&ctx.settings.items(self.settings_tab)) {
+                if let Some(i) = find(&ctx.settings.items(self.settings_tab, ctx.web)) {
                     self.settings = i;
                 }
             }
@@ -412,7 +540,7 @@ impl Front {
                     }
                 }
                 4 => {
-                    if let Some(i) = find(&Self::game_items()) {
+                    if let Some(i) = find(&Self::game_items(ctx.game)) {
                         self.pause = i;
                     }
                 }
@@ -422,7 +550,9 @@ impl Front {
         }
     }
 
-    /// The page's full-screen `Screen` (None while playing).
+    /// The page's full-screen `Screen` (None while playing). `stats` is the stats page's cards,
+    /// `brief` the BRIEF tab, `game` what the GAME tab offers.
+    #[allow(clippy::too_many_arguments)]
     pub fn screen(
         &self,
         settings: &Settings,
@@ -431,6 +561,9 @@ impl Front {
         player: Vec2,
         blips: &[Blip],
         route: &[Vec2],
+        stats: CardRow,
+        brief: TextCard,
+        game: GameMenu,
     ) -> Option<Screen> {
         let s = |id: &str, title: &str, body: ScreenBody, backdrop: Backdrop, hints: Vec<Prompt>| Screen {
             id: id.into(),
@@ -443,7 +576,7 @@ impl Front {
         };
         let select_back = || vec![hint(PadButton::South, "Select"), hint(PadButton::East, "Back")];
         Some(match self.page {
-            Page::Play | Page::Gallery => return None,
+            Page::Play | Page::Gallery | Page::Attract | Page::Loading => return None,
             Page::Boot => {
                 let (title, caption) =
                     if self.since < 1.3 { ("PAVILION", "ENGINE") } else { ("GRAND THEFT FREEWAY", "PALOMA BAY · BX") };
@@ -461,12 +594,13 @@ impl Front {
             }
             Page::Main => {
                 let menu = MenuList { items: self.main_items(has_save, web), focus: self.main };
+                // (The kit's title layout with a menu: the logo smaller, the list under it.)
                 let card =
-                    TitleCard { prompt: None, menu: Some(menu), caption: Some("PALOMA BAY · BX".into()), small_logo: true };
+                    TitleCard { prompt: None, menu: Some(menu), caption: Some("PALOMA BAY · BX".into()), small_logo: false };
                 s("main", "GRAND THEFT FREEWAY", ScreenBody::Title(card), Backdrop::Clear, select_back())
             }
             Page::Settings => {
-                let menu = MenuList { items: settings.items(self.settings_tab), focus: self.settings };
+                let menu = MenuList { items: settings.items(self.settings_tab, web), focus: self.settings };
                 let mut screen = s(
                     &format!("settings/{}", SETTINGS_PAGES[self.settings_tab].to_ascii_lowercase()),
                     "SETTINGS",
@@ -479,8 +613,13 @@ impl Front {
                 screen
             }
             Page::About => {
-                let text = TextCard { heading: "ABOUT".into(), lines: crate::about::lines() };
-                s("about", "ABOUT", ScreenBody::Text(text), Backdrop::Dim, vec![hint(PadButton::East, "Back")])
+                let (heading, lines) = crate::about::page(self.about);
+                let id = format!("about/{}", heading.to_ascii_lowercase().replace(' ', "_"));
+                let hints = vec![hint(PadButton::South, "Next"), hint(PadButton::East, "Back")];
+                let mut screen = s(&id, "ABOUT", ScreenBody::Text(TextCard { heading, lines }), Backdrop::Dim, hints);
+                screen.tabs = crate::about::PAGES.iter().map(|t| t.to_string()).collect();
+                screen.tab = self.about % crate::about::PAGES.len();
+                screen
             }
             Page::Pause => {
                 let (body, backdrop, hints) = match self.pause_tab {
@@ -492,6 +631,7 @@ impl Front {
                             legend: self.legend,
                             blips: blips
                                 .iter()
+                                .filter(|b| map_shows(self.map_filter, b.icon))
                                 .cloned()
                                 .chain(self.waypoint.map(|w| Blip {
                                     pos: w,
@@ -510,6 +650,7 @@ impl Front {
                             },
                             selected: blips
                                 .iter()
+                                .filter(|b| map_shows(self.map_filter, b.icon))
                                 .find(|b| b.pos.distance(self.map_cursor) < self.map_zoom * 0.04)
                                 .and_then(|b| b.label.clone()),
                         }),
@@ -517,34 +658,20 @@ impl Front {
                         vec![
                             hint(PadButton::South, "Waypoint"),
                             hint(PadButton::West, "Legend"),
+                            hint(PadButton::North, &format!("Show: {}", MAP_FILTERS[self.map_filter % MAP_FILTERS.len()])),
                             hint(PadButton::R2, "Zoom"),
                             hint(PadButton::East, "Back"),
                         ],
                     ),
-                    1 => (
-                        ScreenBody::Text(TextCard {
-                            heading: "FREE ROAM".into(),
-                            lines: vec![
-                                "Paloma Bay is yours to explore: downtown, the docks, the hills.".into(),
-                                "Hold ~btn:l1~ to open the weapon wheel (time slows down).".into(),
-                                "~btn:start~ pauses; ~btn:l1~ ~btn:r1~ switch tabs.".into(),
-                            ],
-                        }),
-                        Backdrop::Dim,
-                        vec![hint(PadButton::East, "Resume")],
-                    ),
-                    2 => (
-                        ScreenBody::Cards(crate::protagonists::stat_cards(self.stats)),
-                        Backdrop::Dim,
-                        vec![hint(PadButton::East, "Resume")],
-                    ),
+                    1 => (ScreenBody::Text(brief), Backdrop::Dim, vec![hint(PadButton::East, "Resume")]),
+                    2 => (ScreenBody::Cards(stats), Backdrop::Dim, vec![hint(PadButton::East, "Resume")]),
                     3 => (
                         ScreenBody::Cards(CardRow { cards: Self::settings_cards(), focus: self.pause }),
                         Backdrop::Dim,
                         vec![hint(PadButton::South, "Open"), hint(PadButton::East, "Resume")],
                     ),
                     _ => (
-                        ScreenBody::Menu(MenuList { items: Self::game_items(), focus: self.pause }),
+                        ScreenBody::Menu(MenuList { items: Self::game_items(game), focus: self.pause }),
                         Backdrop::Dim,
                         vec![hint(PadButton::South, "Select"), hint(PadButton::East, "Resume")],
                     ),
@@ -561,5 +688,10 @@ impl Front {
     /// The fade over a page change: black at the change, clear after `secs`.
     pub fn fade(&self, now: f32, secs: f32) -> f32 {
         (1.0 - (now - self.changed_at) / secs).clamp(0.0, 1.0)
+    }
+
+    /// Fades the picture in from black again (a respawn).
+    pub fn fade_in(&mut self, now: f32) {
+        self.changed_at = now;
     }
 }

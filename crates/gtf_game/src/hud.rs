@@ -18,6 +18,14 @@ pub const WEAPONS: [(&str, &str, &str); 8] = [
     ("Phone", "phone", "Put the weapon away"),
 ];
 
+/// The bat in the fists' slot (once owned).
+pub const BAT_SLOT: (&str, &str, &str) = ("Bat", "fists", "Melee · knocks people down");
+
+/// Wheel slot `i` as shown (`bat`: the bat owned, in the fists' slot).
+pub fn slot(i: usize, bat: bool) -> (&'static str, &'static str, &'static str) {
+    if i == 0 && bat { BAT_SLOT } else { WEAPONS[i.min(WEAPONS.len() - 1)] }
+}
+
 /// A notification sliding in at the right.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Note {
@@ -45,21 +53,27 @@ impl WheelState {
     /// Points the stick: past half way picks the slot in that direction (slot 0 at the top,
     /// clockwise); closer to the middle keeps the last pick.
     pub fn aim(&mut self, stick: Vec2) {
-        if stick.length() < 0.5 {
+        self.aim_n(stick, 8);
+    }
+
+    /// The same for a wheel of `n` slots.
+    pub fn aim_n(&mut self, stick: Vec2, n: usize) {
+        if stick.length() < 0.5 || n == 0 {
             return;
         }
         // Angle clockwise from up.
         let a = stick.x.atan2(stick.y).rem_euclid(std::f32::consts::TAU);
-        self.focus = Some(((a / std::f32::consts::TAU * 8.0 + 0.5).floor() as usize) % 8);
+        self.focus = Some(((a / std::f32::consts::TAU * n as f32 + 0.5).floor() as usize) % n);
     }
 
-    pub fn ui(&self, current: usize) -> Wheel {
+    /// The wheel as drawn (`bat`: the bat in the fists' slot).
+    pub fn ui(&self, current: usize, bat: bool) -> Wheel {
         let focus = self.focus.unwrap_or(current);
-        let (name, _, detail) = WEAPONS[focus];
+        let (name, _, detail) = slot(focus, bat);
         Wheel {
             id: "weapons".into(),
-            slots: WEAPONS
-                .iter()
+            slots: (0..WEAPONS.len())
+                .map(|i| slot(i, bat))
                 .map(|(label, icon, detail)| WheelSlot {
                     label: (*label).into(),
                     icon: (*icon).into(),
@@ -79,7 +93,11 @@ pub struct HudInput<'a> {
     pub heading: f32,
     pub camera_yaw: f32,
     pub money: (i64, i64, f32),
+    /// The wheel slot in hand, and whether the bat fills the fists' slot.
     pub weapon: usize,
+    pub bat: bool,
+    /// The ability meter (0..1) and the protagonist's colour.
+    pub ability: (f32, Color),
     pub help: Option<(&'a str, f32)>,
     pub map_blips: Vec<Blip>,
     /// The GPS route on the radar (map points from the player on).
@@ -91,7 +109,7 @@ pub struct HudInput<'a> {
 }
 
 pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
-    let armed = h.weapon != 0 && h.weapon != 7;
+    let armed = (h.weapon != 0 || h.bat) && h.weapon != 7;
     let hud = Hud {
         minimap: Some(Minimap {
             center: h.player,
@@ -104,10 +122,10 @@ pub fn hud(h: &HudInput) -> (Hud, Option<Help>, Vec<Prompt>) {
             cones: Vec::new(),
             circles: Vec::new(),
         }),
-        vitals: Some(Vitals { health: h.vitals.0, armor: h.vitals.1, ability: 0.8, ability_color: Color::hex("#ffc145") }),
+        vitals: Some(Vitals { health: h.vitals.0, armor: h.vitals.1, ability: h.ability.0, ability_color: h.ability.1 }),
         money: Some(Money { amount: h.money.0, delta: h.money.1, delta_age: h.money.2 }),
         weapon: armed.then(|| {
-            let (name, icon, _) = WEAPONS[h.weapon];
+            let (name, icon, _) = slot(h.weapon, h.bat);
             WeaponHud { name: name.into(), icon: icon.into(), clip: h.ammo.map(|a| a.0), reserve: h.ammo.map(|a| a.1) }
         }),
         crosshair: h.crosshair.clone(),
@@ -134,4 +152,41 @@ pub fn lot_blips() -> Vec<Blip> {
         blip(14.0, 5.0, BlipIcon::Gun, "#ff7a3d", "Bayside Arms"),
         blip(60.0, -40.0, BlipIcon::Letter('M'), "#3d8bff", "Mack"),
     ]
+}
+
+/// "Colourblind-safe colours" (PLAN §5.9): the radar's, the map's and the markers' reds turn
+/// orange and their greens sky blue, so nothing hangs on telling red from green.
+pub fn colorblind(ui: &mut pav_core::present::UiModel) {
+    use pav_core::present::ScreenBody;
+    fn safe(c: Color) -> Color {
+        let [r, g, b] = c.0;
+        let (hi, lo) = (r.max(g).max(b), r.min(g).min(b));
+        if hi - lo < 0.04 {
+            return c;
+        }
+        let d = hi - lo;
+        let hue = if hi == r {
+            60.0 * ((g - b) / d).rem_euclid(6.0)
+        } else if hi == g {
+            60.0 * ((b - r) / d + 2.0)
+        } else {
+            60.0 * ((r - g) / d + 4.0)
+        };
+        if !(25.0..335.0).contains(&hue) {
+            Color([hi, hi * 0.32, lo * 0.2])
+        } else if (75.0..165.0).contains(&hue) {
+            Color([lo * 0.5, hi * 0.5, hi])
+        } else {
+            c
+        }
+    }
+    if let Some(m) = ui.hud.as_mut().and_then(|h| h.minimap.as_mut()) {
+        m.blips.iter_mut().for_each(|b| b.color = safe(b.color));
+        m.cones.iter_mut().for_each(|c| c.color = safe(c.color));
+        m.circles.iter_mut().for_each(|c| c.color = safe(c.color));
+    }
+    ui.markers.iter_mut().for_each(|m| m.color = safe(m.color));
+    if let Some(ScreenBody::Map(m)) = ui.screen.as_mut().map(|s| &mut s.body) {
+        m.blips.iter_mut().for_each(|b| b.color = safe(b.color));
+    }
 }

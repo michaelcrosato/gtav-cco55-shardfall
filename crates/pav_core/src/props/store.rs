@@ -107,7 +107,7 @@ pub fn embedded(name: &str) -> bool {
 /// Packs whose files every build carries beside the core (the browser and a lone `.exe` have no
 /// asset files), so rooms and game data can show them. Their rows keep their own tier: shipping
 /// says where the files are, not how far an entry has come. Keep `build.rs`'s list in step.
-pub const SHIPPED: &[&str] = &["kaykit_adventurers", "gtf_city"];
+pub const SHIPPED: &[&str] = &["kaykit_adventurers", "gtf_city", "gtf_vehicles", "gtf_weapons"];
 
 /// In every build, the browser's included: game data and rooms may name only these (the
 /// embedded tier and the shipped packs).

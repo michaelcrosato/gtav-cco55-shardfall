@@ -31,8 +31,8 @@ const HURT_PER: f32 = 45.0;
 /// Dent per m/s beyond that, and the dent that breaks the lamps on that end.
 const DENT_PER: f32 = 0.04;
 const LAMPS_BREAK: f32 = 0.45;
-/// The smallest change in speed that makes a crash event, and the gap between a vehicle's
-/// events (bigger hits always get one).
+/// The smallest change in speed that makes a crash event, and the quiet gap (s) that ends a
+/// contact (a much harder hit within one still gets an event of its own).
 const EVENT_FROM: f32 = 0.6;
 const EVENT_GAP: f32 = 0.15;
 
@@ -77,11 +77,21 @@ impl Sim {
         let (pos, rot) = (e.pos, e.rot);
         let Some(v) = e.vehicle.as_deref_mut() else { return };
         let dv = impulse / v.def.mass.max(1.0);
-        if dv >= EVENT_FROM && (v.state.since_crash >= EVENT_GAP || dv > 3.0) {
-            v.state.since_crash = 0.0;
+        if dv < EVENT_FROM {
+            return;
+        }
+        // One crash is one hit, however many ticks its contact lasts (a car pressed into a wall
+        // or wedged against another): it costs its strongest tick's worth, not the sum of them.
+        let fresh = v.state.since_crash >= EVENT_GAP;
+        if fresh {
+            v.state.crash_dv = 0.0;
+        }
+        if fresh || dv > v.state.crash_dv + 3.0 {
             events.push(SimEvent::Crash { vehicle: id, other, impulse, pos: point });
         }
-        let excess = dv - HURT_FROM;
+        v.state.since_crash = 0.0;
+        let excess = (dv - HURT_FROM).max(0.0) - (v.state.crash_dv - HURT_FROM).max(0.0);
+        v.state.crash_dv = v.state.crash_dv.max(dv);
         if excess <= 0.0 {
             return;
         }

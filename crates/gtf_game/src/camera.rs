@@ -52,6 +52,8 @@ pub struct OrbitCam {
     pub target: Vec3,
     /// Seconds since the player last turned the camera.
     pub idle: f32,
+    /// How far out to the shoulder a wall beside the player lets the pivot go (m).
+    pub room: f32,
     /// False until the first update (the first one snaps to the player).
     placed: bool,
 }
@@ -69,6 +71,7 @@ impl Default for OrbitCam {
             lift: FOOT_LIFT,
             target: Vec3::ZERO,
             idle: 0.0,
+            room: FOOT_SHOULDER,
             placed: false,
         }
     }
@@ -77,7 +80,9 @@ impl Default for OrbitCam {
 /// How the player turns the camera (from the game's settings).
 #[derive(Clone, Copy, Debug)]
 pub struct Look {
+    /// Across and up-and-down (1 = the reference speed).
     pub sensitivity: f32,
+    pub sensitivity_y: f32,
     pub invert_y: bool,
     /// Swing back behind the player's movement after a while without look input.
     pub recentre: bool,
@@ -85,7 +90,7 @@ pub struct Look {
 
 impl Default for Look {
     fn default() -> Self {
-        Look { sensitivity: 1.0, invert_y: false, recentre: true }
+        Look { sensitivity: 1.0, sensitivity_y: 1.0, invert_y: false, recentre: true }
     }
 }
 
@@ -117,9 +122,10 @@ impl OrbitCam {
         Vec2::new(w.x, w.z)
     }
 
-    /// The point the camera orbits: the target, moved out to the shoulder.
+    /// The point the camera orbits: the target, moved out to the shoulder (as far as a wall
+    /// beside the player allows).
     fn pivot(&self) -> Vec3 {
-        self.target + self.axes().1 * self.shoulder
+        self.target + self.axes().1 * self.shoulder.signum() * self.shoulder.abs().min(self.room)
     }
 
     /// From the pivot toward the eye (unit).
@@ -146,9 +152,9 @@ impl OrbitCam {
         // A stick turns at up to 150°/s, faster near full tilt (aim curve).
         let curve = |v: f32| v.signum() * v.abs().powf(1.6);
         self.yaw += curve(r.x) * 2.6 * look.sensitivity * dt;
-        self.elevation -= curve(r.y) * 1.7 * look.sensitivity * dt * inv;
+        self.elevation -= curve(r.y) * 1.7 * look.sensitivity_y * dt * inv;
         self.yaw += m.x * 0.0024 * look.sensitivity;
-        self.elevation += m.y * 0.0019 * look.sensitivity * inv;
+        self.elevation += m.y * 0.0019 * look.sensitivity_y * inv;
         let turned = r.length() > 0.12 || m != Vec2::ZERO;
         self.idle = if turned { 0.0 } else { self.idle + dt };
         // Back behind a moving player once the player has left the camera alone for a while.
@@ -182,11 +188,16 @@ impl OrbitCam {
         } else {
             self.target += (aim - self.target) * (1.0 - (-14.0 * dt).exp());
         }
+        // A wall beside the player on the shoulder's side: the pivot keeps out of it (rays cast
+        // from inside a wall would find nothing, or pin the camera to the player's back).
+        let (_, right) = self.axes();
+        let out = right * self.shoulder.signum();
+        let room = hit(self.target, out, self.shoulder.abs() + SKIN).map_or(self.shoulder.abs(), |d| (d - SKIN).max(0.0));
+        self.room = if room < self.room { room } else { self.room + (room - self.room) * (1.0 - (-3.0 * dt).exp()) };
         // Walls: rays from the pivot toward the eye (the middle and four around it, a stand-in
         // for a sphere cast) pull the camera in at once; it eases back out when they clear.
         let pivot = self.pivot();
         let back = self.back();
-        let (_, right) = self.axes();
         let up = right.cross(back).normalize_or(Vec3::Y);
         let mut free = self.distance;
         for off in [Vec3::ZERO, right * 0.18, -right * 0.18, up * 0.18, -up * 0.18] {
@@ -219,6 +230,242 @@ impl OrbitCam {
         self.yaw = yaw;
         self.placed = false;
     }
+
+    /// Where this camera settles behind someone standing at `feet` facing `facing` (a
+    /// character's yaw): the end of a character switch's sky-cam.
+    pub fn settled(feet: Vec3, facing: f32) -> CameraIntent {
+        let cam = OrbitCam { yaw: wrap(std::f32::consts::PI - facing), target: feet + Vec3::Y * FOOT_LIFT, ..Default::default() };
+        cam.intent()
+    }
+}
+
+/// The chase camera lets go of a right-stick look after this long (s).
+pub const CHASE_RETURN: f32 = 1.5;
+/// Field of view from standing still to 40 m/s and up (degrees).
+pub const CHASE_FOV: [f32; 2] = [60.0, 75.0];
+
+/// What the chase camera follows.
+#[derive(Clone, Copy, Debug)]
+pub struct Ride {
+    /// The body's centre, heading (0 faces +z, π/2 faces +x), velocity (m/s), half size and
+    /// sideways slide (m/s).
+    pub center: Vec3,
+    pub yaw: f32,
+    pub vel: Vec3,
+    pub half: Vec3,
+    pub drift: f32,
+    pub heli: bool,
+}
+
+impl Ride {
+    fn forward(&self) -> Vec3 {
+        Vec3::new(self.yaw.sin(), 0.0, self.yaw.cos())
+    }
+
+    /// Distance behind and height above the target, from the vehicle's size (§5.6.2: 5.5–9 m
+    /// and 1.8–2.6 m; a helicopter sits further back and higher).
+    pub fn reach(&self) -> (f32, f32) {
+        if self.heli {
+            return (11.0, 3.6);
+        }
+        ((1.9 * self.half.z + 1.6).clamp(5.5, 9.0), (1.15 + 0.9 * self.half.y).clamp(1.8, 2.6))
+    }
+}
+
+/// Behind a vehicle (§5.6.2): a yaw spring that lags the heading and looks along the velocity,
+/// FOV widening with speed, a little roll in drifts, walls pulling it in; the right stick looks
+/// around and lets go after 1.5 s, R3 looks behind; holding ○ cuts between cinematic shots
+/// (bumper, low tracking, side dolly, aerial chase, roadside tripod) every 3–6 s.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChaseCam {
+    /// The heading it trails (vehicle convention), and the right stick's look (yaw, pitch).
+    pub yaw: f32,
+    pub look: f32,
+    pub pitch: f32,
+    pub idle: f32,
+    pub fov: f32,
+    pub roll: f32,
+    /// How far walls let it be, and the smoothed point it looks at.
+    pub reach: f32,
+    pub target: Vec3,
+    pub behind: bool,
+    /// Seconds the cinematic button has been held (negative: not held), and the roadside
+    /// tripod's spot for the current tripod shot.
+    pub cine: f32,
+    pub tripod: Option<Vec3>,
+    placed: bool,
+}
+
+impl Default for ChaseCam {
+    fn default() -> Self {
+        Self {
+            yaw: 0.0,
+            look: 0.0,
+            pitch: 0.0,
+            idle: 0.0,
+            fov: CHASE_FOV[0],
+            roll: 0.0,
+            reach: 6.0,
+            target: Vec3::ZERO,
+            behind: false,
+            cine: -1.0,
+            tripod: None,
+            placed: false,
+        }
+    }
+}
+
+/// The cinematic shots, in the order they cycle, and how long each holds (s).
+pub const SHOTS: [(&str, f32); 5] =
+    [("bumper", 3.5), ("low_tracking", 4.0), ("side_dolly", 3.0), ("aerial", 5.0), ("tripod", 6.0)];
+
+impl ChaseCam {
+    /// Starts behind a vehicle (getting in): snaps on the next update.
+    pub fn place_behind(&mut self, yaw: f32) {
+        *self = ChaseCam { yaw, ..Default::default() };
+    }
+
+    /// The current cinematic shot and seconds into it, while ○ is held.
+    pub fn shot(&self) -> Option<(usize, f32)> {
+        if self.cine < 0.0 {
+            return None;
+        }
+        let total: f32 = SHOTS.iter().map(|s| s.1).sum();
+        let mut t = self.cine % total;
+        for (i, (_, len)) in SHOTS.iter().enumerate() {
+            if t < *len {
+                return Some((i, t));
+            }
+            t -= len;
+        }
+        Some((0, 0.0))
+    }
+
+    /// From the target toward the eye (unit).
+    fn back(&self, ride: &Ride) -> Vec3 {
+        let (dist, height) = ride.reach();
+        let yaw = self.yaw + self.look + if self.behind { std::f32::consts::PI } else { 0.0 };
+        let elev = (height / dist).atan() + self.pitch;
+        let flat = -Vec3::new(yaw.sin(), 0.0, yaw.cos());
+        (flat * elev.cos() + Vec3::Y * elev.sin()).normalize()
+    }
+
+    /// Follows `ride` (`dt` real seconds): the pad's right stick and the mouse look around, R3
+    /// looks behind, ○ held runs the cinematic shots; `hit` is the first surface along a ray.
+    pub fn update(&mut self, input: &InputFrame, ride: &Ride, look: Look, dt: f32, hit: &dyn Fn(Vec3, Vec3, f32) -> Option<f32>) {
+        let fwd = ride.forward();
+        let flat_vel = Vec3::new(ride.vel.x, 0.0, ride.vel.z);
+        let speed = flat_vel.length();
+        let ahead = ride.vel.dot(fwd);
+        // Trail the heading, leaning toward where it is actually going when moving briskly.
+        let goal = if ahead > 4.0 {
+            let travel = flat_vel.x.atan2(flat_vel.z);
+            ride.yaw + wrap(travel - ride.yaw) * 0.6
+        } else {
+            ride.yaw
+        };
+        if !self.placed {
+            self.yaw = goal;
+        }
+        self.yaw = wrap(self.yaw + wrap(goal - self.yaw) * (1.0 - (-3.2 * dt).exp()));
+        // Look around: the right stick (a helicopter turns with it instead) and the mouse.
+        let inv = if look.invert_y { -1.0 } else { 1.0 };
+        let r = input.pad.stick_r;
+        let m = input.mouse_delta;
+        let curve = |v: f32| v.signum() * v.abs().powf(1.6);
+        if !ride.heli {
+            self.look += curve(r.x) * 2.6 * look.sensitivity * dt;
+        }
+        self.pitch -= curve(r.y) * 1.2 * look.sensitivity_y * dt * inv;
+        self.look += m.x * 0.0024 * look.sensitivity;
+        self.pitch += m.y * 0.0019 * look.sensitivity_y * inv;
+        let turned = (!ride.heli && r.x.abs() > 0.12) || r.y.abs() > 0.12 || m != glam::Vec2::ZERO;
+        self.idle = if turned { 0.0 } else { self.idle + dt };
+        if self.idle > CHASE_RETURN {
+            let k = 1.0 - (-3.0 * dt).exp();
+            self.look -= wrap(self.look) * k;
+            self.pitch -= self.pitch * k;
+        }
+        self.look = wrap(self.look);
+        self.pitch = self.pitch.clamp(-0.3, 0.8);
+        self.behind = input.pad.held & pad::R3 != 0 && input.pad.held & pad::L3 == 0;
+        let fov = CHASE_FOV[0] + (CHASE_FOV[1] - CHASE_FOV[0]) * (speed / 40.0).clamp(0.0, 1.0);
+        self.fov += (fov - self.fov) * (1.0 - (-2.5 * dt).exp());
+        let roll = (-ride.drift * 0.015).clamp(-0.1, 0.1);
+        self.roll += (roll - self.roll) * (1.0 - (-4.0 * dt).exp());
+        let goal_target = ride.center + Vec3::Y * (ride.half.y * 0.6 + 0.45) + (ride.vel * 0.12).clamp_length_max(4.0);
+        if !self.placed {
+            self.target = goal_target;
+            self.reach = ride.reach().0;
+            self.placed = true;
+        } else {
+            self.target += (goal_target - self.target) * (1.0 - (-12.0 * dt).exp());
+        }
+        // Walls pull it in at once; it eases back out.
+        let (dist, _) = ride.reach();
+        let back = self.back(ride);
+        let free = hit(self.target, back, dist + 0.3).map_or(dist, |d| (d - 0.3).clamp(1.5, dist));
+        self.reach = if free < self.reach { free } else { self.reach + (free - self.reach) * (1.0 - (-2.5 * dt).exp()) };
+        // Cinematic: hold ○ (east).
+        if input.pad.held & pad::EAST != 0 {
+            let before = self.shot().map(|s| s.0);
+            self.cine = self.cine.max(0.0) + dt;
+            let now = self.shot().map(|s| s.0);
+            let far = self.tripod.is_none_or(|p| p.distance(ride.center) > 60.0);
+            if now == Some(4) && (before != now || far) {
+                // A roadside spot ahead of the car, off to its right.
+                let right = Vec3::new(-fwd.z, 0.0, fwd.x);
+                let lead = (speed * 2.5).clamp(18.0, 45.0);
+                self.tripod = Some(ride.center + fwd * lead + right * (ride.half.x + 5.0) + Vec3::Y * 0.8);
+            }
+        } else {
+            self.cine = -1.0;
+            self.tripod = None;
+        }
+    }
+
+    /// The view: the chase view, or the cinematic shot under way unless `blocked` says a wall
+    /// stands between the car and the shot's eye (the chase view then).
+    pub fn intent_clear(&self, ride: &Ride, blocked: &dyn Fn(Vec3, Vec3) -> bool) -> CameraIntent {
+        let c = self.intent(ride);
+        if self.shot().is_some() && blocked(ride.center + Vec3::Y * 0.5, c.eye) {
+            return self.base(ride);
+        }
+        c
+    }
+
+    fn base(&self, ride: &Ride) -> CameraIntent {
+        let fwd = ride.forward();
+        let right = Vec3::new(-fwd.z, 0.0, fwd.x);
+        CameraIntent {
+            eye: self.target + self.back(ride) * self.reach,
+            target: self.target + fwd * 1.5,
+            up: (Vec3::Y + right * self.roll).normalize(),
+            fov: self.fov,
+            near: 0.1,
+            far: 1500.0,
+            cut: false,
+            shake: 0.0,
+        }
+    }
+
+    pub fn intent(&self, ride: &Ride) -> CameraIntent {
+        let fwd = ride.forward();
+        let right = Vec3::new(-fwd.z, 0.0, fwd.x);
+        let h = ride.half;
+        let base = self.base(ride);
+        let Some((shot, t)) = self.shot() else { return base };
+        let c = ride.center;
+        let (eye, target, fov) = match SHOTS[shot].0 {
+            "bumper" => (c + fwd * (h.z + 0.15) + Vec3::Y * 0.1, c + fwd * 20.0 + Vec3::Y * 0.3, 70.0),
+            "low_tracking" => (c - fwd * (h.z * 0.7) + right * (h.x + 1.3) - Vec3::Y * (h.y * 0.5), c + fwd * 3.0, 50.0),
+            "side_dolly" => (c - right * (h.x + 4.5 + t * 0.4) + Vec3::Y * 0.6, c, 45.0),
+            "aerial" => (c - fwd * (14.0 + t) + Vec3::Y * 9.0, c + fwd * 6.0, 55.0),
+            _ => (self.tripod.unwrap_or(c + right * 8.0), c, 40.0),
+        };
+        CameraIntent { eye, target, up: Vec3::Y, fov, cut: t < 0.02, ..base }
+    }
 }
 
 /// A slow drone orbit around `center` (title screen, idle shots): `t` seconds in.
@@ -235,6 +482,16 @@ pub fn drone(center: Vec3, t: f32, radius: f32, height: f32) -> CameraIntent {
         cut: false,
         shake: 0.0,
     }
+}
+
+/// The title's shot (PLAN §5.9): a slow drone off the Mirador Hills over Los Mirados toward
+/// downtown's towers, drifting east toward the freeway and back over three minutes (so it never
+/// cuts), `t` seconds in.
+pub fn title(t: f32) -> CameraIntent {
+    let k = 1.0 - (t * 0.035).cos();
+    let eye = Vec3::new(-260.0 + k * 45.0, 60.0 - k * 3.0, -520.0 + k * 12.0);
+    let target = Vec3::new(100.0 + k * 90.0, 0.0, -180.0 + k * 10.0);
+    CameraIntent { eye, target, up: Vec3::Y, fov: 46.0, near: 0.5, far: 2500.0, cut: false, shake: 0.0 }
 }
 
 #[cfg(test)]
@@ -285,6 +542,20 @@ mod tests {
             cam.update(&InputFrame::default(), feet, Look::default(), Moving::default(), DT, &open);
         }
         assert!((cam.reach - FOOT_DISTANCE).abs() < 0.05, "back out: {}", cam.reach);
+    }
+
+    #[test]
+    fn a_wall_beside_the_player_keeps_the_shoulder_out_of_it() {
+        let mut cam = OrbitCam::default();
+        let feet = Vec3::ZERO;
+        // A wall 0.3 m to the right (east) of a north-facing player: only rays heading east meet it.
+        let wall = |from: Vec3, dir: Vec3, _: f32| (dir.x > 0.5).then(|| ((0.3 - from.x) / dir.x).max(0.0));
+        for _ in 0..30 {
+            cam.update(&InputFrame::default(), feet, Look::default(), Moving::default(), DT, &wall);
+        }
+        let c = cam.intent();
+        assert!(c.eye.x < 0.3, "the eye stays on the player's side of the wall: {c:?}");
+        assert!((cam.reach - FOOT_DISTANCE).abs() < 0.05, "and keeps its distance: {}", cam.reach);
     }
 
     #[test]

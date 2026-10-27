@@ -1,0 +1,47 @@
+# The frontend's cards (PLAN.md §5.9), read by `gtf_game::cards`: the new-game intro (a card per
+# protagonist, then the three together) and the loading cards' tips. Each card is a picture made
+# in the engine: the protagonist posed (`clip`) where the game starts, under the painterly
+# (`paint`) or print (`halftone`) filter, with the heading and the line under it. `who` is a
+# protagonist's key (protagonists.toml), or `crew` for the three side by side.
+
+[[intro]]
+who = "dez"
+heading = "DEZ ORTEGA"
+line = "24, a repo driver with a five-year plan and a lowrider dream. The wheel: ~y~Slipstream~s~ slows the world while he drives."
+clip = "MESH2MOTION/Idle_A"
+style = "paint"
+
+[[intro]]
+who = "mack"
+heading = "MACK KINCAID"
+line = "52, a retired heist planner turned strip-mall success coach. The brain: ~y~Deadeye~s~ slows the world down his sights."
+clip = "MESH2MOTION/Idle_FoldArms"
+style = "paint"
+
+[[intro]]
+who = "roxy"
+heading = "ROXY VANCE"
+line = "33, a stunt performer fired from Explosion 7 for excessive realism. The muscle: ~y~Overdrive~s~ hits twice as hard."
+clip = "MESH2MOTION/Idle_TalkingPhone"
+style = "paint"
+
+[[intro]]
+who = "crew"
+heading = "THREE CRIMINALS. ONE JOB."
+line = "An armoured truck on Route 404, and the whole of Paloma Bay in the way."
+clip = "MESH2MOTION/Idle_A"
+style = "halftone"
+
+[loading]
+# The protagonist being played, under this filter, with one of these.
+style = "halftone"
+tips = [
+  "Hold ~btn:l1~ for the weapon wheel. Time slows while it is open.",
+  "Hold ~btn:down~ to switch between Dez, Mack and Roxy, wherever they are.",
+  "Out of the police's sight the stars flash. Stay hidden until they go.",
+  "Paloma Customs resprays a wanted car, and the police lose track of it.",
+  "Save at your bed, or from the pause menu at your safehouse.",
+  "Press ~btn:l3~ and ~btn:r3~ together for your ability when its meter is full.",
+  "Fifteen Lost Shields hide around Paloma Bay, each with a story.",
+  "Hold ~btn:east~ in a car for the cinematic camera.",
+]

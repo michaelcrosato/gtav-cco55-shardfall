@@ -1,0 +1,15 @@
+{"format":2,"name":"cafe_table_set","unit":"cm",
+"description":"A round bistro table with two black metal chairs facing each other across it (+z and -z).",
+"tags":["table","cafe","chair","coffee","bistro"],
+"category":"furniture",
+"materials":{
+"metal":{"base":"MAT/gtf/painted_metal","color":"#2b2e31"},
+"top":{"color":"#ece6da"}},
+"parts":{
+"chair":{"pos":[0,0,62],"mat":"metal","mirror":"z","parts":{
+  "back":{"type":"box","size":[38,34,3],"pos":[0,65,20],"pitch":-8},
+  "leg":{"type":"cylinder","radius":1.4,"from":[14,0,14],"to":[12,44,12],"mirror":["x","z"]},
+  "seat":{"type":"cylinder","radius":21,"height":4,"pos":[0,46,0]}}},
+"foot":{"type":"cylinder","radius":24,"height":2,"pos":[0,1,0],"mat":"metal"},
+"post":{"type":"cylinder","radius":3.5,"from":[0,2,0],"to":[0,73,0],"mat":"metal"},
+"top":{"type":"cylinder","radius":38,"height":3,"pos":[0,74,0],"mat":"top"}}}

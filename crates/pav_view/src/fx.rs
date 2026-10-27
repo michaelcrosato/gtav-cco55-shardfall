@@ -191,6 +191,61 @@ pub fn preset(name: &str) -> (ParticleBurst, f32) {
             },
             15.0,
         ),
+        // A car's exhaust: a small grey puff that thins out behind it.
+        "exhaust" => (
+            ParticleBurst {
+                area: Vec3::new(0.04, 0.02, 0.04),
+                vel: Vec3::new(0.0, 0.3, 0.0),
+                spread: 0.25,
+                gravity: -0.25,
+                drag: 1.8,
+                life: (0.5, 1.1),
+                size: (0.1, 0.6),
+                color0: Vec4::new(0.55, 0.55, 0.57, 0.38),
+                color1: Vec4::new(0.7, 0.7, 0.72, 0.0),
+                additive: false,
+                turbulence: 0.8,
+                ..b
+            },
+            12.0,
+        ),
+        // Dust thrown up behind wheels on sand or dirt: a billow that rises and spreads.
+        "trail" => (
+            ParticleBurst {
+                area: Vec3::new(0.3, 0.05, 0.3),
+                vel: Vec3::new(0.0, 2.4, 0.0),
+                spread: 1.2,
+                gravity: -0.2,
+                drag: 1.6,
+                life: (1.2, 2.2),
+                size: (0.4, 1.8),
+                color0: Vec4::new(0.58, 0.48, 0.34, 0.6),
+                color1: Vec4::new(0.72, 0.64, 0.52, 0.0),
+                additive: false,
+                turbulence: 1.2,
+                ..b
+            },
+            16.0,
+        ),
+        // Raindrops splashing on the ground: a few droplets kicked up and falling back.
+        "splash" => (
+            ParticleBurst {
+                area: Vec3::new(0.08, 0.0, 0.08),
+                vel: Vec3::new(0.0, 1.7, 0.0),
+                spread: 0.9,
+                gravity: 9.0,
+                drag: 0.0,
+                life: (0.16, 0.28),
+                size: (0.025, 0.012),
+                color0: Vec4::new(0.8, 0.86, 0.95, 0.6),
+                color1: Vec4::new(0.8, 0.86, 0.95, 0.0),
+                additive: false,
+                turbulence: 0.0,
+                bounce: 0.0,
+                ..b
+            },
+            40.0,
+        ),
         "confetti" => (
             ParticleBurst {
                 vel: Vec3::new(0.0, 6.0, 0.0),
@@ -475,6 +530,36 @@ pub fn event_bursts(e: &pav_core::frame::SimEvent, out: &mut Vec<ParticleBurst>)
             }));
         }
         E::Land { pos, speed } if *speed > 8.0 => out.push(with("dust", *pos, 12, &|b| b.spread = 2.0)),
+        // A game's own burst of a preset (a dozen particles at scale 1), thrown along `dir`
+        // when it has one.
+        E::Fx { preset: name, pos, dir, scale } => {
+            let n = (12.0 * scale.max(0.0)).round().clamp(1.0, 400.0) as u32;
+            out.push(with(name, *pos, n, &|b| {
+                if dir.length_squared() > 1e-6 {
+                    b.vel = dir.normalize() * b.vel.length().max(1.0);
+                }
+            }));
+        }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_games_fx_event_draws_its_preset() {
+        let mut out = Vec::new();
+        let at = Vec3::new(1.0, 0.0, 2.0);
+        let e = pav_core::frame::SimEvent::Fx { preset: "splash".into(), pos: at, dir: Vec3::ZERO, scale: 0.5 };
+        event_bursts(&e, &mut out);
+        assert_eq!(out.len(), 1);
+        assert_eq!((out[0].count, out[0].pos), (6, at), "half a dozen droplets where it landed");
+        assert!(out[0].life.1 < 0.5, "a splash is brief");
+        // Thrown along its direction.
+        let e = pav_core::frame::SimEvent::Fx { preset: "sparks".into(), pos: at, dir: Vec3::X, scale: 1.0 };
+        event_bursts(&e, &mut out);
+        assert!(out[1].vel.x > 0.0 && out[1].vel.y.abs() < 1e-4);
     }
 }

@@ -116,6 +116,9 @@ pub(crate) struct Cx<'a> {
     pub keys: &'a KeyMap,
     pub fam: Families,
     pub hits: &'a RefCell<Vec<Hit>>,
+    /// The model's subtitle size and high-contrast setting.
+    pub subtitle_scale: f32,
+    pub contrast: bool,
 }
 
 impl Cx<'_> {
@@ -175,7 +178,13 @@ impl Cx<'_> {
     // ---- plates and fills -------------------------------------------------------------------
 
     pub fn backplate(&self, rect: Rect, radius: f32) {
-        self.p.rect_filled(rect, cr(self.px(radius)), color::BACKPLATE);
+        if self.contrast {
+            // High contrast: nearly opaque, and outlined so its edge reads over anything.
+            self.p.rect_filled(rect, cr(self.px(radius)), Color32::from_black_alpha(238));
+            self.outline(rect, radius, 2.0, Color32::from_white_alpha(200));
+        } else {
+            self.p.rect_filled(rect, cr(self.px(radius)), color::BACKPLATE);
+        }
     }
 
     pub fn fill(&self, rect: Rect, radius: f32, color: Color32) {

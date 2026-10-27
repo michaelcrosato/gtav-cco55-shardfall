@@ -1,7 +1,7 @@
 //! Continuous sounds with live parameters: engines (stacked harmonics whose pitch follows the
 //! revs and whose filter opens with the load), sirens (wail and yelp sweeps), tyre squeal (noise
-//! by slip), helicopter rotors (pulsed noise) and ambience beds (city, surf, wind, rain, crowd,
-//! harbour). The host hands the mixer what should be sounding every frame
+//! by slip), helicopter rotors (pulsed noise), ambience beds (city, surf, wind, rain, crowd,
+//! harbour) and voices babbling (`voice`, and `voice.radio` through a two-way radio). The host hands the mixer what should be sounding every frame
 //! (`Mixer::set_loops`), matched by id: new loops fade in, missing ones fade out, the rest glide
 //! to their new gain, pan, pitch and parameter.
 
@@ -29,12 +29,20 @@ pub enum LoopKind {
     },
     Tyre,
     Rotor,
+    /// A car horn (two notes a third apart), and a car alarm (alternating beeps).
+    Horn,
+    Alarm,
     Bed(Bed),
+    /// Someone talking (babble): `pitch` 1 is a 120 Hz voice (higher voices get smaller
+    /// formants too), `param` how lively; `radio` puts it through a two-way radio.
+    Voice {
+        radio: bool,
+    },
 }
 
 impl LoopKind {
     /// The loop a cue names: `engine.<class>`, `siren.wail`, `siren.yelp`, `tyre`, `rotor`,
-    /// `amb.<bed>`.
+    /// `horn`, `alarm`, `amb.<bed>`, `voice`, `voice.radio`.
     pub fn from_cue(cue: &str) -> Option<LoopKind> {
         Some(match cue {
             "engine.compact" => LoopKind::Engine { base: 52.0, grit: 0.15, sub: 0.3 },
@@ -48,12 +56,16 @@ impl LoopKind {
             "siren.yelp" => LoopKind::Siren { yelp: true },
             "tyre" => LoopKind::Tyre,
             "rotor" => LoopKind::Rotor,
+            "horn" => LoopKind::Horn,
+            "alarm" => LoopKind::Alarm,
             "amb.city" => LoopKind::Bed(Bed::City),
             "amb.surf" => LoopKind::Bed(Bed::Surf),
             "amb.wind" => LoopKind::Bed(Bed::Wind),
             "amb.rain" => LoopKind::Bed(Bed::Rain),
             "amb.crowd" => LoopKind::Bed(Bed::Crowd),
             "amb.harbor" => LoopKind::Bed(Bed::Harbor),
+            "voice" => LoopKind::Voice { radio: false },
+            "voice.radio" => LoopKind::Voice { radio: true },
             _ => return None,
         })
     }
@@ -90,6 +102,7 @@ pub(crate) struct LoopVoice {
     bp: [f32; 2],
     noise: u32,
     t: f32,
+    babble: Option<Box<crate::voice::Babble>>,
 }
 
 fn glide(v: &mut f32, to: f32, rate: f32, dt: f32) {
@@ -110,6 +123,10 @@ impl LoopVoice {
             bp: [0.0; 2],
             noise: seed | 1,
             t: 0.0,
+            babble: match target.kind {
+                LoopKind::Voice { .. } => Some(Box::new(crate::voice::Babble::new(Default::default(), seed as u64))),
+                _ => None,
+            },
         }
     }
 
@@ -187,6 +204,24 @@ impl LoopVoice {
                 let body = self.lowpass(0, n, 380.0, dt);
                 body * (0.25 + pulse * 1.6) * 0.8
             }
+            LoopKind::Horn => {
+                // Two reedy notes a major third apart (F#4 and A#4), a little detuned.
+                let mut s = 0.0;
+                for (i, f) in [370.0f32, 466.2].iter().enumerate() {
+                    self.phase[i] = (self.phase[i] + f * self.pitch.clamp(0.5, 2.0) * dt).fract();
+                    s += if self.phase[i] < 0.42 { 0.5 } else { -0.5 };
+                }
+                self.lowpass(0, s, 2400.0, dt) * 0.3
+            }
+            LoopKind::Alarm => {
+                // Two tones swapping three times a second, pulsing.
+                let hi = (self.t * 3.0).fract() < 0.5;
+                let f = if hi { 1350.0 } else { 950.0 };
+                self.phase[0] = (self.phase[0] + f * dt).fract();
+                let sq = if self.phase[0] < 0.5 { 1.0 } else { -1.0 };
+                let gate = if (self.t * 12.0).fract() < 0.8 { 1.0 } else { 0.0 };
+                self.lowpass(0, sq * gate, 3000.0, dt) * 0.18
+            }
             LoopKind::Bed(bed) => {
                 let n = self.noise();
                 match bed {
@@ -222,6 +257,22 @@ impl LoopVoice {
                     }
                 }
             }
+            LoopKind::Voice { radio } => {
+                let (pitch, param, t) = (self.pitch.clamp(0.4, 3.0), self.param.clamp(0.0, 1.0), self.t);
+                match self.babble.as_mut() {
+                    Some(b) => {
+                        b.voice = pav_core::radio::Voice {
+                            pitch: 120.0 * pitch,
+                            formant: (1.0 + (pitch - 1.0) * 0.25).clamp(0.9, 1.3),
+                            rate: 5.2,
+                            energy: param,
+                            radio: if radio { 1.0 } else { 0.0 },
+                        };
+                        b.next(t, f32::INFINITY, dt) * 1.2
+                    }
+                    None => 0.0,
+                }
+            }
         };
         let a = (self.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
         let g = self.gain;
@@ -247,12 +298,16 @@ mod tests {
             "siren.yelp",
             "tyre",
             "rotor",
+            "horn",
+            "alarm",
             "amb.city",
             "amb.surf",
             "amb.wind",
             "amb.rain",
             "amb.crowd",
             "amb.harbor",
+            "voice",
+            "voice.radio",
         ];
         let dt = 1.0 / 22050.0;
         for (i, name) in names.iter().enumerate() {

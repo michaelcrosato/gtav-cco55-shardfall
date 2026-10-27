@@ -574,7 +574,7 @@ fn poll_ready(session: &mut Session, service: &Service) -> Vec<Value> {
     for completion in completed {
         // Use the same lock order as saving. A source save in flight is retried next frame;
         // compilation never makes this path wait on a file or a compiler worker.
-        let file_lock = match lock_editor(&completion.job.root, false) {
+        let _file_lock = match lock_editor(&completion.job.root, false) {
             Ok(lock) => lock,
             Err(error) if error.is::<EditorBusy>() => {
                 service.book.lock().unwrap().ready.push_back(completion);
@@ -659,7 +659,7 @@ fn poll_ready(session: &mut Session, service: &Service) -> Vec<Value> {
             notes.push(record.info.clone());
         }
         drop(book);
-        drop(file_lock);
+        // `_file_lock` is released here, at the end of the iteration, after `book`.
     }
     notes
 }

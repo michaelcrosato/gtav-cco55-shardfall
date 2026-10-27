@@ -1,0 +1,19 @@
+{"format":2,"name":"pallet_rack","unit":"cm",
+"description":"A warehouse pallet rack bay, 2.7 m wide and 4.6 m tall: orange uprights, blue beams, boxed pallets on three levels.",
+"tags":["rack","warehouse","pallet","storage","industrial"],
+"category":"town",
+"materials":{
+"beam":{"base":"MAT/gtf/painted_metal","color":"#1f4e8c"},
+"box":{"color":"#c49a63"},
+"upright":{"base":"MAT/gtf/painted_metal","color":"#e0601e"},
+"wood":{"color":"#b08a5a"},
+"wrap":{"color":"#d8d4ca"}},
+"parts":{
+"beam":{"type":"box","size":[256,12,6],"pos":[0,235,46],"mat":"beam","mirror":"z","array":{"count":2,"step":[0,150,0]}},
+"brace":{"type":"box","size":[4,4,84],"pos":[131,170,0],"mat":"upright","mirror":"x","array":{"count":3,"step":[0,150,0]}},
+"floor_load":{"type":"box","size":[104,80,96],"pos":[-62,54,0],"mat":"wrap","mirror":"x"},
+"floor_pallet":{"type":"box","size":[110,14,100],"pos":[-62,7,0],"mat":"wood","mirror":"x"},
+"load":{"type":"box","size":[104,96,96],"pos":[-62,303,0],"mat":"box","mirror":"x","array":{"count":2,"step":[0,150,0]},"chance":0.85},
+"pallet":{"type":"box","size":[110,14,100],"pos":[-62,248,0],"mat":"wood","mirror":"x","array":{"count":2,"step":[0,150,0]}},
+"tie":{"type":"box","size":[256,10,6],"pos":[0,455,46],"mat":"beam","mirror":"z"},
+"upright":{"type":"box","size":[8,460,8],"pos":[131,230,46],"mat":"upright","mirror":["x","z"]}}}

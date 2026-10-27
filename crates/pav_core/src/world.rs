@@ -1205,6 +1205,19 @@ impl Sim {
         Some(RayHit { point: origin + dir.normalize_or(Vec3::NEG_Y) * hit.time_of_impact as f32, normal: hit.normal, entity })
     }
 
+    /// Whether an entity's body collides and stops rays (a fallen character's need not: people
+    /// walk over it and bullets pass it). Seated riders are handled by the vehicles.
+    pub fn set_solid(&mut self, id: EntityId, solid: bool) {
+        let Some(b) = self.state.entities.get(id).and_then(|e| e.body).and_then(|h| self.state.physics.bodies.get(h)) else {
+            return;
+        };
+        for c in b.colliders().to_vec() {
+            if let Some(col) = self.state.physics.colliders.get_mut(c) {
+                col.set_sensor(!solid);
+            }
+        }
+    }
+
     /// Casts a ray against everything except the player (and `exclude`).
     pub fn raycast(&self, origin: Vec3, dir: Vec3, max: f32, exclude: Option<EntityId>) -> Option<RayHit> {
         let mut filter = QueryFilter::default().exclude_sensors();

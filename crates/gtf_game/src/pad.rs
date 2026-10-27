@@ -152,6 +152,42 @@ pub static FOOT_KEYS: LazyLock<Arc<KeyMap>> = LazyLock::new(|| {
     ))
 });
 
+/// In a vehicle (§5.10): W throttle, S brake and reverse, A and D steer, I and K pitch (a
+/// helicopter flies forward and back), Space the handbrake, F gets out (held: bails out), H the
+/// horn (tapped in a police car: the siren's wail, yelp, off), V looks behind, the middle mouse
+/// button holds the cinematic camera, comma and period step the radio (comma held: the radio
+/// wheel), E is D-pad right (vigilante in a police car), the up arrow the phone, Alt the
+/// character wheel, Esc pauses, M opens the map.
+pub static DRIVE_KEYS: LazyLock<Arc<KeyMap>> = LazyLock::new(|| {
+    use PadTarget::*;
+    Arc::new(KeyMap::new(
+        "drive",
+        &[
+            ("KeyW", R2),
+            ("KeyS", L2),
+            ("KeyA", StickL(Vec2::NEG_X)),
+            ("KeyD", StickL(Vec2::X)),
+            ("KeyI", StickL(Vec2::Y)),
+            ("KeyK", StickL(Vec2::NEG_Y)),
+            ("Space", Button(pad::R1)),
+            ("MouseRight", Button(pad::L1)),
+            ("MouseLeft", Button(pad::R1)),
+            ("KeyF", Button(pad::NORTH)),
+            ("KeyH", Button(pad::L3)),
+            ("KeyV", Button(pad::R3)),
+            ("MouseMiddle", Button(pad::EAST)),
+            ("Comma", Button(pad::LEFT)),
+            ("Period", Button(pad::RIGHT)),
+            ("KeyE", Button(pad::RIGHT)),
+            ("CapsLock", Button(pad::L3 | pad::R3)),
+            ("ArrowUp", Button(pad::UP)),
+            ("AltLeft", Button(pad::DOWN)),
+            ("Escape", Button(pad::START)),
+            ("KeyM", Button(pad::TOUCHPAD)),
+        ],
+    ))
+});
+
 #[cfg(test)]
 mod tests {
     use super::*;

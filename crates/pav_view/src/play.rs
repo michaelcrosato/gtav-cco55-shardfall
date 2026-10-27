@@ -99,7 +99,8 @@ pub fn with_look(settings: &ViewSettings, v: &ViewIntent) -> Option<ViewSettings
         || v.tonemap.is_some()
         || v.bloom_threshold.is_some()
         || v.haze_height.is_some()
-        || v.gi.is_some();
+        || v.gi.is_some()
+        || v.stylize.is_some();
     if !looks {
         return None;
     }
@@ -131,6 +132,18 @@ pub fn with_look(settings: &ViewSettings, v: &ViewIntent) -> Option<ViewSettings
     }
     if let Some(gi) = v.gi {
         s.gi = gi.max(0.0);
+    }
+    if let Some(st) = v.stylize {
+        use pav_core::present::StylizeKind;
+        s.filter.stylize = match st.kind {
+            StylizeKind::Paint => crate::build::StylizeChoice::Paint,
+            StylizeKind::Halftone => crate::build::StylizeChoice::Halftone,
+            StylizeKind::Sketch => crate::build::StylizeChoice::Sketch,
+        };
+        s.filter.stylize_on = crate::build::PartChoice::All;
+        s.filter.stylize_size = st.size.max(1.0);
+        s.filter.stylize_mix = st.mix.clamp(0.0, 1.0);
+        s.filter.stylize_color = st.color.clamp(0.0, 1.0);
     }
     Some(s)
 }
@@ -328,14 +341,17 @@ pub struct FarCache {
 }
 
 /// The six planes of a view-projection (Gribb–Hartmann; depth 0..1).
-fn frustum(vp: Mat4) -> [Vec4; 6] {
+pub(crate) fn frustum(vp: Mat4) -> [Vec4; 6] {
     let r = |i: usize| vp.row(i);
     [r(3) + r(0), r(3) - r(0), r(3) + r(1), r(3) - r(1), r(2), r(3) - r(2)]
 }
 
 fn visible(planes: &[Vec4; 6], min: Vec3, max: Vec3) -> bool {
-    let c = (min + max) * 0.5;
-    let radius = (max - min).length() * 0.5;
+    sphere_visible(planes, (min + max) * 0.5, (max - min).length() * 0.5)
+}
+
+/// Whether a sphere is at least partly inside the planes.
+pub(crate) fn sphere_visible(planes: &[Vec4; 6], c: Vec3, radius: f32) -> bool {
     planes.iter().all(|p| p.truncate().dot(c) + p.w >= -radius * p.truncate().length())
 }
 

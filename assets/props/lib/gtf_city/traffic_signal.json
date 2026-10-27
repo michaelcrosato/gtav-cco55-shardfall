@@ -4,9 +4,9 @@
 "category":"town",
 "materials":{
 "black":{"base":"MAT/gtf/painted_metal","color":"#26282b","metallic":0.2},
-"lens_amber":{"color":"#f5a612","emissive":0.15},
-"lens_green":{"color":"#19c46a","emissive":0.15},
-"lens_red":{"color":"#e02a1c","emissive":0.15},
+"lens_amber":{"color":"#4a3108","emissive":0.02},
+"lens_green":{"color":"#0c3a22","emissive":0.02},
+"lens_red":{"color":"#4c110c","emissive":0.02},
 "steel":{"base":"MAT/gtf/painted_metal","color":"#8e9498","metallic":0.4}},
 "parts":{
 "amber":{"type":"cylinder","radius":11,"height":2,"pos":[-700,562,14],"axis":"z","mat":"lens_amber"},

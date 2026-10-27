@@ -1,0 +1,363 @@
+//! M3: the player and vehicles — △ walks to the driver's door and gets in, R2 drives, △ stops
+//! and gets out; a locked car's window is smashed (its alarm sounds); a driver is pulled out;
+//! held △ at speed bails out and the car rolls on; L3 cycles a police car's siren; the
+//! helicopter climbs on R2; the chase camera sits behind and widens with speed.
+
+use glam::Vec3;
+use gtf_game::Freeway;
+use gtf_game::drive::Phase;
+use pav_core::entity::EntityId;
+use pav_core::input::pad;
+use pav_core::{InputFrame, Sim};
+
+fn game(sim: &Sim) -> &Freeway {
+    sim.play().unwrap().get::<Freeway>().unwrap()
+}
+
+fn game_mut(sim: &mut Sim) -> &mut Freeway {
+    sim.state.play.as_mut().unwrap().get_mut::<Freeway>().unwrap()
+}
+
+fn cmd(sim: &mut Sim, c: &str) {
+    sim.step(&InputFrame { cmds: vec![c.into()], ..Default::default() });
+}
+
+fn steps(sim: &mut Sim, n: usize, f: &InputFrame) {
+    for _ in 0..n {
+        sim.step(f);
+    }
+}
+
+/// The newest vehicle called `key`.
+fn newest(sim: &Sim, key: &str) -> EntityId {
+    sim.state.entities.iter().filter(|e| e.vehicle.is_some() && e.name == key).map(|e| e.id).max().unwrap()
+}
+
+fn press(button: u32) -> InputFrame {
+    let mut f = InputFrame::default();
+    f.pad.held = button;
+    f.pad.pressed = button;
+    f
+}
+
+fn hold(button: u32) -> InputFrame {
+    let mut f = InputFrame::default();
+    f.pad.held = button;
+    f
+}
+
+fn throttle(r2: f32) -> InputFrame {
+    let mut f = InputFrame::default();
+    f.pad.r2 = r2;
+    f
+}
+
+fn riding(sim: &Sim) -> Option<EntityId> {
+    sim.player().and_then(|p| p.character.as_ref()).and_then(|c| c.riding)
+}
+
+/// Presses △ and steps until the player sits in a car (or `max` ticks): the ticks it took.
+fn get_in(sim: &mut Sim, max: usize) -> usize {
+    sim.step(&press(pad::NORTH));
+    for t in 1..max {
+        if matches!(game(sim).drive.phase, Phase::In { .. }) {
+            return t;
+        }
+        sim.step(&InputFrame::default());
+    }
+    max
+}
+
+/// Puts the player a couple of metres from `car`'s driver's door.
+fn walk_up(sim: &mut Sim, car: EntityId) {
+    let c = gtf_game::drive::Car::read(sim, car).unwrap();
+    let door = c.door_point();
+    let out = (door - c.feet()).normalize_or_zero();
+    sim.set_position(sim.state.player.unwrap(), door + out * 1.5 + c.forward() * 0.5 + Vec3::Y * 0.1);
+    steps(sim, 10, &InputFrame::default());
+}
+
+fn roam() -> Sim {
+    gtf_game::register();
+    let mut sim = Sim::new("freeway/roam", 3).unwrap();
+    cmd(&mut sim, "time 12:00");
+    steps(&mut sim, 90, &InputFrame::default());
+    sim
+}
+
+#[test]
+fn getting_in_driving_and_getting_out() {
+    let mut sim = roam();
+    cmd(&mut sim, "car fenwick_commuter");
+    let car = newest(&sim, "fenwick_commuter");
+    steps(&mut sim, 30, &InputFrame::default());
+    walk_up(&mut sim, car);
+    let ticks = get_in(&mut sim, 180);
+    eprintln!("in after {ticks} ticks ({:.2} s)", ticks as f32 / 60.0);
+    assert_eq!(riding(&sim), Some(car), "seated in the car");
+    assert!(ticks as f32 / 60.0 <= 2.0, "walk, open, sit, shut within two seconds: {ticks} ticks");
+    // The radio came on and the car's card shows.
+    assert!(game(&sim).radio.on.is_some(), "the radio plays in a car");
+    // R2 for three seconds.
+    steps(&mut sim, 180, &throttle(1.0));
+    let st = sim.vehicle_status(car).unwrap();
+    eprintln!("after 3 s of throttle: {:.1} km/h, gear {}", st.kmh, st.gear);
+    assert!(st.kmh > 30.0, "it drives: {} km/h", st.kmh);
+    // The chase camera: behind the car, wider with speed.
+    let c = gtf_game::drive::Car::read(&sim, car).unwrap();
+    let cam = game(&sim).chase.intent(&gtf_game::camera::Ride {
+        center: c.center,
+        yaw: c.yaw,
+        vel: c.vel,
+        half: c.half,
+        drift: 0.0,
+        heli: false,
+    });
+    assert!((cam.eye - c.center).dot(c.forward()) < -3.0, "behind the car: {cam:?}");
+    assert!(cam.fov > 61.0, "wider at speed: {}", cam.fov);
+    // A tap of △: it brakes to a stop, then the player gets out beside it.
+    sim.step(&press(pad::NORTH));
+    let mut out_after = None;
+    for t in 0..360 {
+        sim.step(&InputFrame::default());
+        if game(&sim).drive.phase == Phase::Foot {
+            out_after = Some(t);
+            break;
+        }
+    }
+    eprintln!("out after {out_after:?} ticks");
+    assert!(out_after.is_some(), "out within six seconds");
+    assert_eq!(riding(&sim), None);
+    let feet = sim.feet(sim.state.player.unwrap()).unwrap();
+    let c = gtf_game::drive::Car::read(&sim, car).unwrap();
+    assert!(feet.distance(c.feet()) < 3.5, "standing beside it");
+    assert!(game(&sim).radio.on.is_none(), "the radio stays in the car");
+}
+
+#[test]
+fn a_locked_car_is_broken_into_and_a_driver_is_pulled_out() {
+    let mut sim = roam();
+    cmd(&mut sim, "car paloma_cab");
+    let cab = newest(&sim, "paloma_cab");
+    game_mut(&mut sim).drive.locked.insert(cab);
+    steps(&mut sim, 30, &InputFrame::default());
+    walk_up(&mut sim, cab);
+    let ticks = get_in(&mut sim, 240);
+    assert_eq!(riding(&sim), Some(cab), "in after {ticks} ticks");
+    assert!(game(&sim).drive.alarms.contains_key(&cab), "the alarm sounds");
+    assert!(!game(&sim).drive.locked.contains(&cab));
+    // Out again, then a car with someone at the wheel.
+    sim.step(&press(pad::NORTH));
+    steps(&mut sim, 90, &InputFrame::default());
+    assert_eq!(game(&sim).drive.phase, Phase::Foot);
+    cmd(&mut sim, "car fenwick_commuter");
+    let car = newest(&sim, "fenwick_commuter");
+    let door = gtf_game::drive::Car::read(&sim, car).unwrap().door_point();
+    let driver = sim.spawn_npc("driver", door + Vec3::X * 0.0, 0.0, pav_core::puppet::PuppetDef::default(), None, None);
+    sim.enter_vehicle(driver, car);
+    steps(&mut sim, 30, &InputFrame::default());
+    walk_up(&mut sim, car);
+    let ticks = get_in(&mut sim, 240);
+    let out = sim.state.entities.get(driver).and_then(|e| e.character.as_ref()).map(|c| c.riding);
+    eprintln!("carjacked after {ticks} ticks; the driver now rides {out:?}");
+    assert_eq!(riding(&sim), Some(car), "the player took the wheel");
+    assert_eq!(out, Some(None), "the driver was pulled out");
+}
+
+#[test]
+fn holding_triangle_at_speed_bails_out_and_the_car_rolls_on() {
+    let mut sim = roam();
+    cmd(&mut sim, "drive okami_kaze");
+    let car = newest(&sim, "okami_kaze");
+    assert_eq!(riding(&sim), Some(car), "seated by the command");
+    let mut kmh = 0.0;
+    for _ in 0..300 {
+        sim.step(&throttle(1.0));
+        kmh = sim.vehicle_status(car).unwrap().kmh;
+        if kmh > 70.0 {
+            break;
+        }
+    }
+    assert!(kmh > 60.0, "fast enough to bail: {kmh}");
+    steps(&mut sim, 25, &hold(pad::NORTH));
+    assert_eq!(riding(&sim), None, "bailed out");
+    assert_eq!(game(&sim).drive.phase, Phase::Foot);
+    steps(&mut sim, 20, &InputFrame::default());
+    let rolling = sim.vehicle_status(car).unwrap().kmh;
+    eprintln!("bailed at {kmh:.0} km/h; the car still rolls at {rolling:.0} km/h");
+    assert!(rolling > 20.0, "the empty car coasts on: {rolling}");
+}
+
+#[test]
+fn l3_tapped_in_a_police_car_cycles_the_siren_wail_yelp_off() {
+    let mut sim = roam();
+    cmd(&mut sim, "drive sppd_interceptor");
+    let tap = |sim: &mut Sim| {
+        sim.step(&press(pad::L3));
+        sim.step(&InputFrame::default());
+    };
+    let state = |sim: &Sim| (game(sim).drive.siren, game(sim).drive.yelp);
+    assert_eq!(state(&sim), (false, false));
+    tap(&mut sim);
+    assert_eq!(state(&sim), (true, false), "the wail");
+    tap(&mut sim);
+    assert_eq!(state(&sim), (true, true), "the yelp");
+    tap(&mut sim);
+    assert_eq!(state(&sim), (false, false), "off");
+}
+
+#[test]
+fn the_helicopter_climbs_on_r2() {
+    let mut sim = roam();
+    cmd(&mut sim, "drive skylark_news");
+    let heli = newest(&sim, "skylark_news");
+    assert_eq!(riding(&sim), Some(heli));
+    let y0 = sim.state.entities.get(heli).unwrap().pos.y;
+    // The rotor spins up, then it climbs.
+    steps(&mut sim, 300, &throttle(1.0));
+    let y1 = sim.state.entities.get(heli).unwrap().pos.y;
+    eprintln!("helicopter climbed {:.1} m", y1 - y0);
+    assert!(y1 - y0 > 5.0, "climbed: {}", y1 - y0);
+}
+
+#[test]
+fn a_car_throws_the_person_it_hits() {
+    let mut sim = roam();
+    cmd(&mut sim, "drive okami_kaze");
+    let car = newest(&sim, "okami_kaze");
+    // Someone standing 40 m down a clear road (no traffic in the way to strike them first).
+    let c = gtf_game::drive::Car::read(&sim, car).unwrap();
+    let others: Vec<EntityId> = sim
+        .state
+        .entities
+        .iter()
+        .filter(|e| e.vehicle.is_some() && e.id != car && e.pos.distance(c.center) < 80.0)
+        .map(|e| e.id)
+        .collect();
+    for id in others {
+        sim.despawn(id);
+    }
+    let who = sim.spawn_npc("target", c.feet() + c.forward() * 40.0, 0.0, pav_core::puppet::PuppetDef::default(), None, None);
+    steps(&mut sim, 5, &InputFrame::default());
+    let mut hit_at = None;
+    for _ in 0..360 {
+        sim.step(&throttle(1.0));
+        // (This person: traffic may strike someone else meanwhile.)
+        if game(&sim).struck.ghosts.iter().any(|g| g.0 == who) {
+            hit_at = sim.vehicle_status(car).map(|s| s.kmh);
+            break;
+        }
+    }
+    let kmh = hit_at.expect("the car struck the person");
+    let before = sim.feet(who).unwrap();
+    steps(&mut sim, 30, &InputFrame::default());
+    let e = sim.state.entities.get(who).unwrap();
+    let thrown = sim.feet(who).unwrap().distance(before);
+    eprintln!("struck at {kmh:.0} km/h; the person was thrown {thrown:.1} m, named {}", e.name);
+    assert!(thrown > 2.0, "thrown by the impact: {thrown}");
+    assert!(kmh > 43.0, "fast enough to be lethal: {kmh}");
+    assert!(e.name.starts_with("dead:"), "killed above 12 m/s");
+    // The car carried on rather than stopping dead.
+    assert!(sim.vehicle_status(car).unwrap().kmh > kmh * 0.5, "the car keeps going");
+}
+
+/// A car that goes off the quay floods: the engine drowns, it sinks, and once it is under the
+/// player gets out and swims up; at the quay's edge □ climbs out.
+#[test]
+fn a_car_that_goes_under_lets_the_player_out_to_swim_and_climb_out() {
+    let mut sim = roam();
+    cmd(&mut sim, "drive okami_kaze");
+    let car = newest(&sim, "okami_kaze");
+    // In the harbor water past the end of the avenue (the quay's edge is at z 384).
+    sim.set_position(car, Vec3::new(47.0, 1.0, 392.0));
+    let mut out = None;
+    for t in 0..60 * 20 {
+        sim.step(&InputFrame::default());
+        if riding(&sim).is_none() {
+            out = Some(t);
+            break;
+        }
+    }
+    let state = sim.state.entities.get(car).and_then(|e| e.vehicle.as_ref()).map(|v| (v.state.flooded, v.state.water)).unwrap();
+    eprintln!("out after {:?} ticks; the car flooded {}, under {:.2}", out, state.0, state.1);
+    assert!(state.0, "the engine drowned");
+    assert!(out.is_some(), "the player got out of the sunk car");
+    steps(&mut sim, 120, &InputFrame::default());
+    let ch = sim.player().and_then(|p| p.character.clone()).unwrap();
+    assert!(ch.swimming, "and swims (feet at {:.1})", sim.feet(sim.state.player.unwrap()).unwrap().y);
+    assert!(matches!(game(&sim).drive.phase, Phase::Foot));
+    // To the quay (north) and □ at its edge.
+    let north = InputFrame { move_dir: glam::Vec2::new(0.0, -1.0), ..Default::default() };
+    let mut landed = false;
+    for t in 0..60 * 20 {
+        let mut f = north.clone();
+        if t % 30 == 0 {
+            f.pad.held |= pad::WEST;
+            f.pad.pressed |= pad::WEST;
+        }
+        sim.step(&f);
+        let feet = sim.feet(sim.state.player.unwrap()).unwrap();
+        let grounded = sim.player().and_then(|p| p.character.as_ref()).is_some_and(|c| c.grounded && !c.swimming);
+        if grounded && feet.y > -0.5 {
+            eprintln!("climbed out at ({:.1}, {:.2}, {:.1}) after {:.1} s", feet.x, feet.y, feet.z, t as f32 / 60.0);
+            landed = true;
+            break;
+        }
+    }
+    assert!(landed, "climbed out onto the quay");
+}
+
+/// The effect presets the game asked for over `n` ticks of `f`.
+fn effects(sim: &mut Sim, n: usize, f: &InputFrame) -> Vec<String> {
+    let mut seen = Vec::new();
+    for _ in 0..n {
+        sim.step(f);
+        for e in sim.drain_events() {
+            if let pav_core::frame::SimEvent::Fx { preset, .. } = e {
+                seen.push(preset);
+            }
+        }
+    }
+    seen
+}
+
+#[test]
+fn a_car_puffs_exhaust_pulling_away_raises_dust_on_sand_and_a_bare_rim_sparks() {
+    let count = |v: &[String], p: &str| v.iter().filter(|x| *x == p).count();
+    // On the street: exhaust as it pulls away, and no dust from the asphalt.
+    let mut sim = roam();
+    cmd(&mut sim, "drive bravura_stallion");
+    let car = newest(&sim, "bravura_stallion");
+    steps(&mut sim, 30, &InputFrame::default());
+    assert_eq!(riding(&sim), Some(car), "in the car on the street");
+    sim.drain_events();
+    let pulling = effects(&mut sim, 40, &throttle(1.0));
+    let street = effects(&mut sim, 40, &throttle(1.0));
+    eprintln!("street: {} exhaust, then {} dust", count(&pulling, "exhaust"), count(&street, "trail"));
+    assert!(count(&pulling, "exhaust") > 0, "exhaust puffs as it pulls away: {pulling:?}");
+    assert_eq!(count(&street, "trail"), 0, "no dust on asphalt: {street:?}");
+    // On the beach (sand all round for two cells, far from any lane): dust behind the wheels,
+    // and sparks from a burst tyre's rim.
+    let mut sim = roam();
+    let city = gtf_game::world::city().unwrap();
+    let sand = (0..city.grid.h)
+        .flat_map(|z| (0..city.grid.w).map(move |x| glam::IVec2::new(x, z)))
+        .find(|c| (-2..=2).all(|dz| (-2..=2).all(|dx| city.grid.zone(*c + glam::IVec2::new(dx, dz)) == Some("beach"))))
+        .expect("open sand");
+    let at = city.cell_centre(sand);
+    let id = sim.state.player.unwrap();
+    sim.set_position(id, Vec3::new(at.x, city.ground_y(at) + 1.0, at.y));
+    steps(&mut sim, 30, &InputFrame::default());
+    cmd(&mut sim, "drive bravura_stallion");
+    let car = newest(&sim, "bravura_stallion");
+    steps(&mut sim, 30, &InputFrame::default());
+    assert_eq!(riding(&sim), Some(car), "in the car on the sand");
+    sim.drain_events();
+    let sandy = effects(&mut sim, 100, &throttle(1.0));
+    let st = sim.vehicle_status(car).unwrap();
+    eprintln!("sand at ({:.0}, {:.0}), {:.0} km/h: {} dust", at.x, at.y, st.kmh, count(&sandy, "trail"));
+    assert!(count(&sandy, "trail") > 0, "dust behind the wheels on sand: {sandy:?}");
+    sim.state.entities.get_mut(car).unwrap().vehicle.as_mut().unwrap().state.burst[2] = true;
+    let rim = effects(&mut sim, 30, &throttle(0.6));
+    assert!(count(&rim, "sparks") > 0, "a bare rim sparks: {rim:?}");
+}

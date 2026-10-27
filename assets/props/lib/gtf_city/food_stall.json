@@ -1,0 +1,19 @@
+{"format":2,"name":"food_stall","unit":"cm",
+"description":"A boardwalk food stall: a cream booth, serving window and ledge at +z under a striped awning, a blank sign board on top.",
+"tags":["stall","food","kiosk","boardwalk","snack"],
+"category":"town",
+"materials":{
+"awning":{"base":"MAT/awning_stripes","color":"#d63c2f"},
+"board":{"color":"#fdfaf2"},
+"body":{"color":"#f4efe4"},
+"dark":{"color":"#3a2a20"},
+"ledge":{"color":"#d9d2c5"},
+"roof":{"color":"#d63c2f"}},
+"parts":{
+"awning":{"type":"box","size":[316,4,92],"pos":[0,222,158],"pitch":16,"mat":"awning"},
+"board":{"type":"box","size":[280,54,8],"pos":[0,271,112],"mat":"board"},
+"body":{"type":"box","size":[300,230,240],"pos":[0,115,0],"mat":"body"},
+"ledge":{"type":"box","size":[296,6,40],"pos":[0,109,138],"mat":"ledge"},
+"post":{"type":"box","size":[6,30,6],"pos":[120,259,112],"mat":"dark","mirror":"x"},
+"roof":{"type":"box","size":[320,14,262],"pos":[0,237,0],"mat":"roof"},
+"window":{"type":"box","size":[262,96,2],"pos":[0,160,121],"mat":"dark"}}}

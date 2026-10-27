@@ -28,7 +28,10 @@ crates/
               plans biped/spider/lizard/beetle/blob/quadruped, procedural animation, hit recoil,
               creature lunges, foot IK, legs that stride the way the body travels, idle breathing
               and blinks, cutout look and camera cheats; the biped is a `Skel` of joints that the
-              procedural animation, moves and clips each produce and `dress` turns into parts),
+              procedural animation, moves and clips each produce and `dress` turns into parts,
+              so what it wears follows every animation: hair styles and beards under headwear,
+              caps, hard hats, tactical helmets, sunglasses, bags, badges, vests, ties —
+              "Characters" below),
               moves.rs (attacks and gestures as data, anim/moves.toml: arcs around the shoulders,
               wind-up from wherever the hands were, strikes with lunge/lean/twist/hop/spin,
               follow-through; skills name a move, a look may name its own per skill and combo
@@ -80,7 +83,8 @@ crates/
               assets.rs (`emit_asset`: a library asset drawn from game state each frame),
               interpolation between ticks, visual settings (ViewSettings)
   pav_audio   synthesized sound: oscillators/noise/envelopes/filters, event -> sound bank,
-              cpal output (optional), offline .wav rendering
+              loops with live parameters, radio music by genre and talk (music/), babble
+              voices (voice.rs), cpal output (optional), offline .wav rendering
   pav_tools   agent layer: tool registry + `pav` CLI (one-shot, REPL) + MCP stdio server +
               live bridge client (bridge.rs), and the motion importer (mocap/: glTF and FBX
               libraries, CMU's ASF/AMC, BVH; Rigify, Unreal, Mixamo/MotionBuilder, 100STYLE and
@@ -132,6 +136,11 @@ game's `ViewIntent` (`pav_core::present`):
   per mesh kind. Distance classes (`Scene::cull`): `flags::SMALL` beyond 90 m, `flags::DETAIL`
   beyond 150 m, whole regions past the fog's end (horizontal distance from the fog's centre).
   `Scene::all_meshes()` and `all_sdfs()` walk the regions' instances, then the loose ones.
+- The view builds no vehicle or person the camera cannot see (`pav_view` `build.rs`): one whose
+  bounding sphere lies more than 8 m outside the frustum (a low sun's shadow or a headlight's
+  pool can still reach into the picture) or past the fog's end is skipped before its parts are
+  made. The renderer culled them anyway, so the picture is unchanged; building them cost the
+  CPU about 30 µs a car.
 - Mesh detail by screen size: the regions' instances of the round built-ins (`MeshKey::Sphere`,
   `Cylinder`, `Cone`; 32 segments) draw as `MeshKey::Coarse` with 16 segments under 26 px of
   radius and 8 under 6.5 px (`MeshKey::for_size`: the outline stays within half a pixel), one
@@ -323,7 +332,14 @@ contract. This is an authoring/preview stage; gameplay spawning of these rigs is
 ## Browser and phones
 Headless Chromium can run the browser build (WebGPU on SwiftShader): launch with
 `--enable-unsafe-webgpu --enable-features=Vulkan --use-vulkan=swiftshader --use-angle=swiftshader`
-(other flag sets show a blank canvas). `?room=NAME&seed=N` picks the start room.
+(other flag sets show a blank canvas). `?room=NAME&seed=N` picks the start room, `?scene=NAME`
+the start scene; `?perf=1` (native: `--perf`) logs a line every 5 s — frame rate, frame time,
+the sim's ms per tick, ticks per second, entities and the render scale — for checks that read the
+console. On a software adapter (wgpu `DeviceType::Cpu`: SwiftShader, lavapipe, WARP) Auto
+quality is Low with a quarter-megapixel target and dynamic resolution; SwiftShader still takes
+seconds a frame for a city, so browser checks poll log lines (`scripts/web-check.mjs until:`).
+`scripts/pack_single_html.py --header FILE` puts a text block at the top of the single page as
+an HTML comment (a game's source information).
 Phones: emulate one in headless Chromium with Playwright (`viewport 844x390, isMobile, hasTouch,
 deviceScaleFactor: 1`; Chrome's DPR emulation leaves the canvas at CSS size) and drive it with
 CDP `Input.dispatchTouchEvent`; SwiftShader frames take about a second, so send a tap's start and
@@ -467,13 +483,91 @@ it sinks and the engine drowns.
 - **Feel:** `vehicle::feel::run(&def, &Test::ALL)` builds test tracks in an empty world (a 4 km
   slab, a 15% grade, a 12 m kicker) and measures 0–100 km/h (80% of top speed for slower
   vehicles), top speed, braking, skidpad g, handbrake slide, the climb and the jump.
-- **Drawing** (`pav_view::vehicles`): a `body_asset` prop placed on the ground under the centre,
-  its door parts (`door_l`, `door_r`, or a group) swung by the doors, parts in a dented zone
-  pushed in, lamp parts lit by state (`head_*`, `tail_*` brighter braking, `rev_*`, `siren_*`
-  red and blue in turn); `wheel_asset` at each wheel (authored at 0.33 m radius, hub toward
-  +x); busts in taken seats; smoke and fire by damage. Without a body prop: the box, a cabin,
-  wheels and lamps. `pav_view::assets::emit_asset_tweaked` draws any asset with per-part
-  turns, offsets and glow.
+- **Drawing** (`pav_view::vehicles`): a `body_asset` prop (a car's or a helicopter's) placed on
+  the ground under the centre, its door parts (`door_l`, `door_r`, or a group) swung by the
+  doors, parts in a dented zone pushed in, lamp parts lit by state (`head_*`, `tail_*` brighter
+  braking, `rev_*`, `siren_*` red and blue in turn); `wheel_asset` at each wheel (authored at
+  0.33 m radius, hub toward +x); busts in taken seats; smoke and fire by damage. A
+  helicopter's body turns its `rotor` group by `VehicleView::rotor` about the mast (up through
+  the group's middle) and its `tail_rotor` group 1.7 times as fast about its own axle (the way
+  the group is thinnest); crewed, its `beacon*` parts blink and `nav*` lights glow. Without a
+  body prop (or when it is missing): the box with a cabin, wheels and lamps, or a helicopter's
+  cockpit, tail, crossed blades and skids. `pav_view::assets::emit_asset_tweaked` draws any
+  asset with per-part turns, offsets and glow.
+
+## Characters
+The biped (`pav_core::puppet::PuppetDef`; a room's `look = { .. }`, a game's own looks) is
+built from its proportions (`head_radius`, `neck` — 0 keeps 0.55 × the head radius —
+`torso_length`, `leg_length`, ...) and dressed in `dress`, from the skeleton every animation
+path produces (procedural, moves, clips, low-detail characters alike), so what it wears follows
+the head and torso. `hair` = `buzz | short | long | bun | ponytail | curly | afro | bald` in
+`hair_color` (a cap of hair with its hairline above the eyes, plus a hanging part, bun or a
+tail that swings as it walks), `beard` = `stubble | mustache | goatee | full`. `gear`: `helm` =
+`cap` (a beanie) `| ballcap | hardhat | tactical | hood` and Shardfall's armour helms; under
+headwear only the hair at the nape shows (and long hair or a ponytail below it), a hood hides it
+all. `glasses` (a colour: sunglasses in place of the eyes), `bag = backpack | shoulder` with
+`bag_color`, `badge`, `vest` and `tie` (colours; empty = none). Each is a few rounded cones; the
+new fields are left out of a look's serialization while unset, so older looks keep their bytes.
+`Rng::fork(salt)` gives choices added to old content (a crowd's hair and accessories) a stream of
+their own without shifting the draws after them.
+
+## Radio and voices
+A station is data (`pav_core::radio::StationDef`: genre, tempo range, seed, slot length, title
+and artist words, DJ); `radio::at(st, clock)` gives the song on air and the seconds into its
+slot, live on the clock the game keeps. The game hands the host `present::Music` (station, song,
+offset, volume, muffle, `segments`) in its `AudioScene`; `pav_audio::music` renders it.
+- **Genres:** `synthwave` (gated snares, arpeggios, saw leads), `boombap` (swung sixteenths,
+  vinyl, electric piano, sub bass), `surf` (driving drums, driven square guitars through a
+  spring, tremolo picking), `cumbia` (güiro, accordions, bouncing bass), `smooth` (brushes and
+  ride, seventh chords, a filtered-saw sax with vibrato), `talk` (no songs). Songs have
+  sections (`music::sections`: intro, verses, choruses, a bridge in longer songs, outro); each
+  note is a function of the time since it began, so a song plays from any offset. After the
+  song the station's ident (its own motif and key, from its seed) and a quiet bed.
+- **Talk:** `radio::Segment { kind, start, seconds, voice, seed }` laid on a slot: `voice`
+  (babble), `chime` (the station's sounder), `jingle` (a short bed under an ad). The music dips
+  under a voice; a talk station plays a news bed under its voices. The game shows the words
+  (subtitles, cards); `radio::speech_seconds(text, rate)` says how long a line takes.
+- **Voices:** `radio::Voice { pitch, formant, rate, energy, radio }` → `pav_audio::voice::Babble`
+  (formants gliding between vowels, consonant noise, syllables in phrases with a falling pitch,
+  `radio` band-limits and drives it like a two-way set). As a loop: cues `voice` and
+  `voice.radio` (`pitch` 1 = 120 Hz, `param` liveliness), e.g. a police scanner.
+- **Mix:** `AudioScene.ducking` is the decibels the radio and the ambience beds duck by
+  (dialogue, menus); the mixer glides to it. `AudioScene.voice` is the voices' volume: a
+  one-shot whose cue starts `voice.` plays at it, everything else at `effects`
+  (`AudioScene::gain_for`; the app and the offline render alike).
+- **Listening:** `audio_capture` renders a run's mix (events, loops, the radio and its talk) to
+  .wav; a game's CLI calls `pav_tools::tools::register_sounds(its cue file)` so its own cues
+  are in it. `music::render` and `voice::render` render a song or a line alone.
+
+## Player settings and looks (present)
+What a game's settings page needs from its host, and looks for frontend pictures:
+- **Display:** `AppRequests.display: Option<DisplayRequest>` — `serial` (a new one is applied),
+  `fullscreen` and `vsync` (the window's; a browser page leaves them to the browser), `quality`
+  (`auto`: the host picks, Medium on a touch screen and Low on a software adapter, else High;
+  or `low`, `medium`, `high`: the app's presets), `render_scale` (0.25-1, multiplies what the
+  preset draws) and `dynamic` (resolution follows the frame rate on any device, not only touch).
+  `pav_app` applies it to its quality preset, its scaler and the window.
+- **Subtitles and contrast:** `UiModel.subtitle_scale` (0.6-2) sizes subtitles;
+  `UiModel.high_contrast` draws backplates nearly opaque with a light outline and puts subtitles
+  on a plate of their own.
+- **Painterly and print looks:** `ViewIntent.stylize: Option<StylizeIntent { kind, size, mix,
+  color }>` (`paint`, `halftone`, `sketch`; stroke, dot or hatch size in px; how much shows;
+  how much colour stays) runs the view's stylize filter over the whole picture (a loading card,
+  an intro).
+- **Loading cards over the world:** `LoadingCard` on a `clear` backdrop draws no art of its own
+  (the world shows: e.g. a character posed under `stylize`), only a scrim under the words;
+  `tag` names the word before the tip (None: "TIP", empty: none); a card with no bar
+  (`progress` < 0) has no spinner either.
+- **Bodies:** `Sim::set_solid(id, false)` makes an entity's body stop colliding and stop rays
+  (a fallen character: people walk over it, bullets and sight lines pass it).
+- **Particles from a game:** `SimEvent::Fx { preset, pos, dir, scale }` draws one burst of a
+  `pav_view::fx` preset (`smoke`, `sparks`, `dust`, `splash`, `exhaust`, `trail`...; an unknown name draws
+  `fire`): a dozen particles at scale 1, thrown along `dir` when it is not zero. Push it from
+  `pre` or `post` like a sound. `SimEvent::Splash { pos }` throws water up with rings on the
+  surface.
+- **Attract card:** a `TitleCard` with `small_logo` puts the logo and caption top left and its
+  `prompt` (no button glyph) breathing at the bottom right; set `UiModel.perf = false` while it
+  is up (the FPS readout shares the corner).
 
 ## Urban kit (pav_world)
 `pav_world` turns a district file (TOML) into an immutable `City` (`City::from_toml`, a pure
@@ -490,13 +584,39 @@ the small developer district is `content/freeway/dev_district.toml`.
   (concrete, grass, sand, water, asphalt, dirt, plaza, brush), lot widths/depth/setback, building
   `styles` (tower_glass, tower_concrete, stucco_shop, apartment, bungalow, shed, warehouse),
   heights, street dressing densities (`props`), `level` (ground offset; -0.15 = road level).
+  `[zones.<name>.signs]` puts `names` on the sign bands of shops fronting the `roads` classes
+  listed (each from the shop's own random stream), a `neon` share of them outlined in a tube of
+  one of `neon_colors` that glows after dark.
 - **Landmarks** (`[[landmark]]`): a cell rectangle taken over by an `assembly` (tower_bank,
   police, hospital, open, paloma_sign, lookout...), with a map `blip`; `level = true` flattens the
-  terrain under it.
+  terrain under it. A landmark with parts is built from them instead (`parts.rs`; all in its own
+  frame: metres from its north-west corner, x east, z south, rectangles `[x0, z0, x1, z1]`,
+  heights `y` above its ground, colours `#rrggbb`, `MAT/name` or `MAT/name #rrggbb`): `ground`
+  (paving over the whole rectangle); `[[landmark.room]]` (walls round `rect` with `door`
+  openings and `glass` runs cut in, `inside` lining, `floor`, `roof`, `parapet`, ceiling
+  `lights`; its floor and doorways are `Indoor` walk tiles); `mass` (solid blocks, `cap`);
+  `wall` / `fence` (lines, or round a rectangle with `gate`s: `wall`, chain-link `fence`,
+  `rail`; `cover = true` makes low cover); `slab` (floors, decks on `piles`, canopies on
+  `columns`, `walk`, `glow`); `ramp` (a wedge cars drive up, `rise` toward a side, `y0` → `y1`);
+  `prop` (library props, rows of `count` × `step`, `cover`); `park` (lot places: `kind` names a
+  vehicle archetype, `always` keeps one there — `City::lots`, for the game to fill); `sign`
+  (wall words on an optional `board`, `neon` tube glowing at night, `pole`); `lamp` (glowing
+  panels that light the room); `wheel` (a Ferris wheel: legs and deck baked, rim and cars drawn
+  by the game turning from `City::wheels` — `WheelGeom::rim_at(t)`, `cars_at(t)`); `hull` (a
+  ship moored in the water); `ladder` (a climbable strip up a wall face). Glass panes are
+  invisible destructible colliders in visible frames (the renderer draws no transparency, so
+  the inside shows) with a frosted `band`; `breakable` runs are listed pane by pane in
+  `City::panes` (each box holds its pane, band, sill and mullions: a game breaks it with
+  `Sim::break_blocks_in(min, max, from)`, debris flying from `from`; explosions break any glass).
+  Gates and doors 2.6 m or wider keep the kerb outside free of parked cars.
+- **Spots** (`[[spot]]`: `name`, `at` in cell coordinates, `yaw` degrees from north, `y` metres
+  up on a deck or a roof): `City::spot`, `spot_height`; `landmark_at(p)` is the landmark with
+  parts whose cells hold a point.
 - **Terrain:** `terrain` rows (same size as the map: `0`-`9`, `a`-`z` × `terrain_step` m),
   smoothed into 4 m samples (`City::terrain`, `Terrain::height_at`); cells with height become
   meshes with exact colliders, roads on slopes are flat across. `City::ground_y(p)` is the
-  walkable height anywhere (road, lot, terrain, water surface).
+  walkable height anywhere (road, lot, terrain, water surface; in a landmark its paving, a deck
+  people walk on, a room's floor).
 - **Freeways** (`[[freeway]]`): a smoothed centre line in cell coordinates, deck `height`,
   `lanes` each way, `closed_start`, `broken_end`, and `[[freeway.ramps]]` (`from` beside the
   deck, `to` on a street stub, `kind` on/off). Deck and ramps are swept meshes with exact
@@ -504,15 +624,20 @@ the small developer district is `content/freeway/dev_district.toml`.
 - **Channels:** `channel` road cells running north-south become a sunken bed (6 m) with sloped
   walls; roads crossing them keep their own characters and become bridges; `[[channel_ramp]]`
   adds ramps down the walls. Channel roads never join street roads in road roles.
-- **Placements:** `[[jump]]` (a kicker wedge: `at` cell coords, `yaw`, length/width/height) and
-  `[[sign]]` (words on a post).
+- **Placements:** `[[jump]]` (a kicker wedge: `at` cell coords, `yaw`, length/width/height),
+  `[[sign]]` (words on a post: `text`, `height` 3.2 m, letter `size` 0.9 m and `color`, default
+  `#f4f1ea`; a `\n` in the text starts a second line; dark letters read against the sky) and
+  `[[prop]]` (a library prop or a row of them, as a landmark's `prop` but with `at` in cell
+  coords, standing on the ground there).
 - **Lanes** (`City::lanes`, `lanes::LaneGraph`): every drivable lane as a polyline in its
   direction (right-hand traffic), connectors through junctions (straight/left/right, U-turns at
   dead ends), freeway and ramp lanes, channel lanes (closed to ambient traffic), lane-change
   neighbours, `Junction`s with `SignalPlan`s (`light(ns, t)`, `walk(ns, t)`: pure functions of
   time), `parking` spots, `nearest(p, filter)`, `route(from, to)` (A*) and `route_points`.
 - **Walking** (`City::walk`, `walk::WalkMap`): 2 m tiles (sidewalk, crossing tied to its
-  junction's signal, path, open ground), `at(p)`, `random(rng, filter)`, `path(from, to, budget)`.
+  junction's signal, path, open ground, indoor: landmarks' rooms, where people can be put and
+  walk but crowds neither spawn nor wander), `at(p)`, `random(rng, filter)`,
+  `path(from, to, budget)`.
 - **Cover** (`City::cover`): points along building walls facing walkable ground (high) and low
   walls and barriers (low), each with the direction away from its wall; `near(pos, threat, r)`.
 - Checks: `cargo test -p pav_world` (district builds and is deterministic, the open lane network

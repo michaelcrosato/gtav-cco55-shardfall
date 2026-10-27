@@ -1,0 +1,148 @@
+# The three protagonists (PLAN.md §5.4), read by `gtf_game::protagonists`. Each keeps their own
+# cash, weapons, stats, health, ability meter and whereabouts; the player switches between them
+# with the switch wheel (hold D-pad down). `weapons` are weapons.toml ids owned at the start
+# (fists and the phone always); `stats` run 0-100 (stamina lengthens the sprint, shooting
+# steadies the aim, strength hardens the fists, stealth quietens the crouch). `home` and the
+# `life` spots are mission anchors (`spot:<name>` from the district file): where the protagonist
+# is found when the player switches to them, busy with something (`clip`, `text` on the switch
+# card) in the hours given. `bed` is where they save (D-pad right; home without one). `voice`
+# pitches their babble. `look`: the clothes' colours, a baseball cap's (`cap`), `hair` and
+# `beard` styles (as peds.toml's wear names them) and `hair_color`, sunglasses' colour
+# (`glasses`), a `bag` (backpack or shoulder) and `bag_color`, height (`scale`) and `build`.
+
+[[protagonist]]
+key = "dez"
+name = "Dez Ortega"
+short = "DEZ"
+letter = "D"
+color = "#6fe28a"
+ability = "slipstream"
+cash = 350
+weapons = ["p9"]
+stats = { driving = 72, shooting = 38, stamina = 55, strength = 40, stealth = 45 }
+vehicle = "bravura_stallion"
+voice = 1.12
+home = "spot:dez_home"
+bed = "spot:dez_bed"
+look = { skin = "#c68a62", shirt = "#f2f2ee", pants = "#3b5a8c", shoes = "#ededed", cap = "#1f2a44", hair = "short", hair_color = "#1c1714", beard = "goatee", scale = 0.98, build = 0.9 }
+
+[[protagonist.life]]
+at = "spot:dez_home"
+clip = "MESH2MOTION/Idle_TalkingPhone"
+text = "Dez is on the phone to his cousin about the lowrider."
+hours = [8.0, 23.0]
+
+[[protagonist.life]]
+at = "spot:dez_customs"
+clip = "MESH2MOTION/Idle_A"
+text = "Dez is waiting on a part at Paloma Customs."
+hours = [9.0, 19.0]
+
+[[protagonist.life]]
+at = "spot:dez_beach"
+clip = "MESH2MOTION/Idle_FoldArms"
+text = "Dez is watching the sunset at Palisade Beach."
+hours = [17.0, 21.0]
+
+[[protagonist]]
+key = "mack"
+name = "Mack Kincaid"
+short = "MACK"
+letter = "M"
+color = "#3d8bff"
+ability = "deadeye"
+cash = 2500
+weapons = ["p9", "pump"]
+stats = { driving = 48, shooting = 80, stamina = 35, strength = 55, stealth = 70 }
+vehicle = "daimon_titan"
+voice = 0.82
+home = "spot:mack_home"
+bed = "spot:mack_bed"
+look = { skin = "#e0ac83", shirt = "#1f2d4d", pants = "#5a5f66", shoes = "#2a1d14", hair = "short", hair_color = "#6e655c", beard = "stubble", glasses = "#1b1d22", scale = 1.04, build = 1.25 }
+
+[[protagonist.life]]
+at = "spot:mack_home"
+clip = "MESH2MOTION/Idle_A"
+text = "Mack is rehearsing a seminar to an empty driveway."
+hours = [7.0, 22.0]
+
+[[protagonist.life]]
+at = "spot:mack_diner"
+clip = "MESH2MOTION/Idle_TalkingPhone"
+text = "Mack is on hold with his accountant outside the Freeway Diner."
+hours = [10.0, 20.0]
+
+[[protagonist.life]]
+at = "spot:mack_lookout"
+clip = "MESH2MOTION/Idle_FoldArms"
+text = "Mack is brooding at Lookout Point."
+hours = [18.0, 24.0]
+
+[[protagonist]]
+key = "roxy"
+name = "Roxy Vance"
+short = "ROXY"
+letter = "R"
+color = "#ff3e8a"
+ability = "overdrive"
+cash = 120
+weapons = ["p9", "buzz"]
+stats = { driving = 60, shooting = 55, stamina = 85, strength = 80, stealth = 30 }
+vehicle = "marlin_bay"
+voice = 1.28
+home = "spot:roxy_home"
+bed = "spot:roxy_bed"
+look = { skin = "#f1c9a5", shirt = "#c8242c", pants = "#1d1d22", shoes = "#111111", eyes = "#0d0d0d", hair = "ponytail", hair_color = "#e8467c", scale = 0.97, build = 1.0 }
+
+[[protagonist.life]]
+at = "spot:roxy_home"
+clip = "MESH2MOTION/Idle_A"
+text = "Roxy is stretching outside the trailer."
+hours = [6.0, 22.0]
+
+[[protagonist.life]]
+at = "spot:roxy_pier"
+clip = "MESH2MOTION/Idle_TalkingPhone"
+text = "Roxy is arguing with her agent on Palisade Pier."
+hours = [11.0, 23.0]
+
+[[protagonist.life]]
+at = "spot:roxy_flats"
+clip = "MESH2MOTION/Idle Listening"
+text = "Roxy is eyeing a forklift in The Flats."
+hours = [0.0, 24.0]
+
+# The special abilities (L3 + R3): they last up to `seconds` with a full meter, drain while on
+# and refill by play style (`fill`: meter per event or per second of it). `time_scale` slows the
+# world, `grip` adds tyre grip, `assist` widens the aim assist's cone, `damage` multiplies
+# damage dealt, `taken` damage taken, `knockback` the fists' shove; `tint` washes the screen
+# (linear RGB and strength). `on_foot` / `in_car`: where it works.
+[ability.slipstream]
+name = "Slipstream"
+seconds = 10.0
+time_scale = 0.5
+grip = 0.4
+in_car = true
+tint = [0.25, 1.0, 0.55, 0.22]
+fill = { near_miss = 0.06, drift = 0.03, air = 0.08 }
+
+[ability.deadeye]
+name = "Deadeye"
+seconds = 10.0
+time_scale = 0.35
+assist = 2.0
+damage = 1.5
+on_foot = true
+tint = [0.3, 0.55, 1.0, 0.24]
+fill = { headshot = 0.12, kill = 0.06, takedown = 0.15 }
+
+[ability.overdrive]
+name = "Overdrive"
+seconds = 10.0
+damage = 2.0
+taken = 0.5
+knockback = 2.0
+on_foot = true
+in_car = true
+tint = [1.0, 0.12, 0.1, 0.26]
+fill = { dealt = 0.004, taken = 0.004, explosion = 0.12 }

@@ -1,7 +1,7 @@
 //! The game's own agent tools, registered into `gtf` beside every engine tool
 //! (`pav_tools::tools::register`). They need the game's data, so they live here rather than in
-//! `pav_tools` (PLAN.md §6.5 E12): `perf`, `citymap` and `lanes` now; `perf`, `soak`, `traffic`, `peds`,
-//! `vehicle_feel` arrive with the systems they measure.
+//! `pav_tools` (PLAN.md §6.5 E12): `perf`, `citymap`, `lanes` and `vehicle_feel` now; `soak`,
+//! `traffic` and `peds` arrive with the systems they measure.
 
 use std::path::PathBuf;
 
@@ -21,6 +21,7 @@ pub static TOOLS: &[Tool] = &[
         args: &[
             arg("view", "string", "a view name or all (default all)"),
             arg("ticks", "integer", "sim ticks to time per view (default 300)"),
+            arg("split", "boolean", "also time the frame without the vehicles and without the people"),
         ],
         run: t_perf,
     },
@@ -45,7 +46,376 @@ pub static TOOLS: &[Tool] = &[
         ],
         run: t_lanes,
     },
+    Tool {
+        name: "traffic",
+        help: "Traffic in the loaded freeway scene: counts by tier and mood, soak counters, the nearest cars (lane, speed, mood).",
+        args: &[arg("limit", "integer", "cars to list, nearest first (default 8)")],
+        run: t_traffic,
+    },
+    Tool {
+        name: "peds",
+        help: "People in the loaded freeway scene: counts by what they do and by archetype, soak counters, the nearest people.",
+        args: &[arg("limit", "integer", "people to list, nearest first (default 8)")],
+        run: t_peds,
+    },
+    Tool {
+        name: "soak",
+        help: "Runs Paloma Bay unattended (PLAN §7.5): mode traffic (autopilot cruising), peds (standing), roam (the bot drives, gets heat every minute of calm and evades), attract (the attract loop: stalled vignettes, plays per vignette, entity counts and memory per loop); reports anomaly counters, heat episodes, ms/tick, entity counts.",
+        args: &[
+            arg("mode", "string", "traffic, peds, roam or attract (default traffic)"),
+            arg("seconds", "number", "game seconds to run (default 120)"),
+            arg("seed", "integer", "scene seed (default 1)"),
+            arg("time", "string", "time of day to start at, HH:MM (default 12:00)"),
+            arg("wanted", "integer", "roam: stars to start with (default 0: the first after a minute of calm)"),
+            arg("shots", "string", "a path prefix: also capture the game (HUD on) every shot_every seconds"),
+            arg("shot_every", "number", "seconds between captures (default 10)"),
+        ],
+        run: t_soak,
+    },
+    Tool {
+        name: "vehicle_feel",
+        help: "Vehicle archetypes on the feel tracks against PLAN §5.6.3: top speed, 0-100 km/h, braking, skidpad g, handbrake slide, 15% climb, the kicker jump.",
+        args: &[arg("key", "string", "an archetype key from content/freeway/vehicles.toml, or all (default all)")],
+        run: t_vehicle_feel,
+    },
 ];
+
+fn freeway(s: &Session) -> Result<&gtf_game::Freeway> {
+    s.sim
+        .play()
+        .and_then(|g| g.get::<gtf_game::Freeway>())
+        .ok_or_else(|| anyhow!("load a freeway scene first (load scene=freeway/roam)"))
+}
+
+fn t_traffic(s: &mut Session, a: &Args) -> Result<Output> {
+    let g = freeway(s)?;
+    let limit = a.get("limit").and_then(Value::as_u64).unwrap_or(8) as usize;
+    let me = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(Vec3::ZERO);
+    let mut cars: Vec<_> =
+        g.traffic.cars.iter().filter_map(|c| Some((s.sim.state.entities.get(c.car)?.pos.distance(me), c))).collect();
+    cars.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let list: Vec<Value> = cars
+        .iter()
+        .take(limit)
+        .map(|(d, c)| {
+            json!({ "car": c.car.0, "key": c.key, "dist": r1(*d), "lane": c.lane, "speed": r1(c.speed),
+                    "tier": format!("{:?}", c.tier).to_lowercase(), "mood": format!("{:?}", c.mood).to_lowercase(),
+                    "held": c.held, "why": c.why, "route": c.route.len(), "goal": c.goal.map(|g| [r1(g.x), r1(g.y), r1(g.z)]), "end": c.end,
+                    "bus": c.bus.is_some(), "autopilot": c.pilot })
+        })
+        .collect();
+    Ok(Output::Json(json!({ "summary": g.traffic.summary(), "nearest": list })))
+}
+
+fn t_peds(s: &mut Session, a: &Args) -> Result<Output> {
+    let g = freeway(s)?;
+    let limit = a.get("limit").and_then(Value::as_u64).unwrap_or(8) as usize;
+    let def = gtf_game::peds::def()?;
+    let me = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(Vec3::ZERO);
+    let mut doing = std::collections::BTreeMap::<String, usize>::new();
+    let mut kinds = std::collections::BTreeMap::<String, usize>::new();
+    let mut near = Vec::new();
+    for p in &g.peds.list {
+        *doing.entry(format!("{:?}", p.doing).to_lowercase()).or_default() += 1;
+        let kind = def.archetype.get(p.arch as usize).map(|a| a.id.clone()).unwrap_or_default();
+        *kinds.entry(kind.clone()).or_default() += 1;
+        if let Some(f) = s.sim.feet(p.id) {
+            near.push((f.distance(me), p.id.0, kind, format!("{:?}", p.doing).to_lowercase()));
+        }
+    }
+    near.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let list: Vec<Value> =
+        near.iter().take(limit).map(|(d, id, k, what)| json!({ "id": id, "kind": k, "dist": r1(*d), "doing": what })).collect();
+    Ok(Output::Json(json!({
+        "out": g.peds.list.len(), "doing": doing, "kinds": kinds,
+        "spawned": g.peds.spawned, "despawned": g.peds.despawned, "rerouted": g.peds.stuck,
+        "struck": g.struck.count, "nearest": list,
+    })))
+}
+
+fn t_soak(s: &mut Session, a: &Args) -> Result<Output> {
+    let mode = text(a, "mode").unwrap_or("traffic").to_string();
+    if !matches!(mode.as_str(), "traffic" | "peds" | "roam" | "attract") {
+        bail!("soak: mode is traffic, peds, roam or attract");
+    }
+    let seconds = a.get("seconds").and_then(Value::as_f64).unwrap_or(120.0).clamp(5.0, 7200.0);
+    let seed = a.get("seed").and_then(Value::as_u64).unwrap_or(1);
+    if mode == "attract" {
+        return soak_attract(s, a, seconds, seed);
+    }
+    let mut args = Args::new();
+    args.insert("scene".into(), json!("freeway/roam"));
+    args.insert("seed".into(), json!(seed));
+    pav_tools::call(s, "load", &args)?;
+    let cmd = |s: &mut Session, c: &str| s.sim.step(&pav_core::InputFrame { cmds: vec![c.into()], ..Default::default() });
+    cmd(s, &format!("time {}", text(a, "time").unwrap_or("12:00")));
+    let shots = text(a, "shots").map(str::to_string);
+    let shot_every = (a.get("shot_every").and_then(Value::as_f64).unwrap_or(10.0).max(1.0) * 60.0) as u64;
+    match mode.as_str() {
+        "traffic" => {
+            cmd(s, "drive fenwick_commuter");
+            cmd(s, "autopilot on");
+        }
+        // The bot drives a fast car; a minute without heat and it gets some (1-3 stars, in
+        // turn), then runs — leaving wrecks for other cars — until the police give up (or it is
+        // wasted or busted, and walks to the next car).
+        "roam" => {
+            cmd(s, "drive okami_kaze");
+            cmd(s, "autopilot escape");
+            if let Some(n) = a.get("wanted").and_then(Value::as_u64).filter(|n| *n > 0) {
+                cmd(s, &format!("wanted {}", n.min(5)));
+            }
+        }
+        _ => {}
+    }
+    let (mut episodes, mut escapes, mut wasted, mut busted, mut calm) = (0u32, 0u32, 0u32, 0u32, 0.0f32);
+    let mut was_alive = true;
+    let mut was_wanted = false;
+    let ticks = (seconds * 60.0) as u64;
+    let (mut nan, mut fell, mut slowest, mut total_ms) = (0u32, 0u32, 0.0f64, 0.0f64);
+    let mut fallen: Vec<(u32, String)> = Vec::new();
+    let (mut fewest, mut most) = (usize::MAX, 0usize);
+    let start = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(Vec3::ZERO);
+    let mut travelled = 0.0f32;
+    let mut last = start;
+    for t in 0..ticks {
+        let input = if mode == "peds" { pav_core::InputFrame::default() } else { s.sim.bot_input() };
+        let clock = std::time::Instant::now();
+        s.sim.step(&input);
+        let ms = clock.elapsed().as_secs_f64() * 1000.0;
+        total_ms += ms;
+        slowest = slowest.max(ms);
+        if t % 60 == 0 {
+            let n = s.sim.state.entities.iter().count();
+            fewest = fewest.min(n);
+            most = most.max(n);
+            for e in s.sim.state.entities.iter() {
+                if !e.pos.is_finite() {
+                    nan += 1;
+                } else if e.pos.y < -40.0 {
+                    fell += 1;
+                    if fallen.len() < 12 && !fallen.iter().any(|(id, _)| *id == e.id.0) {
+                        fallen.push((e.id.0, format!("{}#{} at {:.0},{:.0},{:.0}", e.name, e.id.0, e.pos.x, e.pos.y, e.pos.z)));
+                    }
+                }
+            }
+            let now = s.sim.state.player.and_then(|id| s.sim.feet(id)).unwrap_or(last);
+            travelled += now.distance(last);
+            last = now;
+        }
+        s.sim.drain_events();
+        if let Some(prefix) = &shots
+            && t > 0
+            && t % shot_every == 0
+        {
+            let mut c = Args::new();
+            c.insert("out".into(), json!(format!("{prefix}_{:03}s.png", t / 60)));
+            c.insert("hud".into(), json!(true));
+            c.insert("width".into(), json!(1280));
+            c.insert("height".into(), json!(720));
+            pav_tools::call(s, "capture", &c)?;
+        }
+        if mode == "roam" {
+            let g = freeway(s)?;
+            let (alive, stars, fate) = (g.fate.alive(), g.heat.stars, g.fate);
+            if was_alive && !alive {
+                match fate {
+                    gtf_game::fate::Fate::Wasted { .. } => wasted += 1,
+                    gtf_game::fate::Fate::Busted { .. } => busted += 1,
+                    gtf_game::fate::Fate::Alive => {}
+                }
+            } else if alive && was_wanted && stars == 0 && was_alive {
+                escapes += 1;
+            }
+            was_alive = alive;
+            was_wanted = stars > 0;
+            calm = if alive && stars == 0 { calm + 1.0 / 60.0 } else { 0.0 };
+            if calm > 60.0 {
+                calm = 0.0;
+                episodes += 1;
+                cmd(s, &format!("wanted {}", 1 + (episodes - 1) % 3));
+            }
+        }
+    }
+    let g = freeway(s)?;
+    let traffic = g.traffic.summary();
+    let peds = json!({ "out": g.peds.list.len(), "spawned": g.peds.spawned, "rerouted": g.peds.stuck, "struck": g.struck.count });
+    let stuck_cars = traffic["stuck_cars"].as_u64().unwrap_or(0);
+    let ai_crashes = traffic["ai_crashes"].as_u64().unwrap_or(0);
+    let in_view = traffic["spawn_in_view"].as_u64().unwrap_or(0) + traffic["despawn_in_view"].as_u64().unwrap_or(0);
+    let police_in_view = g.police.spawn_in_view;
+    let ok = stuck_cars == 0 && ai_crashes <= 3 && in_view == 0 && police_in_view == 0 && nan == 0 && fell == 0;
+    let heat = json!({
+        "episodes": episodes, "escapes": escapes, "wasted": wasted, "busted": busted,
+        "police_spawned": g.police.spawned, "police_spawn_in_view": police_in_view,
+        "cars_left": g.bot.bailed, "cars_taken": g.bot.taken, "peak": g.heat.peak,
+    });
+    Ok(Output::Json(json!({
+        "mode": mode, "seconds": seconds, "seed": seed, "ok": ok,
+        "limits": "stuck_cars 0, ai_crashes <= 3, spawn/despawn in view 0 (traffic and police), NaN 0, fell through 0",
+        "traffic": traffic, "peds": peds, "heat": heat,
+        "nan_positions": nan, "fell_through_world": fell,
+        "fallen": fallen.iter().map(|f| f.1.clone()).collect::<Vec<_>>(),
+        "ms_per_tick": (total_ms / ticks.max(1) as f64 * 1000.0).round() / 1000.0,
+        "slowest_tick_ms": (slowest * 100.0).round() / 100.0,
+        "entities": [fewest, most],
+        "player_travelled_m": travelled.round(),
+    })))
+}
+
+/// `soak mode=attract`: the attract loop on its own for `seconds` (PLAN §7.5). Reports the
+/// vignettes that stalled, how often each was played, each vignette's entity count 8 s in on its
+/// first and its latest play, and per loop the sum of those counts and the process's memory at
+/// its start. Flat means no loop's sum grew past the first complete loop's by 10% (one sample of
+/// a vignette varies with the traffic round it; a leak grows every loop) and the memory from
+/// the second loop on stays within 10% (the first visits every place for the first time).
+fn soak_attract(s: &mut Session, a: &Args, seconds: f64, seed: u64) -> Result<Output> {
+    let mut args = Args::new();
+    args.insert("scene".into(), json!("freeway/attract"));
+    args.insert("seed".into(), json!(seed));
+    pav_tools::call(s, "load", &args)?;
+    let shots = text(a, "shots").map(str::to_string);
+    let ticks = (seconds * 60.0) as u64;
+    let (mut nan, mut fell, mut slowest, mut total_ms) = (0u32, 0u32, 0.0f64, 0.0f64);
+    let mut fallen: Vec<String> = Vec::new();
+    // Per vignette: plays, and the entities 8 s in on its first and its latest play.
+    let mut plays: std::collections::BTreeMap<String, (u32, usize, usize)> = Default::default();
+    // Per loop, the vignettes' entity counts summed (and how many were summed).
+    let mut loop_entities: Vec<(usize, u32)> = vec![(0, 0)];
+    let mut memory: Vec<u64> = Vec::new();
+    let (mut loops, mut ready, mut counted) = (u32::MAX, false, false);
+    let mut shot = 0u32;
+    for _ in 0..ticks {
+        let clock = std::time::Instant::now();
+        s.sim.step(&pav_core::InputFrame::default());
+        let ms = clock.elapsed().as_secs_f64() * 1000.0;
+        total_ms += ms;
+        slowest = slowest.max(ms);
+        s.sim.drain_events();
+        let g = freeway(s)?;
+        let st = &g.attract;
+        if !st.on {
+            bail!("soak: the attract loop ended by itself");
+        }
+        if st.loops != loops {
+            loops = st.loops;
+            memory.push(resident_kib());
+            loop_entities.push((0, 0));
+        }
+        let id = g.attract_vignette().unwrap_or_default();
+        if st.ready && !ready {
+            plays.entry(id.clone()).or_default().0 += 1;
+            counted = false;
+        }
+        ready = st.ready;
+        if st.ready && st.t >= 8.0 && !counted {
+            counted = true;
+            let n = s.sim.state.entities.iter().count();
+            if let Some(l) = loop_entities.last_mut() {
+                l.0 += n;
+                l.1 += 1;
+            }
+            let e = plays.entry(id.clone()).or_default();
+            if e.1 == 0 {
+                e.1 = n;
+            }
+            e.2 = n;
+            for e in s.sim.state.entities.iter() {
+                if !e.pos.is_finite() {
+                    nan += 1;
+                } else if e.pos.y < -40.0 {
+                    fell += 1;
+                    if fallen.len() < 12 {
+                        fallen.push(format!("{id}: {}#{} at {:.0},{:.0},{:.0}", e.name, e.id.0, e.pos.x, e.pos.y, e.pos.z));
+                    }
+                }
+            }
+            // A picture of each vignette (8 s in), as long as `shots` asks.
+            if let Some(prefix) = &shots {
+                shot += 1;
+                let mut c = Args::new();
+                c.insert("out".into(), json!(format!("{prefix}_{shot:03}_{id}.png")));
+                c.insert("hud".into(), json!(true));
+                c.insert("width".into(), json!(1280));
+                c.insert("height".into(), json!(720));
+                pav_tools::call(s, "capture", &c)?;
+            }
+        }
+    }
+    let g = freeway(s)?;
+    let st = &g.attract;
+    let stalls = st.anomalies.len();
+    let n = gtf_game::attract::def()?.vignette.len();
+    let flat = |first: usize, last: usize| last as f64 <= first as f64 * 1.1 + 4.0;
+    let vignettes: serde_json::Map<String, Value> = plays
+        .iter()
+        .map(|(id, (p, first, last))| {
+            (id.clone(), json!({ "plays": p, "entities_first": first, "entities_last": last, "flat": flat(*first, *last) }))
+        })
+        .collect();
+    let every_twice = plays.len() == n && plays.values().all(|(p, _, _)| *p >= 2);
+    // (Complete loops only: every vignette in it played once.)
+    let sums: Vec<usize> = loop_entities.iter().filter(|l| l.1 as usize == n).map(|l| l.0).collect();
+    let entities_flat = sums.first().is_none_or(|&first| sums.iter().all(|&s| s as f64 <= first as f64 * 1.1));
+    let base = memory.get(1).copied().unwrap_or(0);
+    let peak = memory.iter().skip(1).copied().max().unwrap_or(0);
+    let memory_flat = base == 0 || (peak as f64) <= base as f64 * 1.1;
+    let ok = stalls == 0 && every_twice && entities_flat && memory_flat && nan == 0 && fell == 0;
+    Ok(Output::Json(json!({
+        "mode": "attract", "seconds": seconds, "seed": seed, "ok": ok,
+        "limits": "vignette_stalls 0, every vignette played at least twice, the entities per loop and the memory (from the second loop) flat within 10%, NaN 0, fell through 0",
+        "vignette_stalls": stalls, "anomalies": st.anomalies, "played": st.played, "loops": st.loops,
+        "vignettes": vignettes, "every_vignette_twice": every_twice, "entities_per_loop": sums, "entities_flat": entities_flat,
+        "memory_kib_per_loop": memory, "memory_flat": memory_flat,
+        "nan_positions": nan, "fell_through_world": fell, "fallen": fallen,
+        "ms_per_tick": (total_ms / ticks.max(1) as f64 * 1000.0).round() / 1000.0,
+        "slowest_tick_ms": (slowest * 100.0).round() / 100.0,
+    })))
+}
+
+/// The process's resident memory in KiB (Linux; 0 elsewhere).
+fn resident_kib() -> u64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| l.split_whitespace().nth(1)?.parse().ok()))
+        .unwrap_or(0)
+}
+
+fn t_vehicle_feel(_s: &mut Session, a: &Args) -> Result<Output> {
+    use pav_core::vehicle::feel::{self, Test};
+    let all = gtf_game::vehicles::all()?;
+    let key = a.get("key").and_then(Value::as_str).unwrap_or("all");
+    let chosen: Vec<_> = all.iter().filter(|v| (key == "all" && !v.helicopter()) || v.key == key).collect();
+    if chosen.is_empty() {
+        let keys: Vec<&str> = all.iter().map(|v| v.key.as_str()).collect();
+        bail!("no vehicle '{key}' (vehicles: {}, all)", keys.join(", "));
+    }
+    let mut rows = Vec::new();
+    for v in chosen {
+        if v.helicopter() {
+            rows.push(json!({ "key": v.key, "note": "helicopters fly (no road feel tracks); tests/vehicles.rs checks they climb and fly forward" }));
+            continue;
+        }
+        let f = feel::run(&v.def, &Test::ALL);
+        let misses = gtf_game::vehicles::feel_misses(v, &f);
+        let j = f.jump.clone().unwrap_or_default();
+        rows.push(json!({
+            "key": v.key,
+            "ok": misses.is_empty(),
+            "top_speed": f.top_speed.map(r1),
+            "accel_to_kmh": (f.accel_to * 3.6).round(),
+            "accel_s": f.accel_time.map(|t| (t * 100.0).round() / 100.0),
+            "brake_m": f.brake_distance.map(r1),
+            "skidpad_g": f.grip_g.map(|g| (g * 100.0).round() / 100.0),
+            "slide_deg": f.slide_deg.map(r1),
+            "climb_share": f.climb_share.map(|c| (c * 100.0).round() / 100.0),
+            "jump": { "takeoff": r1(j.takeoff_pitch), "landing": r1(j.landing_pitch), "air_s": (j.air_time * 100.0).round() / 100.0, "upright": j.upright },
+            "misses": misses,
+        }));
+    }
+    let failed = rows.iter().filter(|r| r["ok"] == json!(false)).count();
+    Ok(Output::Json(json!({ "vehicles": rows, "failed": failed })))
+}
 
 /// One budget row: (metric, budget, relaxed budget for `hills_vista`).
 const BUDGETS: &[(&str, f64, f64)] = &[
@@ -54,6 +424,9 @@ const BUDGETS: &[(&str, f64, f64)] = &[
     ("triangles", 2_500_000.0, 3_500_000.0),
     ("sdf", 3000.0, 3000.0),
     ("lights", 64.0, 64.0),
+    ("shadow_lights", 4.0, 4.0),
+    ("particles", 30_000.0, 30_000.0),
+    ("entities", 450.0, 450.0),
     ("view_ms", 4.0, 6.0),
     ("sim_ms", 3.0, 3.0),
 ];
@@ -74,15 +447,62 @@ fn t_perf(s: &mut Session, a: &Args) -> Result<Output> {
         args.insert("scene".into(), json!(format!("freeway/view/{}", v.name)));
         pav_tools::call(s, "load", &args)?;
         s.step(5);
-        // Warm the view's caches, then measure a frame.
+        // Warm the view's caches, then measure frames (the median of five: one frame's time
+        // swings with whatever else the machine is doing).
         s.render_timed(960, 540)?;
-        let (_, view_ms) = s.render_timed(960, 540)?;
+        let mut times = Vec::new();
+        for _ in 0..5 {
+            times.push(s.render_timed(960, 540)?.1);
+        }
+        times.sort_by(f64::total_cmp);
+        let view_ms = times[2];
+        // Where the frame's time goes: the median of five frames as it is, without the vehicles,
+        // and without the people too (the scene is put back afterwards).
+        let split = if a.get("split").and_then(Value::as_bool).unwrap_or(false) {
+            let median = |s: &mut Session| -> Result<f64> {
+                let mut t = Vec::new();
+                for _ in 0..5 {
+                    t.push(s.render_timed(960, 540)?.1);
+                }
+                t.sort_by(f64::total_cmp);
+                Ok((t[2] * 100.0).round() / 100.0)
+            };
+            let all = median(s)?;
+            let keep = s.sim.state.clone();
+            let cars: Vec<_> = s.sim.state.entities.iter().filter(|e| e.vehicle.is_some()).map(|e| e.id).collect();
+            for id in &cars {
+                s.sim.despawn(*id);
+            }
+            let without_vehicles = median(s)?;
+            let people: Vec<_> = s
+                .sim
+                .state
+                .entities
+                .iter()
+                .filter(|e| e.character.is_some() && Some(e.id) != s.sim.state.player)
+                .map(|e| e.id)
+                .collect();
+            for id in &people {
+                s.sim.despawn(*id);
+            }
+            let without_people = median(s)?;
+            s.sim.state = keep;
+            Some(
+                json!({ "median": all, "vehicles": cars.len(), "without_vehicles": without_vehicles, "people": people.len(), "without_people_too": without_people }),
+            )
+        } else {
+            None
+        };
         let mut stats = pav_tools::tools::render_stats(s)?;
         let t = std::time::Instant::now();
         s.step(ticks);
         let sim_ms = t.elapsed().as_secs_f64() * 1000.0 / ticks as f64;
         stats["view_ms"] = json!((view_ms * 100.0).round() / 100.0);
         stats["sim_ms"] = json!((sim_ms * 1000.0).round() / 1000.0);
+        stats["entities"] = json!(s.sim.state.entities.len());
+        if let Some(split) = split {
+            stats["view_ms_split"] = split;
+        }
         let relaxed = v.name == "hills_vista";
         let mut over = Vec::new();
         for (k, budget, wide) in BUDGETS {
@@ -102,7 +522,7 @@ fn t_perf(s: &mut Session, a: &Args) -> Result<Output> {
         "ok": failed.is_empty(),
         "views": rows,
         "failed": failed,
-        "note": "debug build; view_ms is CPU time to build one frame; sim_ms covers the city without population yet",
+        "note": "view_ms: CPU time to build a frame (the median of five after a warm one; build gtf with --release for the budgets); sim_ms: per tick, traffic and people included",
     })))
 }
 
@@ -227,6 +647,7 @@ fn t_citymap(_s: &mut Session, a: &Args) -> Result<Output> {
                     Walk::Crossing { .. } => [255, 150, 40, 170],
                     Walk::Path => [210, 180, 120, 90],
                     Walk::Open => [120, 200, 120, 50],
+                    Walk::Indoor => [120, 170, 255, 120],
                     Walk::Blocked => continue,
                 };
                 let ctr = wm.centre(t);

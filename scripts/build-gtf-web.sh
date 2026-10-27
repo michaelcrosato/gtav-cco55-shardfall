@@ -9,4 +9,4 @@ mkdir -p dist
 scripts/build-web.sh --single-file --package gtf_app --bin grand_theft_freeway --scene freeway \
 	--title "Grand Theft Freeway-BX" \
 	--description "Grand Theft Freeway-BX: an open-world crime caper in Paloma Bay, built on the Pavilion engine." \
-	--theme-color "#ff7a3d" --out dist/GrandTheftFreeway-BX.html "$@"
+	--theme-color "#ff7a3d" --header scripts/gtf-source-information.txt --out dist/GrandTheftFreeway-BX.html "$@"

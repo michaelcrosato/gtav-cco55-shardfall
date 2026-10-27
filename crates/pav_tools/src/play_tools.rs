@@ -10,7 +10,8 @@ use crate::session::Session;
 use crate::tools::{Args, Output, get_bool, get_str, get_u64};
 
 /// `play`: the running game's HUD, outcome and state; `bot=true` lets its bot play on;
-/// `seeds=N` plays fresh runs on seeds 1..N with the bot and leaves the session alone.
+/// `seeds=N` plays fresh runs on seeds 1..N with the bot (each given `cmd` first, if any) and
+/// leaves the session alone.
 pub fn t_play(s: &mut Session, a: &Args) -> Result<Output> {
     let keys = || games::all().into_iter().map(|g| g.key).collect::<Vec<_>>().join(", ");
     let Some(key) = s.sim.play().map(|g| g.key()) else {
@@ -30,6 +31,9 @@ pub fn t_play(s: &mut Session, a: &Args) -> Result<Output> {
         for seed in 1..=n {
             let mut sim = Sim::new(&scene, seed)?;
             sim.config = s.sim.config.clone();
+            if let Some(c) = get_str(a, "cmd") {
+                sim.step(&pav_core::InputFrame { cmds: vec![c.to_string()], activity: true, ..Default::default() });
+            }
             let (outcome, played) = sim.run_bot(ticks);
             runs.push(json!([seed, outcome, round2(played as f64 / hz)]));
             if outcome == Outcome::Won {
